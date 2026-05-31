@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カンバンボード - チケット管理システム</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ログイン画面 -->
+    <div class="login-screen" id="loginScreen" style="display:none">
+        <div class="login-box">
+            <h2>カンバンボード</h2>
+            <p class="login-subtitle">ログインしてください</p>
+            <form id="loginForm">
+                <div class="login-field">
+                    <label for="loginUsername">ユーザ名</label>
+                    <input type="text" id="loginUsername" placeholder="ユーザ名" autocomplete="username" required>
+                </div>
+                <div class="login-field">
+                    <label for="loginPassword">パスワード</label>
+                    <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="login-btn" id="loginBtn">ログイン</button>
+                <div class="login-error" id="loginError" style="display:none"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- アプリケーションコンテンツ（ログイン成功后に表示） -->
+    <div id="appContent" style="display:none">
+    <!-- 画面左上のフィルターエリア -->
+    <div class="filter-area" id="filterArea">
+        <!-- タイトル検索ボックス -->
+        <div class="search-box" id="searchBox">
+            <span class="filter-icon">🔍</span>
+            <input type="text" id="titleSearchInput" placeholder="タイトルで検索...">
+        </div>
+        <!-- 担当者フィルター -->
+        <div class="assignee-filter" id="assigneeFilter">
+            <span class="filter-icon">👤</span>
+            <select id="assigneeFilterSelect">
+                <option value="">すべて</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- メインコンテナ（左右分割用） -->
+    <div class="main-container" id="mainContainer">
+        <div class="kanban-main" id="kanbanMain">
+            <div class="kanban-board">
+        <!-- 担当者用メモカラム（フィルターで人物を選択すると表示） -->
+        <div class="column column-memo" data-column="memo" id="memoColumn" style="display:none">
+            <div class="column-header">
+                <div class="column-title" id="memoColumnTitle">Memo</div>
+            </div>
+            <div class="memo-area">
+                <textarea id="assigneeMemoText" placeholder="メモを記述..."></textarea>
+            </div>
+            <div class="assignee-chart-area">
+                <div class="chart-title">予実グラフ（累積工数）</div>
+                <div class="assignee-chart" id="assigneeChart"></div>
+                <div class="chart-legend">
+                    <span class="legend-item"><span class="legend-line planned"></span>予定</span>
+                    <span class="legend-item"><span class="legend-line actual"></span>実績</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="column" data-column="todo">
+            <div class="column-header">
+                <div class="column-title">To Do</div>
+                <div class="column-count">0 件</div>
+            </div>
+            <div class="ticket-list"></div>
+            <div class="add-ticket-form">
+                <button class="add-ticket-btn">&plus;</button>
+            </div>
+        </div>
+
+        <div class="column" data-column="doing">
+            <div class="column-header">
+                <div class="column-title">Doing</div>
+                <div class="column-count">0 件</div>
+            </div>
+            <div class="ticket-list"></div>
+        </div>
+
+        <div class="column" data-column="done">
+            <div class="column-header">
+                <div class="column-title">Done</div>
+                <div class="column-count">0 件</div>
+            </div>
+            <div class="ticket-list"></div>
+        </div>
+
+        <!-- アーカイブ（初期非表示） -->
+        <div class="column" data-column="archive" id="archiveColumn" style="display:none">
+            <div class="column-header">
+                <div class="column-title">📦 Archive</div>
+                <div class="column-count">0 件</div>
+            </div>
+            <div class="ticket-list"></div>
+        </div>
+    </div><!-- /kanban-board -->
+        </div><!-- /kanban-main -->
+
+        <!-- 設定パネル（初期非表示） -->
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-header">
+                <div class="settings-title">⚙️ 設定</div>
+                <button class="settings-close-btn" id="settingsCloseBtn" title="閉じる">✕</button>
+            </div>
+            <div class="settings-body">
+                <!-- 担当者管理 -->
+                <section class="settings-section">
+                    <h3>担当者管理</h3>
+                    <p class="settings-hint">担当者のマスターデータ。削除しても既存チケットの割り当てには影響しません。</p>
+                    <div class="settings-list" id="usersList"></div>
+                    <div class="settings-add-row">
+                        <input type="text" id="newUserInput" placeholder="担当者名を入力" autocomplete="off"/>
+                        <button class="settings-add-btn" id="addUserBtn">追加</button>
+                    </div>
+                </section>
+
+                <!-- ラベル管理 -->
+                <section class="settings-section">
+                    <h3>ラベル管理</h3>
+                    <p class="settings-hint">ラベルと色を設定。削除しても既存チケットのラベルには影響しません。</p>
+                    <div class="settings-list" id="labelsList"></div>
+                    <div class="settings-add-row">
+                        <input type="text" id="newLabelNameInput" placeholder="ラベル名" autocomplete="off"/>
+                        <input type="color" id="newLabelColorInput" value="#808080" title="ラベル色"/>
+                        <button class="settings-add-btn" id="addLabelBtn">追加</button>
+                    </div>
+                </section>
+
+                <!-- 休日管理 -->
+                <section class="settings-section">
+                    <h3>休日管理</h3>
+                    <p class="settings-hint">土曜日・日曜日以外の祝日・休日を入力（8桁: yyyyMMdd、1行に1つ）。</p>
+                    <textarea id="holidaysTextarea" class="holidays-textarea" placeholder="20260530&#10;20260601"></textarea>
+                </section>
+
+                <!-- DBエクスポート/インポート -->
+                <section class="settings-section">
+                    <h3>データベース</h3>
+                    <div class="db-actions">
+                        <button class="settings-db-btn" id="exportDbBtn">📤 エクスポート</button>
+                        <button class="settings-db-btn" id="importDbBtn">📥 インポート</button>
+                        <button class="settings-db-btn" id="importCsvBtn">📄 CSVインポート</button>
+                        <input type="file" id="importFileInput" accept=".json" style="display:none"/>
+                        <input type="file" id="importCsvFileInput" accept=".csv" style="display:none"/>
+                    </div>
+                </section>
+            </div>
+        </div><!-- /settings-panel -->
+    </div><!-- /main-container -->
+
+    <!-- 画面左下のボタン（設定 + Archive + ログ + ログアウト） -->
+    <div class="bottom-left-buttons">
+        <button class="settings-btn" id="settingsBtn" title="設定">⚙️</button>
+        <button class="archive-toggle-bottom-btn" id="archiveToggleBtn" title="アーカイブを表示/非表示">📦</button>
+        <button class="logs-btn" id="logsBtn" title="ログ">📋</button>
+        <button class="logout-btn" id="logoutBtn" title="ログアウト" style="display:none">🚪</button>
+    </div>
+
+    <!-- ログパネル（初期非表示） -->
+    <div class="logs-panel" id="logsPanel">
+        <div class="logs-header">
+            <div class="logs-title">📋 ログ</div>
+            <button class="logs-close-btn" id="logsCloseBtn" title="閉じる">✕</button>
+        </div>
+        <div class="logs-toolbar">
+            <button class="logs-toolbar-btn" id="logsCopyBtn" title="クリップボードにコピー">📋 コピー</button>
+            <button class="logs-toolbar-btn" id="logsExportBtn" title="テキストとしてエクスポート">💾 エクスポート</button>
+            <select id="logsLevelFilter" class="logs-level-filter">
+                <option value="DEBUG">すべて</option>
+                <option value="INFO">INFO以上</option>
+                <option value="WARN">WARN以上</option>
+                <option value="ERROR">ERRORのみ</option>
+            </select>
+            <input type="text" id="logsSearchInput" class="logs-search-input" placeholder="検索...">
+        </div>
+        <div class="logs-body">
+            <div class="logs-list" id="logsList"></div>
+        </div>
+        <div class="logs-footer">
+            <button class="logs-footer-btn" id="logsFetchServerBtn" title="サーバーログを取得">🖥 サーバーログを取得</button>
+            <span class="logs-count" id="logsCount">0 件</span>
+        </div>
+    </div><!-- /logs-panel -->
+
+    <!-- モーダルダイアログ -->
+    <div class="modal-overlay" id="ticketModal">
+        <div class="modal">
+            <div class="modal-title" id="modalTitle">新しいチケット</div>
+            
+            <div class="form-group">
+                <label>タイトル</label>
+                <input type="text" id="ticketTitle" placeholder="タスクのタイトルを入力">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>開始日</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="form-group">
+                    <label>終了日</label>
+                    <input type="date" id="endDate">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>工数（時間）</label>
+                    <input type="number" id="effort" placeholder="例: 8" min="0">
+                </div>
+                <div class="form-group">
+                    <label>担当者</label>
+                    <div class="selection-tags" id="assigneeTags"></div>
+                    <div class="custom-dropdown" id="assigneeDropdown">
+                        <button type="button" class="dropdown-toggle-btn" id="assigneeToggleBtn">担当者を選択 ▼</button>
+                        <div class="dropdown-list" id="assigneeList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>ラベル</label>
+                <div class="selection-tags" id="labelTags"></div>
+                <div class="custom-dropdown" id="labelDropdown">
+                    <button type="button" class="dropdown-toggle-btn" id="labelToggleBtn">ラベルを選択 ▼</button>
+                    <div class="dropdown-list" id="labelList"></div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>メモ</label>
+                <textarea id="memo" placeholder="詳細な説明やメモ..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>子タスク</label>
+                <div class="child-tasks" id="childTasks"></div>
+                <button class="add-child-task-btn" id="addChildTaskBtn">＋ 子タスクを追加</button>
+            </div>
+
+            <div class="modal-actions">
+                <button class="modal-btn cancel" id="cancelBtn">キャンセル</button>
+                <button class="modal-btn save" id="saveBtn">保存</button>
+            </div>
+
+            <div class="history-section">
+                <button class="modal-btn history" id="viewHistoryBtn">📋 履歴を確認</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 履歴表示ダイアログ -->
+    <div class="modal-overlay" id="historyModal">
+        <div class="modal history-modal">
+            <div class="modal-title">チケットの履歴</div>
+            <div class="history-list" id="historyList"></div>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" id="closeHistoryBtn">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
