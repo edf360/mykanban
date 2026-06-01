@@ -132,5 +132,4 @@ export function showAppScreen() {
     if (appContent) appContent.style.display = '';
     if (bottomButtons) bottomButtons.style.display = '';
     if (filterArea) filterArea.style.display = '';
-
 }

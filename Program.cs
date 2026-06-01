@@ -62,7 +62,7 @@ using (var scope = app.Services.CreateScope())
 // 4. APIルートをマップ（/api/プレフィックスのみ）
 app.MapControllers();
 
-// 4. wwwrootからの静的ファイル配信
+// 5. wwwrootからの静的ファイル配信
 var wwwRootPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
 if (Directory.Exists(wwwRootPath))
 {
@@ -73,7 +73,7 @@ if (Directory.Exists(wwwRootPath))
     });
 }
 
-// 5. SPAフォールバック - API以外のすべてのリクエストでkanban.htmlを返す
+// 6. SPAフォールバック - API以外のすべてのリクエストでkanban.htmlを返す
 app.MapFallback(async context =>
 {
     var filePath = Path.Combine(wwwRootPath, "kanban.html");

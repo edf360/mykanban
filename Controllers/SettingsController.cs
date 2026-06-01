@@ -462,6 +462,68 @@ public class SettingsController : ControllerBase
                     };
                     _context.TicketHistories.Add(history);
                 }
+                if (existingTicket.Column != ticket.Column)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "status",
+                        Value = ticket.Column,
+                        PreviousValue = existingTicket.Column,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+                if ((existingTicket.StartDate.HasValue != ticket.StartDate.HasValue)
+                    || (existingTicket.StartDate.HasValue && existingTicket.StartDate.Value != ticket.StartDate.Value))
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "date",
+                        Value = ticket.StartDate?.ToString("yyyy-MM-dd") ?? "",
+                        PreviousValue = existingTicket.StartDate?.ToString("yyyy-MM-dd") ?? "",
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+                if ((existingTicket.Effort.HasValue != ticket.Effort.HasValue)
+                    || (existingTicket.Effort.HasValue && existingTicket.Effort.Value != ticket.Effort.Value))
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "effort",
+                        Value = ticket.Effort?.ToString() ?? "",
+                        PreviousValue = existingTicket.Effort?.ToString() ?? "",
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+                if (existingTicket.Memo != ticket.Memo)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "memo",
+                        Value = ticket.Memo,
+                        PreviousValue = existingTicket.Memo,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+                if (existingTicket.ChildTasksJson != ticket.ChildTasksJson)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "childtask",
+                        Value = ticket.ChildTasksJson,
+                        PreviousValue = existingTicket.ChildTasksJson,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
             }
 
             imported++;

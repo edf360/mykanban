@@ -226,6 +226,23 @@ export function createTicketElement(data) {
                 state.currentTicketData[ticket.dataset.id] = updated;
                 const idx = state.allTickets.findIndex(t => t.ticketId === ticket.dataset.id);
                 if (idx !== -1) state.allTickets[idx] = updated;
+                
+                // 進捗バー/テキストを更新
+                const progressFill = ticket.querySelector('.progress-fill');
+                const progressText = ticket.querySelector('.progress-text');
+                if (progressFill) progressFill.style.width = `${updated.progress || 0}%`;
+                if (progressText) progressText.textContent = `${updated.progress || 0}%`;
+                
+                // 進捗グラフを更新
+                const chartEl = ticket.querySelector('.ticket-chart');
+                if (chartEl && updated.startDate && updated.endDate) {
+                    renderProgressChart(chartEl, updated.startDate, updated.endDate);
+                }
+                
+                // メモカラムの累積進捗グラフを更新
+                if (typeof window.updateMemoColumn === 'function') {
+                    window.updateMemoColumn();
+                }
             } catch (error) {
                 console.error('Failed to update child task:', error);
                 checkbox.checked = !checkbox.checked;

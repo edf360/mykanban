@@ -180,13 +180,23 @@ export function renderAssigneeChart(container, assigneeName) {
                 totalPlanned += dailyEffort;
             }
             
+            // 実績は「今日時点で完了した分」をバーンインとして累積
+            // 各日付において、その日までに完了した実績工数を計算
             if (day <= today && day >= start) {
                 const progress = ticket.progress || 0;
                 const actualEffort = effort * (progress / 100);
                 const daysFromStart = Math.round((day - start) / (1000 * 60 * 60 * 24));
-                const totalDays = Math.max(1, daysFromStart + 1);
-                if (daysFromStart >= 0) {
-                    totalActual += actualEffort / totalDays;
+                const totalDuration = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
+                // 経過日数比率に基づいてその日までの累積実績を計算
+                const ratio = Math.min(1, (daysFromStart + 1) / totalDuration);
+                const dailyActual = actualEffort * ratio;
+                // 前日までの実績を引いて日次分のみ加算（初日は全体）
+                if (daysFromStart === 0) {
+                    totalActual += dailyActual;
+                } else {
+                    const prevRatio = Math.min(1, daysFromStart / totalDuration);
+                    const prevDaily = actualEffort * prevRatio;
+                    totalActual += dailyActual - prevDaily;
                 }
             }
         });

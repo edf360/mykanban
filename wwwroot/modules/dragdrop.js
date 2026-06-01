@@ -105,13 +105,9 @@ export function setupDropZones() {
                         await apiRequest('PATCH', `${API_BASE}/${ticketId}/restore`, null);
                         state.allTickets[idx].isArchived = false;
                     } else if (!wasArchived && isNowArchived) {
-                        const archivedTicket = await apiRequest('DELETE', `${API_BASE}/${ticketId}`, null);
-                        if (archivedTicket) {
-                            state.allTickets[idx] = archivedTicket;
-                            state.currentTicketData[ticketId] = archivedTicket;
-                        } else {
-                            state.allTickets[idx].isArchived = true;
-                        }
+                        // DELETE APIはNoContentを返すため、ローカルでisArchivedを設定
+                        await apiRequest('DELETE', `${API_BASE}/${ticketId}`, null);
+                        state.allTickets[idx].isArchived = true;
                     }
                     
                     state.allTickets[idx].column = newColumn;
