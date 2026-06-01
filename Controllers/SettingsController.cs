@@ -239,7 +239,7 @@ public class SettingsController : ControllerBase
             }
 
             // 履歴をインポート（履歴がない場合は自動生成）
-            if ((importData.Histories?.Count ?? 0) > 0)
+            if (importData.Histories != null && importData.Histories.Count > 0)
             {
                 foreach (var h in importData.Histories)
                 {
@@ -255,7 +255,7 @@ public class SettingsController : ControllerBase
                     _context.TicketHistories.Add(history);
                 }
             }
-            else if ((importData.Tickets?.Count ?? 0) > 0)
+            else if (importData.Tickets != null && importData.Tickets.Count > 0)
             {
                 // 履歴がない古いバックアップの場合、各チケットに作成履歴を自動生成
                 foreach (var t in importData.Tickets)
@@ -474,8 +474,7 @@ public class SettingsController : ControllerBase
                     };
                     _context.TicketHistories.Add(history);
                 }
-                if ((existingTicket.StartDate.HasValue != ticket.StartDate.HasValue)
-                    || (existingTicket.StartDate.HasValue && existingTicket.StartDate.Value != ticket.StartDate.Value))
+                if (!Equals(existingTicket.StartDate, ticket.StartDate))
                 {
                     var history = new TicketHistory
                     {
@@ -487,8 +486,7 @@ public class SettingsController : ControllerBase
                     };
                     _context.TicketHistories.Add(history);
                 }
-                if ((existingTicket.Effort.HasValue != ticket.Effort.HasValue)
-                    || (existingTicket.Effort.HasValue && existingTicket.Effort.Value != ticket.Effort.Value))
+                if (!Equals(existingTicket.Effort, ticket.Effort))
                 {
                     var history = new TicketHistory
                     {
