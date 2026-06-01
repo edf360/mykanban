@@ -117,6 +117,11 @@ async function initApp() {
     try {
         console.log('[app] Starting initialization...');
         console.log('[app] state address:', state, 'id:', state.ticketCounter);
+
+        // 設定データを先に読み込み（ラベル色情報用）
+        await loadSettings();
+        console.log('[app] loadSettings done');
+
         await loadTickets();
         console.log('[app] loadTickets done, tickets:', state.allTickets.length);
 
@@ -149,9 +154,6 @@ async function initApp() {
 
         // タイトル検索を初期化
         initTitleSearch();
-
-        // 設定データも読み込み（ラベル色情報用）
-        await loadSettings();
 
         // アプリ画面を表示
         showAppScreen();

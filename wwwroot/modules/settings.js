@@ -1,10 +1,16 @@
 // 設定パネル管理モジュール
 import { apiRequest } from './api.js';
-import { requireAdmin } from './auth.js';
+import { requireAdmin, getToken } from './auth.js';
+import { renderAllTickets } from './renderer.js';
 
 // 設定データ
 let settings = { users: [], labels: [], holidays: [] };
 let isOpen = false;
+
+// グローバルオブジェクト（renderer.js / labels.js から Settings.settings() でアクセス）
+window.Settings = {
+    settings: () => settings
+};
 
 // ドラッグ＆ドロップ用変数
 let dragItem = null;
@@ -216,6 +222,7 @@ function createLabelItem(index, name, color) {
             settings.labels.splice(index, 1);
             renderLabels();
             save();
+            renderAllTickets();
         }
     });
     actions.appendChild(deleteBtn);
@@ -261,6 +268,7 @@ function createLabelItem(index, name, color) {
             settings.labels.splice(index, 0, moved);
             renderLabels();
             save();
+            renderAllTickets();
         }
     });
 
@@ -309,6 +317,7 @@ function finishInlineEdit(index, newName, newColor) {
     settings.labels[index].color = newColor;
     renderLabels();
     save();
+    renderAllTickets();
 }
 
 /**
@@ -418,6 +427,7 @@ function createUserItem(name, index) {
             settings.users.splice(index, 1);
             renderUsers();
             save();
+            renderAllTickets();
         }
     });
     actions.appendChild(deleteBtn);
@@ -461,6 +471,7 @@ function createUserItem(name, index) {
             settings.users.splice(index, 0, moved);
             renderUsers();
             save();
+            renderAllTickets();
         }
     });
 
@@ -508,6 +519,7 @@ function finishUserInlineEdit(index, newName) {
     settings.users[index] = name;
     renderUsers();
     save();
+    renderAllTickets();
 }
 
 /**
@@ -542,6 +554,7 @@ function addUser() {
     input.value = '';
     renderUsers();
     save();
+    renderAllTickets();
 }
 
 /**
@@ -563,6 +576,7 @@ function addLabel() {
     colorInput.value = '#808080';
     renderLabels();
     save();
+    renderAllTickets();
 }
 
 /**
@@ -582,8 +596,16 @@ function saveHolidays() {
  */
 async function exportDb() {
     try {
-        const response = await fetch('/api/settings/export', { method: 'POST' });
-        if (!response.ok) throw new Error('エクスポートに失敗しました');
+        const headers = {};
+        const token = getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        const response = await fetch('/api/settings/export', { method: 'POST', headers });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: '不明なエラー' }));
+            throw new Error(err.error || 'エクスポートに失敗しました');
+        }
 
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -627,8 +649,15 @@ async function handleImportFile(file) {
         const formData = new FormData();
         formData.append('file', file);
 
+        const headers = {};
+        const token = getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/settings/import', {
             method: 'POST',
+            headers,
             body: formData
         });
 
@@ -665,8 +694,15 @@ async function handleCsvImport(file) {
         const formData = new FormData();
         formData.append('file', file);
 
+        const headers = {};
+        const token = getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/settings/import-csv', {
             method: 'POST',
+            headers,
             body: formData
         });
 

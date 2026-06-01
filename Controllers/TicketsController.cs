@@ -62,14 +62,13 @@ public class TicketsController : ControllerBase
         _context.Tickets.Add(ticket);
         
         // 作成履歴を記録
-        var today = DateTime.Now.Date;
         var history = new TicketHistory
         {
             TicketId = ticket.TicketId,
             Type = "created",
             Value = null,
             PreviousValue = null,
-            Date = today
+            Date = DateTime.Now
         };
         _context.TicketHistories.Add(history);
         
@@ -88,6 +87,18 @@ public class TicketsController : ControllerBase
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
 
+        // 変更前の値を保存
+        var oldTitle = ticket.Title;
+        var oldAssigneesJson = ticket.AssigneesJson;
+        var oldMainAssignee = ticket.MainAssignee;
+        var oldLabelsJson = ticket.LabelsJson;
+        var oldChildTasksJson = ticket.ChildTasksJson;
+        var oldMemo = ticket.Memo;
+        var oldStartDate = ticket.StartDate;
+        var oldEndDate = ticket.EndDate;
+        var oldEffort = ticket.Effort;
+
+        // フィールド更新
         ticket.Title = dto.Title;
         if (!string.IsNullOrEmpty(dto.Column))
             ticket.Column = dto.Column;
@@ -100,38 +111,52 @@ public class TicketsController : ControllerBase
         ticket.Memo = dto.Memo;
         ticket.ChildTasks = dto.ChildTasks.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList();
 
+        // 変更検出と履歴記録
+        if (oldTitle != ticket.Title)
+            await RecordHistory(id, "title", ticket.Title, oldTitle);
+        
+        if (oldAssigneesJson != ticket.AssigneesJson)
+            await RecordHistory(id, "assignee", ticket.AssigneesJson, oldAssigneesJson);
+        
+        if (oldMainAssignee != ticket.MainAssignee)
+            await RecordHistory(id, "assignee", $"main:{ticket.MainAssignee}", $"main:{oldMainAssignee}");
+        
+        if (oldLabelsJson != ticket.LabelsJson)
+            await RecordHistory(id, "label", ticket.LabelsJson, oldLabelsJson);
+        
+        if (oldChildTasksJson != ticket.ChildTasksJson)
+            await RecordHistory(id, "childtask", ticket.ChildTasksJson, oldChildTasksJson);
+        
+        if (oldMemo != ticket.Memo)
+            await RecordHistory(id, "memo", ticket.Memo, oldMemo);
+        
+        if (oldStartDate != ticket.StartDate)
+            await RecordHistory(id, "date-start", ticket.StartDate?.ToString("yyyy-MM-dd"), oldStartDate?.ToString("yyyy-MM-dd"));
+        
+        if (oldEndDate != ticket.EndDate)
+            await RecordHistory(id, "date-end", ticket.EndDate?.ToString("yyyy-MM-dd"), oldEndDate?.ToString("yyyy-MM-dd"));
+        
+        if (oldEffort != ticket.Effort)
+            await RecordHistory(id, "effort", ticket.Effort?.ToString(), oldEffort?.ToString());
+
         await _context.SaveChangesAsync();
         return Ok(ticket);
     }
 
     /// <summary>
-    /// 指定されたタイプの履歴をその日の最新値として保存（既に存在すれば更新）
+    /// 履歴を記録（全ての変更を保存）
     /// </summary>
     private async Task RecordHistory(string ticketId, string type, string? value, string? previousValue)
     {
-        var today = DateTime.Now.Date;
-        var existing = await _context.TicketHistories
-            .FirstOrDefaultAsync(h => h.TicketId == ticketId && h.Type == type && h.Date.Date == today);
-        
-        if (existing != null)
+        var history = new TicketHistory
         {
-            // 同じ日の同じタイプが既に存在すれば更新
-            existing.Value = value;
-            existing.PreviousValue = previousValue;
-        }
-        else
-        {
-            // 新規作成
-            var history = new TicketHistory
-            {
-                TicketId = ticketId,
-                Type = type,
-                Value = value,
-                PreviousValue = previousValue,
-                Date = today
-            };
-            _context.TicketHistories.Add(history);
-        }
+            TicketId = ticketId,
+            Type = type,
+            Value = value,
+            PreviousValue = previousValue,
+            Date = DateTime.Now
+        };
+        _context.TicketHistories.Add(history);
     }
 
     /// <summary>

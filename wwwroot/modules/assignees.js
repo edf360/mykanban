@@ -49,8 +49,14 @@ export function renderAssigneeTags() {
     // 担当者タグのクリックイベントをバインド（メイン担当者切り替え）
     assigneeTagsEl.querySelectorAll('.assignee-tag').forEach(tag => {
         tag.addEventListener('click', (e) => {
-            // ×ボタンクリックの場合は無視
-            if (e.target.classList.contains('remove-assignee')) return;
+            // ×ボタンクリックの場合は担当者を削除
+            if (e.target.classList.contains('remove-assignee')) {
+                e.stopPropagation();
+                const index = parseInt(e.target.dataset.index);
+                removeAssignee(index);
+                renderAssigneeSelect();
+                return;
+            }
             const clickedAssignee = e.currentTarget.dataset.assignee;
             state.mainAssignee = clickedAssignee;
             renderAssigneeTags();
@@ -87,6 +93,7 @@ export function renderAssigneeSelect() {
         // アイテムクリックで担当者をトグル
         item.addEventListener('click', () => {
             toggleAssignee(assignee);
+            renderAssigneeTags();
             renderAssigneeSelect();
         });
         

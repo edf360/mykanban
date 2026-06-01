@@ -40,7 +40,14 @@ export async function showHistory(ticketId) {
                 created: '作成',
                 progress: '進捗',
                 column: '移動',
-                assignee: '担当者'
+                assignee: '担当者',
+                title: 'タイトル',
+                label: 'ラベル',
+                childtask: '子タスク',
+                memo: 'メモ',
+                'date-start': '開始日',
+                'date-end': '終了日',
+                effort: '工数'
             };
 
             for (const [date, items] of Object.entries(grouped)) {
@@ -72,12 +79,49 @@ export async function showHistory(ticketId) {
                         detail = `${from} → ${to} に移動`;
                     } else if (item.type === 'assignee') {
                         try {
-                            const oldList = JSON.parse(item.previousValue || '[]');
-                            const newList = JSON.parse(item.value || '[]');
-                            detail = `担当者: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
+                            const oldVal = item.previousValue || '';
+                            const newVal = item.value || '';
+                            // main:xxx 形式のメイン担当者変更
+                            if (oldVal.startsWith('main:') && newVal.startsWith('main:')) {
+                                const oldMain = oldVal.substring(5) || '-';
+                                const newMain = newVal.substring(5) || '-';
+                                detail = `メイン担当者: ${escapeHtml(oldMain)} → ${escapeHtml(newMain)}`;
+                            } else {
+                                const oldList = JSON.parse(oldVal || '[]');
+                                const newList = JSON.parse(newVal || '[]');
+                                detail = `担当者: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
+                            }
                         } catch {
                             detail = `担当者が変更されました`;
                         }
+                    } else if (item.type === 'title') {
+                        const oldTitle = item.previousValue ? escapeHtml(item.previousValue) : '-';
+                        const newTitle = item.value ? escapeHtml(item.value) : '-';
+                        detail = `${oldTitle} → ${newTitle}`;
+                    } else if (item.type === 'label') {
+                        try {
+                            const oldList = JSON.parse(item.previousValue || '[]');
+                            const newList = JSON.parse(item.value || '[]');
+                            detail = `ラベル: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
+                        } catch {
+                            detail = `ラベルが変更されました`;
+                        }
+                    } else if (item.type === 'childtask') {
+                        detail = '子タスクが変更されました';
+                    } else if (item.type === 'memo') {
+                        detail = 'メモが変更されました';
+                    } else if (item.type === 'date-start') {
+                        const oldDate = item.previousValue || '-';
+                        const newDate = item.value || '-';
+                        detail = `開始日: ${oldDate} → ${newDate}`;
+                    } else if (item.type === 'date-end') {
+                        const oldDate = item.previousValue || '-';
+                        const newDate = item.value || '-';
+                        detail = `終了日: ${oldDate} → ${newDate}`;
+                    } else if (item.type === 'effort') {
+                        const oldEffort = item.previousValue || '-';
+                        const newEffort = item.value || '-';
+                        detail = `工数: ${oldEffort}h → ${newEffort}h`;
                     }
                     
                     const typeSpan = document.createElement('span');
@@ -88,8 +132,17 @@ export async function showHistory(ticketId) {
                     detailSpan.className = 'history-detail';
                     detailSpan.textContent = detail;
                     
+                    // 時刻表示
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'history-time';
+                    const timePart = item.date ? item.date.split('T')[1] : '';
+                    if (timePart) {
+                        timeSpan.textContent = timePart.substring(0, 5);
+                    }
+                    
                     div.appendChild(typeSpan);
                     div.appendChild(detailSpan);
+                    div.appendChild(timeSpan);
                     historyListEl.appendChild(div);
                 }
             }

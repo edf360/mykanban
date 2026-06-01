@@ -160,6 +160,7 @@ public class SettingsController : ControllerBase
                 t.EndDate,
                 t.Effort,
                 assignees = t.Assignees,
+                mainAssignee = t.MainAssignee,
                 labels = t.Labels,
                 t.Memo,
                 childTasks = t.ChildTasks,
@@ -229,6 +230,7 @@ public class SettingsController : ControllerBase
                     EndDate = t.EndDate,
                     Effort = t.Effort,
                     Assignees = t.Assignees ?? new List<string>(),
+                    MainAssignee = t.MainAssignee,
                     Labels = t.Labels ?? new List<string>(),
                     Memo = t.Memo ?? string.Empty,
                     ChildTasks = t.ChildTasks?.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList() ?? new List<ChildTask>()
@@ -236,19 +238,38 @@ public class SettingsController : ControllerBase
                 _context.Tickets.Add(ticket);
             }
 
-            // 履歴をインポート
-            foreach (var h in importData.Histories ?? new List<ImportHistory>())
+            // 履歴をインポート（履歴がない場合は自動生成）
+            if ((importData.Histories?.Count ?? 0) > 0)
             {
-                var history = new TicketHistory
+                foreach (var h in importData.Histories)
                 {
-                    Id = h.Id,
-                    TicketId = h.TicketId,
-                    Type = h.Type,
-                    Value = h.Value,
-                    PreviousValue = h.PreviousValue,
-                    Date = h.Date
-                };
-                _context.TicketHistories.Add(history);
+                    var history = new TicketHistory
+                    {
+                        Id = h.Id,
+                        TicketId = h.TicketId,
+                        Type = h.Type,
+                        Value = h.Value,
+                        PreviousValue = h.PreviousValue,
+                        Date = h.Date
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+            }
+            else if ((importData.Tickets?.Count ?? 0) > 0)
+            {
+                // 履歴がない古いバックアップの場合、各チケットに作成履歴を自動生成
+                foreach (var t in importData.Tickets)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = t.TicketId,
+                        Type = "created",
+                        Value = t.Title,
+                        PreviousValue = null,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
             }
 
             // 設定をインポート
@@ -316,6 +337,10 @@ public class SettingsController : ControllerBase
         var imported = 0;
         var skipped = 0;
 
+        // CSVから発見した担当者とラベルを収集
+        var discoveredAssignees = new HashSet<string>();
+        var discoveredLabels = new HashSet<string>();
+
         for (int row = 1; row < lines.Count; row++)
         {
             var values = ParseCsvLine(lines[row]);
@@ -346,6 +371,10 @@ public class SettingsController : ControllerBase
             // 担当者の処理
             var assignee = GetSafeValue(values, columnIndexes, "担当者").Trim();
             ticket.Assignees = !string.IsNullOrEmpty(assignee) ? new List<string> { assignee } : new List<string>();
+            if (!string.IsNullOrEmpty(assignee))
+            {
+                discoveredAssignees.Add(assignee);
+            }
             if (existingTicket == null)
             {
                 ticket.MainAssignee = !string.IsNullOrEmpty(assignee) ? assignee : null;
@@ -362,7 +391,12 @@ public class SettingsController : ControllerBase
 
             // ラベルの処理
             var labelsStr = GetSafeValue(values, columnIndexes, "ラベル");
-            ticket.Labels = ParseSemicolonSeparated(labelsStr);
+            var labels = ParseSemicolonSeparated(labelsStr);
+            ticket.Labels = labels;
+            foreach (var label in labels)
+            {
+                discoveredLabels.Add(label);
+            }
 
             // メモの処理
             ticket.Memo = GetSafeValue(values, columnIndexes, "メモ");
@@ -377,10 +411,64 @@ public class SettingsController : ControllerBase
                 ticket.Position = (maxPosition ?? -1) + 1;
                 ticket.Id = GenerateNewId();
                 _context.Tickets.Add(ticket);
+                
+                // 作成履歴を記録
+                var history = new TicketHistory
+                {
+                    TicketId = ticket.TicketId,
+                    Type = "created",
+                    Value = ticket.Title,
+                    PreviousValue = null,
+                    Date = DateTime.Now
+                };
+                _context.TicketHistories.Add(history);
+            }
+            else
+            {
+                // 既存チケット更新 - 変更フィールドを比較して履歴記録
+                if (existingTicket.Title != ticket.Title)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "title",
+                        Value = ticket.Title,
+                        PreviousValue = existingTicket.Title,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+                if (existingTicket.AssigneesJson != ticket.AssigneesJson)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "assignee",
+                        Value = ticket.AssigneesJson,
+                        PreviousValue = existingTicket.AssigneesJson,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
+                if (existingTicket.LabelsJson != ticket.LabelsJson)
+                {
+                    var history = new TicketHistory
+                    {
+                        TicketId = ticket.TicketId,
+                        Type = "label",
+                        Value = ticket.LabelsJson,
+                        PreviousValue = existingTicket.LabelsJson,
+                        Date = DateTime.Now
+                    };
+                    _context.TicketHistories.Add(history);
+                }
             }
 
             imported++;
         }
+
+        // 発見した担当者とラベルを設定に追加
+        await MergeDiscoveredSettingsAsync(discoveredAssignees, discoveredLabels);
 
         await _context.SaveChangesAsync();
         return Ok(new { message = "インポートが完了しました", count = imported, skipped = skipped });
@@ -497,6 +585,60 @@ public class SettingsController : ControllerBase
         var maxId = _context.Tickets.Max(t => (int?)t.Id) ?? 0;
         return maxId + 1;
     }
+
+    /// <summary>
+    /// CSVから発見した担当者とラベルを設定にマージ（重複追加なし）
+    /// Setting.Users / Setting.Labels は getter ごとに新しいインスタンスを返すため、
+    /// 取得→追加→再代入の pattern で JSON に保存する。
+    /// </summary>
+    private async Task MergeDiscoveredSettingsAsync(HashSet<string> assignees, HashSet<string> labels)
+    {
+        if (assignees.Count == 0 && labels.Count == 0)
+            return;
+
+        var setting = await _context.Settings.FirstOrDefaultAsync();
+        if (setting == null)
+        {
+            setting = new Setting { Id = 1 };
+            _context.Settings.Add(setting);
+        }
+
+        // 既存リストを取得（getter は毎回新しいインスタンスを返す）
+        var users = setting.Users;
+        var labelConfigs = setting.Labels;
+
+        // 担当者を追加（既存重複なし）
+        if (assignees.Count > 0)
+        {
+            var existingUsers = new HashSet<string>(users);
+            foreach (var a in assignees)
+            {
+                if (!existingUsers.Contains(a))
+                {
+                    users.Add(a);
+                    existingUsers.Add(a);
+                }
+            }
+        }
+
+        // ラベルを追加（既存重複なし、新規はデフォルトグレー）
+        if (labels.Count > 0)
+        {
+            var existingLabelNames = new HashSet<string>(labelConfigs.Select(l => l.Name));
+            foreach (var l in labels)
+            {
+                if (!existingLabelNames.Contains(l))
+                {
+                    labelConfigs.Add(new LabelConfig { Name = l, Color = "#808080" });
+                    existingLabelNames.Add(l);
+                }
+            }
+        }
+
+        // setter に再代入して JSON に保存
+        setting.Users = users;
+        setting.Labels = labelConfigs;
+    }
 }
 
 /// <summary>
@@ -534,6 +676,7 @@ public class ImportTicket
     public DateTime? EndDate { get; set; }
     public int? Effort { get; set; }
     public List<string>? Assignees { get; set; }
+    public string? MainAssignee { get; set; }
     public List<string>? Labels { get; set; }
     public string? Memo { get; set; }
     public List<ImportChildTask>? ChildTasks { get; set; }

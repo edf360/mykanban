@@ -294,12 +294,18 @@ export function createTicketElement(data) {
 
                 // 進捗値をローカル状態に反映（カラム移動は行わない）
                 const idx = state.allTickets.findIndex(t => t.ticketId === ticket.dataset.id);
-                if (idx !== -1) state.allTickets[idx].progress = percentage;
+                if (idx !== -1) {
+                    state.allTickets[idx].progress = percentage;
+                }
+                // state.currentTicketData にも反映（グラフ再描画用）
+                if (state.currentTicketData[ticket.dataset.id]) {
+                    state.currentTicketData[ticket.dataset.id].progress = percentage;
+                }
             } catch (error) {
                 console.error('Failed to update progress:', error);
             }
             
-            // グラフを更新
+            // 対象チケットの進捗グラフを更新
             const chartEl = ticket.querySelector('.ticket-chart');
             if (chartEl) {
                 const ticketData = state.currentTicketData[ticket.dataset.id];
@@ -308,9 +314,10 @@ export function createTicketElement(data) {
                 }
             }
             
-            // リスナーをクリーンアップ（メモリリーク防止）
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+            // 個人の累積進捗グラフを更新（メモカラムに表示されている場合）
+            if (typeof window.updateMemoColumn === 'function') {
+                window.updateMemoColumn();
+            }
             
             setTimeout(() => {
                 wasProgressDragging = false;

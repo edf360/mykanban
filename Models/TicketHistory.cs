@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace KanbanServer.Models;
 
 /// <summary>
-/// チケットの履歴ログ（1日につき1件の最新値のみ保存）
+/// チケットの履歴ログ（全ての変更を記録）
 /// </summary>
 public class TicketHistory
 {
@@ -30,7 +30,7 @@ public class TicketHistory
     public string? PreviousValue { get; set; }
 
     /// <summary>
-    /// 日付（時刻は切り捨て、日付のみ）
+    /// 日時（変更時刻）
     /// </summary>
     [JsonPropertyName("date")]
     public DateTime Date { get; set; }
