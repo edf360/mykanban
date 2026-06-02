@@ -10,7 +10,7 @@ public class Ticket
     public string Title { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
     public string Column { get; set; } = "todo";
-    public int Position { get; set; }
+    public double Position { get; set; }
     public int Progress { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }

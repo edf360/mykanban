@@ -3,7 +3,7 @@
  */
 
 import { API_BASE, state } from './state.js';
-import { apiRequest } from './api.js';
+import { apiRequest, loadTickets } from './api.js';
 import { draggedTicket, removeDropIndicators, updateColumnCount, renderAllTickets } from './renderer.js';
 
 /**
@@ -93,8 +93,24 @@ export function setupDropZones() {
             const newColumn = column.dataset.column;
             const ticketId = draggedTicket.dataset.id;
             try {
-                const ticketsInColumn = Array.from(column.querySelectorAll('.ticket'));
-                const newPosition = ticketsInColumn.indexOf(draggedTicket);
+                // ドロップ先のカラム内のチケット（ドラッグ中のは除く）を取得
+                const otherTickets = tickets.filter(t => t.dataset.id !== ticketId);
+                
+                // InsertIndexを計算（otherTickets内の挿入位置）
+                let insertIdx;
+                if (otherTickets.length === 0) {
+                    // カラムが空の場合
+                    insertIdx = 0;
+                } else if (insertIndex === -1 || insertIndex >= tickets.length) {
+                    // 末尾に挿入
+                    insertIdx = otherTickets.length;
+                } else if (insertIndex === 0) {
+                    // 先頭に挿入
+                    insertIdx = 0;
+                } else {
+                    // 中間に挿入
+                    insertIdx = insertIndex > otherTickets.length ? otherTickets.length : insertIndex;
+                }
                 
                 const idx = state.allTickets.findIndex(t => t.ticketId === ticketId);
                 if (idx !== -1) {
@@ -113,9 +129,11 @@ export function setupDropZones() {
                     state.allTickets[idx].column = newColumn;
                 }
                 
-                await apiRequest('PATCH', `${API_BASE}/${ticketId}/column`, { column: newColumn, position: newPosition });
+                // サーバー側で中間値を計算してもらうためにインデックスを送信
+                await apiRequest('PATCH', `${API_BASE}/${ticketId}/column`, { column: newColumn, insertIndex: insertIdx });
                 
-                // 再描画して状態を反映
+                // サーバーから最新のチケットデータを取得してから再描画
+                await loadTickets();
                 renderAllTickets();
             } catch (error) {
                 console.error('Failed to update column:', error);

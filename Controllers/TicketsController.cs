@@ -22,7 +22,7 @@ public class TicketsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<Ticket>>> GetAll()
     {
-        var tickets = await _context.Tickets.Where(t => !t.IsArchived).OrderBy(t => t.Column).ThenBy(t => t.Position).ToListAsync();
+        var tickets = await _context.Tickets.OrderBy(t => t.IsArchived).ThenBy(t => t.Column).ThenBy(t => t.Position).ToListAsync();
         return Ok(tickets);
     }
 
@@ -53,11 +53,11 @@ public class TicketsController : ControllerBase
             ChildTasks = dto.ChildTasks.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList()
         };
 
-        // 同じカラム内の最大Positionを取得
+        // 同じカラム内の最大Positionを取得（double方式）
         var maxPosition = await _context.Tickets
             .Where(t => t.Column == ticket.Column)
-            .MaxAsync(t => (int?)t.Position) ?? -1;
-        ticket.Position = maxPosition + 1;
+            .MaxAsync(t => (double?)t.Position) ?? -1.0;
+        ticket.Position = maxPosition + 1.0;
 
         _context.Tickets.Add(ticket);
         
@@ -200,6 +200,8 @@ public class TicketsController : ControllerBase
         {
             // 初回削除の場合はアーカイブに移動
             ticket.IsArchived = true;
+            ticket.Column = "archive";
+            ticket.Position = 0;
             await _context.SaveChangesAsync();
             // アーカイブされたチケットデータを返す（フロントエンドで再描画用）
             return Ok(ticket);
@@ -241,32 +243,86 @@ public class TicketsController : ControllerBase
             await RecordHistory(id, "column", newColumn, oldColumn);
         }
 
-        if (dto.Position.HasValue)
-        {
-            // 旧カラムのPositionを再編号
-            if (oldColumn != dto.Column)
+        if (dto.InsertIndex.HasValue)
             {
-                await RepositionColumn(oldColumn);
+                // インデックスベースの中間値計算
+                int insertIdx = dto.InsertIndex.Value;
+                
+                // 移動中のチケットを除くカラム内のチケットをPosition順に取得
+                var ordered = await _context.Tickets
+                    .Where(t => t.Column == newColumn && t.TicketId != id)
+                    .OrderBy(t => t.Position)
+                    .ToListAsync();
+                
+                double newPos;
+                
+                // 挿入インデックスの範囲チェック
+                if (insertIdx <= 0)
+                {
+                    // 先頭に挿入：最初の要素より小さい値を設定
+                    newPos = ordered.Count > 0 ? ordered[0].Position - 1.0 : 0.0;
+                }
+                else if (insertIdx >= ordered.Count)
+                {
+                    // 末尾に挿入
+                    newPos = ordered.Count > 0 ? ordered[ordered.Count - 1].Position + 1.0 : 0.0;
+                }
+                else
+                {
+                    // 中間に挿入：前後のPositionの平均
+                    newPos = (ordered[insertIdx - 1].Position + ordered[insertIdx].Position) / 2.0;
+                }
+                
+                // 衝突検出（差が0.001未満の場合）
+                var hasConflict = await _context.Tickets
+                    .Where(t => t.Column == newColumn && t.TicketId != id)
+                    .AnyAsync(t => Math.Abs(t.Position - newPos) < 0.001);
+                
+                if (hasConflict)
+                {
+                    // 精度が不足している場合は再編号してから再計算
+                    await RepositionColumnDouble(newColumn, id);
+                    ordered = await _context.Tickets
+                        .Where(t => t.Column == newColumn && t.TicketId != id)
+                        .OrderBy(t => t.Position)
+                        .ToListAsync();
+                    
+                    if (insertIdx <= 0)
+                    {
+                        newPos = ordered.Count > 0 ? ordered[0].Position - 1.0 : 0.0;
+                    }
+                    else if (insertIdx >= ordered.Count)
+                    {
+                        newPos = ordered.Count > 0 ? ordered[ordered.Count - 1].Position + 1.0 : 0.0;
+                    }
+                    else
+                    {
+                        newPos = (ordered[insertIdx - 1].Position + ordered[insertIdx].Position) / 2.0;
+                    }
+                }
+                
+                ticket.Position = newPos;
+                
+                // 旧カラムのPositionを再編号（カラム移動した場合）
+                // 移動中のチケットは除外する（EF Core Change Trackerが元のColumn値を使用するため）
+                if (oldColumn != newColumn)
+                {
+                    await RepositionColumnDouble(oldColumn, id);
+                }
             }
-
-            // 新カラムで指定位置に挿入（その後のPositionをシフト）
-            ticket.Position = dto.Position.Value;
-            await ShiftPositions(dto.Column, dto.Position.Value);
-        }
-        else
-        {
-            // Position未指定の場合は、新カラムの末尾に追加
-            var maxPos = await _context.Tickets
-                .Where(t => t.Column == dto.Column && t.TicketId != id)
-                .MaxAsync(t => (int?)t.Position) ?? -1;
-            ticket.Position = maxPos + 1;
-
-            if (oldColumn != dto.Column)
+            else
             {
-                await RepositionColumn(oldColumn);
-            }
-        }
+                // InsertIndex未指定の場合は、新カラムの末尾に追加
+                var maxPos = await _context.Tickets
+                    .Where(t => t.Column == dto.Column && t.TicketId != id)
+                    .MaxAsync(t => (double?)t.Position) ?? -1.0;
+                ticket.Position = maxPos + 1.0;
 
+                if (oldColumn != dto.Column)
+                {
+                    await RepositionColumnDouble(oldColumn, id);
+                }
+            }
         await _context.SaveChangesAsync();
         return NoContent();
     }
@@ -395,33 +451,18 @@ public class TicketsController : ControllerBase
     }
 
     /// <summary>
-    /// カラム内のPositionを0から連続に再編号
+    /// カラム内のPositionを0.0, 1.0, 2.0, ... に再編号（中間値方式のフォールバック）
     /// </summary>
-    private async Task RepositionColumn(string column)
+    private async Task RepositionColumnDouble(string column, string? excludeTicketId = null)
     {
         var tickets = await _context.Tickets
-            .Where(t => t.Column == column)
+            .Where(t => t.Column == column && (excludeTicketId == null || t.TicketId != excludeTicketId))
             .OrderBy(t => t.Position)
             .ToListAsync();
 
         for (int i = 0; i < tickets.Count; i++)
         {
             tickets[i].Position = i;
-        }
-    }
-
-    /// <summary>
-    /// 指定位置以降のPositionを+1シフト
-    /// </summary>
-    private async Task ShiftPositions(string column, int position)
-    {
-        var toShift = await _context.Tickets
-            .Where(t => t.Column == column && t.Position >= position)
-            .ToListAsync();
-
-        foreach (var t in toShift)
-        {
-            t.Position++;
         }
     }
 }

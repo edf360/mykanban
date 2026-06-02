@@ -29,7 +29,11 @@ public class ChildTaskDto
 public class ColumnUpdateDto
 {
     public string Column { get; set; } = string.Empty;
-    public int? Position { get; set; }
+    /// <summary>
+    /// 挿入先のインデックス（0 = 先頭、null = 末尾）
+    /// サーバー側で中間値を計算するために使用
+    /// </summary>
+    public int? InsertIndex { get; set; }
 }
 
 /// <summary>

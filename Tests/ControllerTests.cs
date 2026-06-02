@@ -120,26 +120,26 @@ public class ControllerTests : IDisposable
         _context.Tickets.Add(new Ticket { TicketId = "todo-move", Id = 3, Title = "MoveMe", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
-        // Act: todoのチケットをdoingのPosition 1に移動
-        var dto = new ColumnUpdateDto { Column = "doing", Position = 1 };
+        // Act: todoのチケットをdoingのインデックス1に移動（AとBの間）
+        var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 1 };
         var result = await _controller.UpdateColumn("todo-move", dto);
 
         Assert.IsType<NoContentResult>(result);
         await _context.SaveChangesAsync(); // 変更をコミット
 
-        // Assert: doingの順序は A(0), MoveMe(1), B(2)
+        // Assert: doingの順序は A, MoveMe, B （中間値方式のためPosition値は浮動小数）
         var sorted = await _context.Tickets
             .Where(t => t.Column == "doing")
             .OrderBy(t => t.Position)
             .ToListAsync();
-        
+
         Assert.Equal(3, sorted.Count);
         Assert.Equal("doing-a", sorted[0].TicketId);
-        Assert.Equal(0, sorted[0].Position);
         Assert.Equal("todo-move", sorted[1].TicketId);
-        Assert.Equal(1, sorted[1].Position);
         Assert.Equal("doing-b", sorted[2].TicketId);
-        Assert.Equal(2, sorted[2].Position);
+        // Positionは単調増加していることを確認
+        Assert.True(sorted[0].Position < sorted[1].Position);
+        Assert.True(sorted[1].Position < sorted[2].Position);
     }
 
     [Fact]
@@ -365,7 +365,7 @@ public class ControllerTests : IDisposable
         // コントローラーのロジック: oldColumn == dto.Column なのでReposition/Shiftは呼ばれない
         // ticket.Position = 0 に設定され、ShiftPositions("doing", 0) が呼ばれる
         // ShiftPositionsは Position >= 0 のチケットを+1シフト（B自身も含まれる）
-        var dto = new ColumnUpdateDto { Column = "doing", Position = 0 };
+        var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         var result = await _controller.UpdateColumn("same-b", dto);
 
         Assert.IsType<NoContentResult>(result);
@@ -580,7 +580,7 @@ public class ControllerTests : IDisposable
         Assert.Equal(50, ticketAfterProgress!.Progress);
 
         // Step 3: カラム移動（PATCH /column）
-        var moveDto = new ColumnUpdateDto { Column = "doing", Position = 0 };
+        var moveDto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         var moveResult = await _controller.UpdateColumn(ticketId, moveDto);
         Assert.IsType<NoContentResult>(moveResult);
 
@@ -604,7 +604,7 @@ public class ControllerTests : IDisposable
         await _context.SaveChangesAsync();
 
         // Act: 空のdoneカラムに移動（Position 0指定）
-        var dto = new ColumnUpdateDto { Column = "done", Position = 0 };
+        var dto = new ColumnUpdateDto { Column = "done", InsertIndex = 0 };
         var result = await _controller.UpdateColumn("empty-a", dto);
 
         // Assert: NoContentが返る
@@ -641,11 +641,11 @@ public class ControllerTests : IDisposable
         Assert.Equal(3, all1.Count);
 
         // Step 2: Ticket-0をdoingに移動
-        var moveDto = new ColumnUpdateDto { Column = "doing", Position = 0 };
+        var moveDto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         await _controller.UpdateColumn(todoTickets[0].TicketId, moveDto);
 
         // Step 3: Ticket-1をdoneに移動
-        var doneDto = new ColumnUpdateDto { Column = "done", Position = 0 };
+        var doneDto = new ColumnUpdateDto { Column = "done", InsertIndex = 0 };
         await _controller.UpdateColumn(todoTickets[1].TicketId, doneDto);
 
         // 全チケット取得してカラム分布を確認
@@ -659,7 +659,7 @@ public class ControllerTests : IDisposable
         Assert.Equal("todo", all2[2].Column);
 
         // Step 4: doingのTicket-0をdoneに移動（doneには既にTicket-1がある）
-        var toDoneDto = new ColumnUpdateDto { Column = "done", Position = 1 };
+        var toDoneDto = new ColumnUpdateDto { Column = "done", InsertIndex = 1 };
         await _controller.UpdateColumn(todoTickets[0].TicketId, toDoneDto);
 
         // doneカラムを確認
@@ -678,8 +678,8 @@ public class ControllerTests : IDisposable
         var getAll3 = await _controller.GetAll();
         var ok3 = Assert.IsType<OkObjectResult>(((ActionResult<List<Ticket>>)getAll3).Result!);
         var all3 = (List<Ticket>)ok3.Value!;
-        // アーカイブされたチケットは除外されるため、残りは2つ（doneに1つ + doingに1つ）
-        Assert.Equal(2, all3.Count);
+        // GetAllはアーカイブチケットも含めて返すため、残りは3つ（doneに2つ + doingに1つ）
+        Assert.Equal(3, all3.Count);
     }
 
     // ===== 日付・空値関連テスト =====
@@ -909,21 +909,23 @@ public class AdditionalControllerTests : IDisposable
         _context.Tickets.Add(new Ticket { TicketId = "restore-visible", Id = 1, Title = "可視性テスト", Column = "todo", Position = 0, IsArchived = true });
         await _context.SaveChangesAsync();
 
-        // GetAllではアーカイブ済みのチケットは表示されない
+        // GetAllはアーカイブチケットも含めて返す
         var beforeResult = await _controller.GetAll();
         var beforeOk = Assert.IsType<OkObjectResult>(((ActionResult<List<Ticket>>)beforeResult).Result!);
         var beforeList = (List<Ticket>)beforeOk.Value!;
-        Assert.Empty(beforeList);
+        Assert.Single(beforeList);
+        Assert.True(beforeList[0].IsArchived);
 
         // Act: 復帰
         await _controller.Restore("restore-visible");
 
-        // Assert: GetAllで表示されるようになる
+        // Assert: 復帰後、IsArchivedがfalseになる
         var afterResult = await _controller.GetAll();
         var afterOk = Assert.IsType<OkObjectResult>(((ActionResult<List<Ticket>>)afterResult).Result!);
         var afterList = (List<Ticket>)afterOk.Value!;
         Assert.Single(afterList);
         Assert.Equal("restore-visible", afterList[0].TicketId);
+        Assert.False(afterList[0].IsArchived);
     }
 
     // ===== 完全削除テスト（アーカイブ済みの2度目のDELETE） =====
@@ -978,7 +980,7 @@ public class AdditionalControllerTests : IDisposable
         var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
 
         // カラム移動で履歴を追加
-        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "doing", Position = 0 });
+        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "doing", InsertIndex = 0 });
 
         // Act: 履歴取得
         var result = await _controller.GetHistory(ticket.TicketId);
@@ -1052,7 +1054,7 @@ public class AdditionalControllerTests : IDisposable
         var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
 
         // Act: カラム移動（todo → doing）
-        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "doing", Position = 0 });
+        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "doing", InsertIndex = 0 });
 
         // Assert: 履歴にcolumnタイプが記録される
         var histories = await _context.TicketHistories.Where(h => h.TicketId == ticket.TicketId).ToListAsync();
@@ -1205,7 +1207,7 @@ public class AdditionalControllerTests : IDisposable
         var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
 
         // Act: 同じカラムに移動（Position変更のみ）
-        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "todo", Position = 0 });
+        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "todo", InsertIndex = 0 });
 
         // Assert: 履歴にcolumnタイプは記録されない（同じカラム）
         var histories = await _context.TicketHistories.Where(h => h.TicketId == ticket.TicketId).ToListAsync();
@@ -1215,7 +1217,7 @@ public class AdditionalControllerTests : IDisposable
     // ===== GetAllでアーカイブ除外テスト =====
 
     [Fact]
-    public async Task GetAll_ShouldExcludeArchivedTickets()
+    public async Task GetAll_ShouldIncludeArchivedTickets()
     {
         // Arrange: 通常チケットとアーカイブ済みチケットを混在
         _context.Tickets.Add(new Ticket { TicketId = "visible", Id = 1, Title = "表示", Column = "todo", Position = 0, IsArchived = false });
@@ -1225,12 +1227,16 @@ public class AdditionalControllerTests : IDisposable
         // Act: GetAll
         var result = await _controller.GetAll();
 
-        // Assert: アーカイブ済みのチケットは除外される
+        // Assert: アーカイブ済みのチケットも含めて返される
         var actionResult = Assert.IsType<ActionResult<List<Ticket>>>(result);
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
         var tickets = Assert.IsAssignableFrom<List<Ticket>>(okResult.Value!);
 
-        Assert.Single(tickets);
+        Assert.Equal(2, tickets.Count);
+        // IsArchived=false が先に来る（ソート順）
         Assert.Equal("visible", tickets[0].TicketId);
+        Assert.False(tickets[0].IsArchived);
+        Assert.Equal("hidden", tickets[1].TicketId);
+        Assert.True(tickets[1].IsArchived);
     }
 }

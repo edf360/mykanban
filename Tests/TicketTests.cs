@@ -403,7 +403,7 @@ public class TicketTests : IDisposable
 
         // Act: そのチケットをdoingカラムのPosition 0に移動（コントローラー経由）
         var controller = new KanbanServer.Controllers.TicketsController(_context);
-        var dto = new ColumnUpdateDto { Column = "doing", Position = 0 };
+        var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         var result = await controller.UpdateColumn("single-a", dto);
 
         // Assert: NoContentが返る

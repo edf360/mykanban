@@ -93,7 +93,15 @@ export function renderAllTickets() {
         list.innerHTML = '';
     });
     
-    state.allTickets.forEach(ticket => {
+    // Positionでソートして描画（ドラッグ＆ドロップ後の順番を反映）
+    const sortedTickets = [...state.allTickets].sort((a, b) => {
+        if (a.column !== b.column) {
+            return a.column.localeCompare(b.column);
+        }
+        return (a.position ?? 0) - (b.position ?? 0);
+    });
+    
+    sortedTickets.forEach(ticket => {
         if (!ticketMatchesFilter(ticket)) return;
         
         // アーカイブ済みのチケットはArchiveカラムに配置
