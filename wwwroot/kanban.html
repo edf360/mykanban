@@ -157,13 +157,30 @@
         </div><!-- /settings-panel -->
     </div><!-- /main-container -->
 
-    <!-- 画面左下のボタン（設定 + Archive + ログ + ログアウト） -->
+    <!-- 画面左下のボタン（グラフ + 設定 + Archive + ログ + ログアウト） -->
     <div class="bottom-left-buttons">
+        <button class="graph-toggle-btn" id="graphToggleBtn" title="グラフを表示/非表示">📊</button>
         <button class="settings-btn" id="settingsBtn" title="設定">⚙️</button>
         <button class="archive-toggle-bottom-btn" id="archiveToggleBtn" title="アーカイブを表示/非表示">📦</button>
         <button class="logs-btn" id="logsBtn" title="ログ">📋</button>
         <button class="logout-btn" id="logoutBtn" title="ログアウト" style="display:none">🚪</button>
     </div>
+
+    <!-- グラフパネル（初期非表示） -->
+    <div class="graph-panel" id="graphPanel">
+        <div class="graph-panel-resize-handle" id="graphPanelResizeHandle"></div>
+        <div class="graph-panel-body" id="graphPanelBody" style="display:none">
+            <div class="graph-panel-controls">
+                <label for="graphLabelFilter">ラベル選択:</label>
+                <select id="graphLabelFilter">
+                    <option value="">ラベルを選択してください</option>
+                </select>
+            </div>
+            <div class="graph-panel-content">
+                <div class="matrix-table-container" id="matrixTableContainer"></div>
+            </div>
+        </div>
+    </div><!-- /graph-panel -->
 
     <!-- ログパネル（初期非表示） -->
     <div class="logs-panel" id="logsPanel">

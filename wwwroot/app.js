@@ -18,6 +18,7 @@ import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
 import { getToken, login, logout, showLoginScreen, showAppScreen, getUsername } from './modules/auth.js';
 import { logInfo, logError, copyToClipboard, exportAsText, getLogBuffer, onUIUpdate } from './modules/logger.js';
+import { renderProgressMatrix } from './modules/charts.js';
 
 /**
  * アプリケーションのメイン初期化処理
@@ -379,3 +380,164 @@ function initLogsPanel() {
 
 // ログパネルを初期化
 initLogsPanel();
+
+// ===== グラフパネル関連 =====
+
+/**
+ * グラフパネルの初期化
+ */
+function initGraphPanel() {
+    const graphToggleBtn = document.getElementById('graphToggleBtn');
+    const graphPanel = document.getElementById('graphPanel');
+    const graphPanelBody = document.getElementById('graphPanelBody');
+    const graphPanelResizeHandle = document.getElementById('graphPanelResizeHandle');
+    const graphLabelSelect = document.getElementById('graphLabelFilter');
+    const matrixContainer = document.getElementById('matrixTableContainer');
+    const mainContainer = document.querySelector('.main-container');
+    const bottomLeftButtons = document.querySelector('.bottom-left-buttons');
+
+    // ラベルリストをドロップダウンに設定
+    function populateGraphLabelSelect() {
+        if (!graphLabelSelect) return;
+        const labels = state.labelSuggestions || [];
+        graphLabelSelect.innerHTML = '<option value="">ラベルを選択</option>';
+        labels.forEach(label => {
+            const option = document.createElement('option');
+            option.value = label;
+            option.textContent = label;
+            graphLabelSelect.appendChild(option);
+        });
+    }
+
+    // 選択されたラベルで表を更新
+    function updateGraphPanel() {
+        if (!graphLabelSelect) return;
+        const labelName = graphLabelSelect.value;
+        if (!labelName) {
+            if (matrixContainer) matrixContainer.innerHTML = '';
+            return;
+        }
+        // 表を更新
+        renderProgressMatrix(matrixContainer, labelName);
+    }
+
+    // グラフトグルボタン
+    if (graphToggleBtn) {
+        graphToggleBtn.addEventListener('click', () => {
+            state.graphPanelOpen = !state.graphPanelOpen;
+            if (state.graphPanelOpen) {
+                // パネル表示
+                if (graphPanel) graphPanel.style.display = 'flex';
+                if (graphPanelBody) graphPanelBody.style.display = 'block';
+                if (mainContainer) mainContainer.classList.add('graph-panel-open');
+                if (bottomLeftButtons) {
+                    bottomLeftButtons.classList.add('graph-panel-open');
+                }
+                // カンバンボードの高さをグラフパネルの高さに応じて調整
+                const kanbanMain = document.querySelector('.kanban-main');
+                const kanbanBoard = document.querySelector('.kanban-board');
+                const panelHeight = graphPanel.offsetHeight;
+                const remainingHeight = window.innerHeight - panelHeight;
+                if (kanbanMain) {
+                    kanbanMain.style.height = `${remainingHeight}px`;
+                }
+                if (kanbanBoard) {
+                    kanbanBoard.style.height = `${remainingHeight}px`;
+                }
+                if (bottomLeftButtons) {
+                    bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
+                }
+                populateGraphLabelSelect();
+                // デフォルトで最初のラベルを選択
+                if (graphLabelSelect && state.labelSuggestions && state.labelSuggestions.length > 0) {
+                    graphLabelSelect.value = state.labelSuggestions[0];
+                    updateGraphPanel();
+                }
+            } else {
+                // パネル非表示
+                if (graphPanel) graphPanel.style.display = 'none';
+                if (graphPanelBody) graphPanelBody.style.display = 'none';
+                if (mainContainer) mainContainer.classList.remove('graph-panel-open');
+                if (bottomLeftButtons) {
+                    bottomLeftButtons.classList.remove('graph-panel-open');
+                    bottomLeftButtons.style.bottom = '';
+                }
+                // カンバンボードの高さをリセット
+                const kanbanMain = document.querySelector('.kanban-main');
+                const kanbanBoard = document.querySelector('.kanban-board');
+                if (kanbanMain) {
+                    kanbanMain.style.height = '';
+                }
+                if (kanbanBoard) {
+                    kanbanBoard.style.height = '';
+                }
+                // グラフパネルの高さをリセット
+                if (graphPanel) graphPanel.style.height = '20vh';
+            }
+        });
+    }
+
+    // ラベル変更イベント
+    if (graphLabelSelect) {
+        graphLabelSelect.addEventListener('change', () => {
+            updateGraphPanel();
+        });
+    }
+
+    // リサイズハンドルによる高さ変更
+    if (graphPanelResizeHandle && graphPanel) {
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+        const minHeight = 150; // 最小高さ (px)
+        const maxHeight = window.innerHeight - 100; // 最大高さ (px)
+
+        // bottomLeftButtons の bottom とカンバンボードの高さをグラフパネルの高さに合わせて更新
+        function updatePanelLayout(panelHeight) {
+            if (bottomLeftButtons) {
+                bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
+            }
+            // カンバンボードの高さをグラフパネルの高さに応じて調整
+            const kanbanMain = document.querySelector('.kanban-main');
+            const kanbanBoard = document.querySelector('.kanban-board');
+            const remainingHeight = window.innerHeight - panelHeight;
+            if (kanbanMain) {
+                kanbanMain.style.height = `${remainingHeight}px`;
+            }
+            if (kanbanBoard) {
+                kanbanBoard.style.height = `${remainingHeight}px`;
+            }
+        }
+
+        graphPanelResizeHandle.addEventListener('mousedown', (e) => {
+            if (!state.graphPanelOpen) return;
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = graphPanel.offsetHeight;
+            graphPanelResizeHandle.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const deltaY = startY - e.clientY;
+            let newHeight = startHeight + deltaY;
+            newHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+            graphPanel.style.height = `${newHeight}px`;
+            updatePanelLayout(newHeight);
+            // グラフを再描画してサイズを合わせる
+            if (graphLabelSelect && graphLabelSelect.value) {
+                updateGraphPanel();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isResizing) return;
+            isResizing = false;
+            graphPanelResizeHandle.classList.remove('dragging');
+        });
+    }
+}
+
+// グラフパネルを初期化
+initGraphPanel();

@@ -276,3 +276,196 @@ export function renderAssigneeChart(container, assigneeName) {
         </svg>
     `;
 }
+
+
+/**
+ * 進捗率に応じた色を取得
+ */
+function getProgressColor(progress) {
+    if (progress >= 100) return '#10b981';
+    if (progress >= 75) return '#3b82f6';
+    if (progress >= 50) return '#0ea5e9';
+    if (progress >= 25) return '#f59e0b';
+    return '#ef4444';
+}
+
+/**
+ * ラベルでフィルタしたチケット一覧を取得（アーカイブ含む）
+ */
+export function getTicketsByLabel(labelName) {
+    return state.allTickets.filter(t =>
+        t.labels && t.labels.includes(labelName)
+    );
+}
+
+/**
+ * 設定画面の担当者順番配列を取得
+ */
+function getAssigneeOrder() {
+    try {
+        if (typeof Settings !== 'undefined' && Settings.settings) {
+            const s = Settings.settings();
+            if (s && s.users && Array.isArray(s.users)) {
+                return s.users.map(u => typeof u === 'string' ? u : u.name || u);
+            }
+        }
+    } catch (e) {
+        // Settings未初期化
+    }
+    return [];
+}
+
+/**
+ * カラム順序（左側に表示する順）
+ */
+const COLUMN_ORDER = ['archive', 'done', 'doing', 'todo'];
+
+/**
+ * カラム名を表示用ラベルに変換
+ */
+function columnToLabel(column) {
+    const map = { archive: 'Archive', done: 'Done', doing: 'Doing', todo: 'To Do' };
+    return map[column] || column;
+}
+
+/**
+ * 進捗マトリックス表を描画
+ * 列: チケット名（カラム順 archive → done → doing → todo でソート）
+ * 行: 担当者（設定画面の順番）
+ */
+export function renderProgressMatrix(container, labelName) {
+    if (!container) return;
+    
+    const tickets = getTicketsByLabel(labelName);
+    if (tickets.length === 0) {
+        container.innerHTML = '<p class="graph-placeholder">該当するチケットがありません</p>';
+        return;
+    }
+    
+    const assigneeOrder = getAssigneeOrder();
+    
+    // チケット名でグループ化（出現順保持）
+    const titleMap = new Map();
+    tickets.forEach(t => {
+        const title = t.title || '無題';
+        if (!titleMap.has(title)) {
+            titleMap.set(title, []);
+        }
+        titleMap.get(title).push(t);
+    });
+    
+    // カラム順 archive → done → doing → todo でソート
+    // 同一タイトルで複数カラムに跨る場合は最初の出現カラムの順でソート
+    const titles = Array.from(titleMap.keys()).sort((a, b) => {
+        const aTickets = titleMap.get(a);
+        const bTickets = titleMap.get(b);
+        // 各タイトルの最小カラムインデックスを取得
+        const aMinCol = Math.min(...aTickets.map(t => COLUMN_ORDER.indexOf(t.column || 'todo')));
+        const bMinCol = Math.min(...bTickets.map(t => COLUMN_ORDER.indexOf(t.column || 'todo')));
+        return aMinCol - bMinCol;
+    });
+    
+    // 担当者を収集
+    const assigneeSet = new Set();
+    tickets.forEach(t => {
+        if (t.assignees) {
+            t.assignees.forEach(a => assigneeSet.add(a));
+        }
+    });
+    
+    // 設定画面の順番でソート
+    const assignees = Array.from(assigneeSet).sort((a, b) => {
+        const ia = assigneeOrder.indexOf(a);
+        const ib = assigneeOrder.indexOf(b);
+        return (ia >= 0 ? ia : Infinity) - (ib >= 0 ? ib : Infinity);
+    });
+    
+    if (assignees.length === 0 || titles.length === 0) {
+        container.innerHTML = '<p class="graph-placeholder">データがありません</p>';
+        return;
+    }
+    
+    const table = document.createElement('table');
+    table.className = 'progress-matrix-table';
+    
+    // ヘッダー
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    const thName = document.createElement('th');
+    thName.textContent = '担当者';
+    headerRow.appendChild(thName);
+    
+    titles.forEach(title => {
+        const th = document.createElement('th');
+        const titleTickets = titleMap.get(title);
+        // 複数カラムに跨る場合はカラム情報をヘッダーに表示
+        const columns = new Set(titleTickets.map(t => t.column || 'todo'));
+        if (columns.size > 1) {
+            const sortedCols = Array.from(columns).sort((a, b) => COLUMN_ORDER.indexOf(a) - COLUMN_ORDER.indexOf(b));
+            th.textContent = `${title} (${sortedCols.map(columnToLabel).join(', ')})`;
+        } else {
+            th.textContent = title;
+        }
+        th.title = title;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // 本文
+    const tbody = document.createElement('tbody');
+    assignees.forEach(assignee => {
+        const tr = document.createElement('tr');
+        const tdName = document.createElement('td');
+        tdName.textContent = assignee;
+        tdName.title = assignee;
+        tr.appendChild(tdName);
+        
+        titles.forEach(title => {
+            const td = document.createElement('td');
+            const titleTickets = titleMap.get(title).filter(t =>
+                t.assignees && t.assignees.includes(assignee)
+            );
+            
+            if (titleTickets.length === 0) {
+                const span = document.createElement('span');
+                span.style.color = '#d1d5db';
+                span.textContent = '—';
+                td.appendChild(span);
+            } else {
+                const avgProgress = Math.round(
+                    titleTickets.reduce((sum, t) => sum + (t.progress || 0), 0) / titleTickets.length
+                );
+                const color = getProgressColor(avgProgress);
+                
+                const cellDiv = document.createElement('div');
+                cellDiv.className = 'progress-bar-cell';
+                
+                const barDiv = document.createElement('div');
+                barDiv.className = 'progress-bar-mini';
+                const fillDiv = document.createElement('div');
+                fillDiv.className = 'progress-bar-mini-fill';
+                fillDiv.style.width = avgProgress + '%';
+                fillDiv.style.background = color;
+                barDiv.appendChild(fillDiv);
+                
+                const textSpan = document.createElement('span');
+                textSpan.className = 'progress-bar-text';
+                textSpan.textContent = avgProgress + '%';
+                
+                cellDiv.appendChild(barDiv);
+                cellDiv.appendChild(textSpan);
+                td.appendChild(cellDiv);
+            }
+            
+            tr.appendChild(td);
+        });
+        
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    
+    container.innerHTML = '';
+    container.appendChild(table);
+}
+

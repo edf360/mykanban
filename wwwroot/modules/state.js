@@ -19,6 +19,8 @@ export const state = {
     labelSuggestions: [],
     assigneeSuggestions: [],
     searchKeyword: '',
+    // グラフパネル表示状態
+    graphPanelOpen: false,
 };
 
 // イベントバス（モジュール間通信用）

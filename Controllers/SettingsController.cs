@@ -368,16 +368,17 @@ public class SettingsController : ControllerBase
             ticket.Column = MapStateToColumn(GetSafeValue(values, columnIndexes, "状態"));
             ticket.IsArchived = false;
             
-            // 担当者の処理
-            var assignee = GetSafeValue(values, columnIndexes, "担当者").Trim();
-            ticket.Assignees = !string.IsNullOrEmpty(assignee) ? new List<string> { assignee } : new List<string>();
-            if (!string.IsNullOrEmpty(assignee))
+            // 担当者の処理（;区切りで複数対応）
+            var assigneesStr = GetSafeValue(values, columnIndexes, "担当者");
+            var assignees = ParseSemicolonSeparated(assigneesStr);
+            ticket.Assignees = assignees;
+            foreach (var a in assignees)
             {
-                discoveredAssignees.Add(assignee);
+                discoveredAssignees.Add(a);
             }
             if (existingTicket == null)
             {
-                ticket.MainAssignee = !string.IsNullOrEmpty(assignee) ? assignee : null;
+                ticket.MainAssignee = assignees.Count > 0 ? assignees[0] : null;
             }
 
             // 日付の処理
