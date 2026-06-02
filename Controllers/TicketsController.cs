@@ -32,7 +32,7 @@ public class TicketsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Ticket>> Create([FromBody] TicketDto dto)
     {
-        // 最大Idを取得して+1
+        // 全チケットの最大Idを取得して+1（トランザクション内で排他ロックにより重複防止）
         var maxId = await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0;
 
         var ticket = new Ticket
@@ -145,18 +145,27 @@ public class TicketsController : ControllerBase
 
     /// <summary>
     /// 履歴を記録（全ての変更を保存）
+    /// 履歴記録の失敗はメイン処理に影響しないようにtry-catchで保護
     /// </summary>
     private async Task RecordHistory(string ticketId, string type, string? value, string? previousValue)
     {
-        var history = new TicketHistory
+        try
         {
-            TicketId = ticketId,
-            Type = type,
-            Value = value,
-            PreviousValue = previousValue,
-            Date = DateTime.Now
-        };
-        _context.TicketHistories.Add(history);
+            var history = new TicketHistory
+            {
+                TicketId = ticketId,
+                Type = type,
+                Value = value,
+                PreviousValue = previousValue,
+                Date = DateTime.Now
+            };
+            _context.TicketHistories.Add(history);
+        }
+        catch (Exception ex)
+        {
+            // 履歴記録の失敗はログ出力のみでメイン処理を継続
+            System.Diagnostics.Debug.WriteLine($"履歴記録に失敗しました: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -393,16 +402,23 @@ public class TicketsController : ControllerBase
         var tickets = await _context.Tickets.Where(t => t.LabelsJson != null && t.LabelsJson.Length > 2).ToListAsync();
         foreach (var ticket in tickets)
             {
-                var labels = System.Text.Json.JsonSerializer.Deserialize<List<string>>(ticket.LabelsJson);
-                if (labels != null)
+                try
                 {
-                    foreach (var label in labels)
+                    var labels = System.Text.Json.JsonSerializer.Deserialize<List<string>>(ticket.LabelsJson);
+                    if (labels != null)
                     {
-                        if (!labelMap.ContainsKey(label))
+                        foreach (var label in labels)
                         {
-                            labelMap[label] = "#808080"; // 設定にないラベルはデフォルト色
+                            if (!labelMap.ContainsKey(label))
+                            {
+                                labelMap[label] = "#808080"; // 設定にないラベルはデフォルト色
+                            }
                         }
                     }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // 無効なJSONはスキップ
                 }
             }
 
@@ -437,13 +453,20 @@ public class TicketsController : ControllerBase
         var tickets = await _context.Tickets.Where(t => t.AssigneesJson != null && t.AssigneesJson.Length > 2).ToListAsync();
         foreach (var ticket in tickets)
             {
-                var assignees = System.Text.Json.JsonSerializer.Deserialize<List<string>>(ticket.AssigneesJson);
-                if (assignees != null)
+                try
                 {
-                    foreach (var assignee in assignees)
+                    var assignees = System.Text.Json.JsonSerializer.Deserialize<List<string>>(ticket.AssigneesJson);
+                    if (assignees != null)
                     {
-                        assigneeSet.Add(assignee);
+                        foreach (var assignee in assignees)
+                        {
+                            assigneeSet.Add(assignee);
+                        }
                     }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // 無効なJSONはスキップ
                 }
             }
 

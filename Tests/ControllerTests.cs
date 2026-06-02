@@ -1239,4 +1239,139 @@ public class AdditionalControllerTests : IDisposable
         Assert.Equal("hidden", tickets[1].TicketId);
         Assert.True(tickets[1].IsArchived);
     }
+
+    // ===== JSON逆シリアライズの例外ハンドリングテスト =====
+
+    [Fact]
+    public async Task GetLabelsSuggest_InvalidJson_ShouldNotThrow()
+    {
+        // Arrange: 無効なJSONを含むチケットを直接DBに追加
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "invalid-json-label",
+            Id = 1,
+            Title = "無効JSONテスト",
+            Column = "todo",
+            Position = 0,
+            LabelsJson = "invalid-json-not-array"
+        });
+        await _context.SaveChangesAsync();
+
+        // Act: 例外が投げられないことを確認
+        var result = await _controller.GetLabelsSuggest();
+
+        // Assert: 空リストが返る（無効なJSONはスキップされる）
+        var actionResult = Assert.IsType<ActionResult<List<LabelSuggestDto>>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var labels = Assert.IsAssignableFrom<List<LabelSuggestDto>>(okResult.Value!);
+        Assert.Empty(labels);
+    }
+
+    [Fact]
+    public async Task GetAssigneesSuggest_InvalidJson_ShouldNotThrow()
+    {
+        // Arrange: 無効なJSONを含むチケットを直接DBに追加
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "invalid-json-assignee",
+            Id = 1,
+            Title = "無効JSONテスト",
+            Column = "todo",
+            Position = 0,
+            AssigneesJson = "{not-valid-json"
+        });
+        await _context.SaveChangesAsync();
+
+        // Act: 例外が投げられないことを確認
+        var result = await _controller.GetAssigneesSuggest();
+
+        // Assert: 空リストが返る（無効なJSONはスキップされる）
+        var actionResult = Assert.IsType<ActionResult<List<string>>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var assignees = Assert.IsAssignableFrom<List<string>>(okResult.Value!);
+        Assert.Empty(assignees);
+    }
+}
+
+/// <summary>
+/// TokenStoreのテスト
+/// </summary>
+public class TokenStoreTests
+{
+    [Fact]
+    public void CreateToken_ShouldCreateValidToken()
+    {
+        // Arrange
+        var store = new KanbanServer.Services.TokenStore();
+
+        // Act
+        var token = store.CreateToken("testuser", false);
+
+        // Assert
+        Assert.NotNull(token);
+        Assert.NotEmpty(token);
+        var info = store.ValidateToken(token);
+        Assert.NotNull(info);
+        Assert.Equal("testuser", info.Username);
+        Assert.False(info.IsAdmin);
+    }
+
+    [Fact]
+    public void ValidateToken_ExpiredToken_ShouldReturnNull()
+    {
+        // Arrange
+        var store = new KanbanServer.Services.TokenStore();
+        var token = store.CreateToken("testuser", false, TimeSpan.FromMilliseconds(10));
+
+        // Act: 有効期限を待つ
+        System.Threading.Thread.Sleep(20);
+        var info = store.ValidateToken(token);
+
+        // Assert: 期限切れでnullが返る
+        Assert.Null(info);
+    }
+
+    [Fact]
+    public void ValidateToken_ValidToken_ShouldReturnInfo()
+    {
+        // Arrange
+        var store = new KanbanServer.Services.TokenStore();
+        var token = store.CreateToken("testuser", true, TimeSpan.FromHours(1));
+
+        // Act
+        var info = store.ValidateToken(token);
+
+        // Assert
+        Assert.NotNull(info);
+        Assert.Equal("testuser", info.Username);
+        Assert.True(info.IsAdmin);
+    }
+
+    [Fact]
+    public void RevokeToken_ShouldInvalidateToken()
+    {
+        // Arrange
+        var store = new KanbanServer.Services.TokenStore();
+        var token = store.CreateToken("testuser", false);
+
+        // Act
+        store.RevokeToken(token);
+        var info = store.ValidateToken(token);
+
+        // Assert
+        Assert.Null(info);
+    }
+
+    [Fact]
+    public void ValidateToken_NonExistentToken_ShouldReturnNull()
+    {
+        // Arrange
+        var store = new KanbanServer.Services.TokenStore();
+
+        // Act
+        var info = store.ValidateToken("non-existent-token");
+
+        // Assert
+        Assert.Null(info);
+    }
 }

@@ -2,6 +2,7 @@ using KanbanServer.Data;
 using KanbanServer.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -199,6 +200,11 @@ public class SettingsController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { error = "ファイルが選択されていません" });
 
+        // ファイルサイズ制限（10MB）
+        const long maxFileSize = 10 * 1024 * 1024;
+        if (file.Length > maxFileSize)
+            return BadRequest(new { error = $"ファイルサイズが制限を超えています（最大10MB）" });
+
         using var reader = new StreamReader(file.OpenReadStream());
         var json = await reader.ReadToEndAsync();
 
@@ -306,6 +312,11 @@ public class SettingsController : ControllerBase
     {
         if (file == null || file.Length == 0)
             return BadRequest(new { error = "ファイルが選択されていません" });
+
+        // ファイルサイズ制限（10MB）
+        const long maxFileSize = 10 * 1024 * 1024;
+        if (file.Length > maxFileSize)
+            return BadRequest(new { error = $"ファイルサイズが制限を超えています（最大10MB）" });
 
         using var reader = new StreamReader(file.OpenReadStream());
         var lines = new List<string>();
@@ -594,8 +605,13 @@ public class SettingsController : ControllerBase
         var cleaned = value.Trim();
         if (string.IsNullOrEmpty(cleaned))
             return null;
-        if (DateTime.TryParse(cleaned, out var date))
+        // カルチャ不変のパーサーを使用し、複数のフォーマットをサポート
+        var formats = new[] { "yyyy-MM-dd", "yyyy/MM/dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm:ss", "o" };
+        if (DateTime.TryParseExact(cleaned, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             return date;
+        // Fallback: InvariantCulture で標準パース
+        if (DateTime.TryParse(cleaned, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date2))
+            return date2;
         return null;
     }
 

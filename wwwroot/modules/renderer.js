@@ -14,6 +14,29 @@ import { openEditModal } from './modal.js';
 // グローバルイベントリスナーのクリーンアップ用配列
 const progressEventListeners = new Map();
 
+/**
+ * 色値が有効なHEXコードか検証する（#RGB または #RRGGBB のみ許可）
+ */
+function isValidHexColor(color) {
+    if (typeof color !== 'string') return false;
+    return /^#([0-9A-Fa-f]{3}){1,2}$/.test(color);
+}
+
+/**
+ * 色値を正規化する（不正な場合はデフォルトグレーを返す）
+ */
+function sanitizeColor(color) {
+    if (isValidHexColor(color)) {
+        // #RGB を #RRGGBB に展開
+        if (color.length === 4) {
+            return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+        }
+        return color.toLowerCase();
+    }
+    console.warn(`[renderer] Invalid color value "${color}", using default`);
+    return '#808080';
+}
+
 function getLabelColorMap() {
     const map = {};
     try {
@@ -21,7 +44,7 @@ function getLabelColorMap() {
             const labels = Settings.settings().labels || [];
             labels.forEach(l => {
                 if (l && l.name) {
-                    map[l.name] = l.color || '#808080';
+                    map[l.name] = sanitizeColor(l.color || '#808080');
                 }
             });
         }

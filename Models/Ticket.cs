@@ -6,6 +6,7 @@ namespace KanbanServer.Models;
 public class Ticket
 {
     public string TicketId { get; set; } = string.Empty;
+    
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
@@ -27,7 +28,17 @@ public class Ticket
     [JsonPropertyName("assignees")]
     public List<string> Assignees
     {
-        get => JsonSerializer.Deserialize<List<string>>(AssigneesJson) ?? new();
+        get
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(AssigneesJson) ?? new();
+            }
+            catch (JsonException)
+            {
+                return new();
+            }
+        }
         set => AssigneesJson = JsonSerializer.Serialize(value);
     }
 
@@ -44,14 +55,34 @@ public class Ticket
     [JsonPropertyName("labels")]
     public List<string> Labels
     {
-        get => JsonSerializer.Deserialize<List<string>>(LabelsJson) ?? new();
+        get
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(LabelsJson) ?? new();
+            }
+            catch (JsonException)
+            {
+                return new();
+            }
+        }
         set => LabelsJson = JsonSerializer.Serialize(value);
     }
 
     [JsonPropertyName("childTasks")]
     public List<ChildTask> ChildTasks
     {
-        get => JsonSerializer.Deserialize<List<ChildTask>>(ChildTasksJson) ?? new();
+        get
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<List<ChildTask>>(ChildTasksJson) ?? new();
+            }
+            catch (JsonException)
+            {
+                return new();
+            }
+        }
         set => ChildTasksJson = JsonSerializer.Serialize(value);
     }
 }
