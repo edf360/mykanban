@@ -113,10 +113,22 @@ export function showLoginScreen() {
     const bottomButtons = document.querySelector('.bottom-left-buttons');
     const filterArea = document.getElementById('filterArea');
 
-    if (loginScreen) loginScreen.style.display = 'flex';
-    if (appContent) appContent.style.display = 'none';
-    if (bottomButtons) bottomButtons.style.display = 'none';
-    if (filterArea) filterArea.style.display = 'none';
+    if (loginScreen) {
+        loginScreen.classList.remove('hidden');
+        loginScreen.style.display = 'flex';
+    }
+    if (appContent) {
+        appContent.classList.add('hidden');
+        appContent.style.display = 'none';
+    }
+    if (bottomButtons) {
+        bottomButtons.classList.add('hidden');
+        bottomButtons.style.display = 'none';
+    }
+    if (filterArea) {
+        filterArea.classList.add('hidden');
+        filterArea.style.display = 'none';
+    }
 }
 
 /**
@@ -128,8 +140,20 @@ export function showAppScreen() {
     const bottomButtons = document.querySelector('.bottom-left-buttons');
     const filterArea = document.getElementById('filterArea');
 
-    if (loginScreen) loginScreen.style.display = 'none';
-    if (appContent) appContent.style.display = '';
-    if (bottomButtons) bottomButtons.style.display = '';
-    if (filterArea) filterArea.style.display = '';
+    if (loginScreen) {
+        loginScreen.classList.add('hidden');
+        loginScreen.style.display = 'none';
+    }
+    if (appContent) {
+        appContent.classList.remove('hidden');
+        appContent.style.display = '';
+    }
+    if (bottomButtons) {
+        bottomButtons.classList.remove('hidden');
+        bottomButtons.style.display = '';
+    }
+    if (filterArea) {
+        filterArea.classList.remove('hidden');
+        filterArea.style.display = '';
+    }
 }

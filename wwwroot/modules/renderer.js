@@ -84,10 +84,26 @@ export function ticketMatchesFilter(ticket) {
         return false;
     }
 
-    // タイトル検索フィルター
+    // メイン担当限定フィルター（担当者が選択されている場合のみ有効）
+    if (state.mainAssigneeOnly && selectedAssignee) {
+        if (ticket.mainAssignee !== selectedAssignee) {
+            return false;
+        }
+    }
+
+    // チケット検索フィルター（タイトル・メモ・子タスク名）
     const keyword = state.searchKeyword?.trim().toLowerCase();
-    if (keyword && !ticket.title?.toLowerCase().includes(keyword)) {
-        return false;
+    if (keyword) {
+        const title = (ticket.title || '').toLowerCase();
+        const memo = (ticket.memo || '').toLowerCase();
+        const childTasksText = (ticket.childTasks || [])
+            .map(t => t.text || '')
+            .join(' ')
+            .toLowerCase();
+        const searchable = `${title} ${memo} ${childTasksText}`;
+        if (!searchable.includes(keyword)) {
+            return false;
+        }
     }
 
     return true;
@@ -144,8 +160,6 @@ export function renderAllTickets() {
         }
     });
     
-    // カラムカウントを更新（メモカラムは除外）
-    document.querySelectorAll('.column:not([data-column="memo"])').forEach(updateColumnCount);
 }
 
 /**
@@ -157,6 +171,22 @@ export function createTicketElement(data) {
     ticket.draggable = true;
     ticket.dataset.id = data.ticketId;
     state.currentTicketData[data.ticketId] = data;
+
+    // 色分けクラスの付与
+    const today = new Date().toISOString().split('T')[0];
+    if (data.endDate) {
+        if (data.endDate < today) {
+            ticket.classList.add('overdue');
+        } else if (data.endDate === today) {
+            ticket.classList.add('due-today');
+        }
+    }
+    if (data.priority === 'high') {
+        ticket.classList.add('high-priority');
+    }
+    if (data.status === 'blocked') {
+        ticket.classList.add('blocked');
+    }
 
     const titleHtml = data.title ? escapeHtml(data.title) : '(タイトルなし)';
     
@@ -453,15 +483,6 @@ export function recreateTicket(ticketEl, data, column) {
     ticketEl.replaceWith(newTicket);
 }
 
-/**
- * カラムカウントを更新
- */
-export function updateColumnCount(column) {
-    const countEl = column.querySelector('.column-count');
-    if (!countEl) return;
-    const count = column.querySelectorAll('.ticket').length;
-    countEl.textContent = `${count} 件`;
-}
 
 // ドラッグ関連のグローバル変数（dragdrop.jsと共有）
 export let draggedTicket = null;

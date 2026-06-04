@@ -4,7 +4,7 @@
 
 import { API_BASE, state } from './state.js';
 import { apiRequest, loadTickets } from './api.js';
-import { draggedTicket, removeDropIndicators, updateColumnCount, renderAllTickets } from './renderer.js';
+import { draggedTicket, removeDropIndicators, renderAllTickets } from './renderer.js';
 
 /**
  * ドロップゾーンを設定
@@ -85,9 +85,6 @@ export function setupDropZones() {
             } else {
                 list.insertBefore(draggedTicket, tickets[insertIndex]);
             }
-            
-            const column = list.closest('.column');
-            updateColumnCount(column);
             
             // サーバーにカラム変更を通知
             const newColumn = column.dataset.column;

@@ -19,6 +19,8 @@ export const state = {
     labelSuggestions: [],
     assigneeSuggestions: [],
     searchKeyword: '',
+    // メイン担当限定フィルター
+    mainAssigneeOnly: false,
     // グラフパネル表示状態
     graphPanelOpen: false,
 };

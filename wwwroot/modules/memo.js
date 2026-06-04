@@ -46,6 +46,7 @@ export function updateMemoColumn() {
     
     const selectedAssignee = getSelectedAssignee();
     if (!selectedAssignee) {
+        memoColumn.classList.add('hidden');
         memoColumn.style.display = 'none';
         return;
     }
@@ -54,6 +55,7 @@ export function updateMemoColumn() {
     if (memoColumnTitle) {
         memoColumnTitle.textContent = `${selectedAssignee} - Memo`;
     }
+    memoColumn.classList.remove('hidden');
     memoColumn.style.display = 'flex';
     
     // 予実グラフを描画

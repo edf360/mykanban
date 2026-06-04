@@ -4,7 +4,7 @@
 
 import { API_BASE, state, escapeHtml } from './state.js';
 import { apiRequest } from './api.js';
-import { recreateTicket, updateColumnCount, renderAllTickets } from './renderer.js';
+import { recreateTicket, renderAllTickets } from './renderer.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { addChildTaskToDom, renderChildTasks } from './childtasks.js';
@@ -12,14 +12,15 @@ import { addChildTaskToDom, renderChildTasks } from './childtasks.js';
 /**
  * 新規チケットモーダルを開く
  */
-export function openNewModal() {
-    console.log('[Modal] openNewModal called');
+export function openNewModal(defaultColumn) {
+    console.log('[Modal] openNewModal called with defaultColumn:', defaultColumn);
     state.editingTicketId = null;
     window.__editingTicketId = null;
     state.currentLabels = [];
     state.currentAssignees = [];
     state.mainAssignee = null;
     state.currentChildTasks = [];
+    state.newTicketColumn = defaultColumn || 'todo';
     
     // フィルターで選択された担当者をデフォルトに設定
     const selectedAssignee = getSelectedAssignee();
@@ -137,12 +138,11 @@ export async function saveTicket() {
             }
         } else {
             // 新規作成
-            data.column = 'todo';
+            data.column = state.newTicketColumn || 'todo';
             const created = await apiRequest('POST', API_BASE, data);
             state.currentTicketData[created.ticketId] = created;
             state.allTickets.push(created);
             
-            const todoList = document.querySelector('.column[data-column="todo"] .ticket-list');
             // 再描画で追加
             renderAllTickets();
         }

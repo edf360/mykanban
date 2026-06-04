@@ -14,11 +14,13 @@ export function initArchive() {
     
     if (archiveToggleBottomBtn && archiveColumn) {
         archiveToggleBottomBtn.addEventListener('click', () => {
-            console.log('[Archive] toggle button clicked, current display:', archiveColumn.style.display);
-            if (archiveColumn.style.display === 'none') {
+            console.log('[Archive] toggle button clicked');
+            if (archiveColumn.classList.contains('hidden')) {
+                archiveColumn.classList.remove('hidden');
                 archiveColumn.style.display = 'flex';
                 console.log('[Archive] archive column shown');
             } else {
+                archiveColumn.classList.add('hidden');
                 archiveColumn.style.display = 'none';
                 console.log('[Archive] archive column hidden');
             }

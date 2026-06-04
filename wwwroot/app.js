@@ -12,13 +12,13 @@ import { renderLabelSelect } from './modules/labels.js';
 import { renderAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
-import { populateAssigneeFilter, initFilter, initTitleSearch } from './modules/filter.js';
+import { populateAssigneeFilter, initFilter, initTicketSearch, initMainAssigneeFilter, initFilterToggle } from './modules/filter.js';
 import { initArchive } from './modules/archive.js';
 import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
 import { getToken, login, logout, showLoginScreen, showAppScreen, getUsername } from './modules/auth.js';
 import { logInfo, logError, copyToClipboard, exportAsText, getLogBuffer, onUIUpdate } from './modules/logger.js';
-import { renderProgressMatrix } from './modules/charts.js';
+import { renderProgressMatrix, getTicketsByLabel } from './modules/charts.js';
 
 /**
  * アプリケーションのメイン初期化処理
@@ -87,11 +87,14 @@ async function initApp() {
     // 6. 設定パネル
     initSettings();
 
-    // 6. Todo カラムの追加ボタン
-    const addBtn = document.querySelector('.column[data-column="todo"] .add-ticket-btn');
-    if (addBtn) {
-        addBtn.addEventListener('click', openNewModal);
-    }
+    // 6. カラムヘッダーの追加ボタン（todo/doing/done）
+    document.querySelectorAll('.column-add-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const column = btn.dataset.column;
+            openNewModal(null, column);
+        });
+    });
 
     // 7. 子タスク追加ボタン
     const addChildTaskBtn = document.getElementById('addChildTaskBtn');
@@ -106,6 +109,7 @@ async function initApp() {
     // 8. ログアウトボタン
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
+        logoutBtn.classList.remove('hidden');
         logoutBtn.style.display = 'block';
         logoutBtn.addEventListener('click', async () => {
             if (!confirm('ログアウトしますか？')) return;
@@ -153,8 +157,14 @@ async function initApp() {
         // フィルターイベントを設定
         await initFilter();
 
-        // タイトル検索を初期化
-        initTitleSearch();
+        // チケット検索を初期化
+        initTicketSearch();
+
+        // メイン担当限定フィルターを初期化
+        initMainAssigneeFilter();
+
+        // 検索ウィンドウトグルを初期化
+        initFilterToggle();
 
         // アプリ画面を表示
         showAppScreen();
@@ -181,6 +191,7 @@ function setupLoginForm() {
         if (!username || !password) {
             if (loginError) {
                 loginError.textContent = 'ユーザ名とパスワードを入力してください';
+                loginError.classList.remove('hidden');
                 loginError.style.display = 'block';
             }
             return;
@@ -193,6 +204,7 @@ function setupLoginForm() {
         } catch (error) {
             if (loginError) {
                 loginError.textContent = error.message || 'ログインに失敗しました';
+                loginError.classList.remove('hidden');
                 loginError.style.display = 'block';
             }
         }
@@ -392,6 +404,9 @@ function initGraphPanel() {
     const graphPanelBody = document.getElementById('graphPanelBody');
     const graphPanelResizeHandle = document.getElementById('graphPanelResizeHandle');
     const graphLabelSelect = document.getElementById('graphLabelFilter');
+    const excludeToggleBtn = document.getElementById('graphExcludeToggleBtn');
+    const excludeTicketsList = document.getElementById('excludeTicketsList');
+    const excludeDropdown = document.getElementById('excludeTicketsDropdown');
     const matrixContainer = document.getElementById('matrixTableContainer');
     const mainContainer = document.querySelector('.main-container');
     const bottomLeftButtons = document.querySelector('.bottom-left-buttons');
@@ -409,16 +424,63 @@ function initGraphPanel() {
         });
     }
 
+    // 除外チケットの選択状態（IDセット）
+    const excludedTicketSet = new Set();
+
+    // 除外チケットリストをドロップダウンに設定
+    function populateExcludeTicketsSelect(labelName) {
+        if (!excludeTicketsList) return;
+        const tickets = getTicketsByLabel(labelName);
+        excludeTicketsList.innerHTML = '';
+        tickets.forEach(t => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = excludedTicketSet.has(t.id);
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    excludedTicketSet.add(t.id);
+                } else {
+                    excludedTicketSet.delete(t.id);
+                }
+                updateGraphPanel();
+            });
+            const span = document.createElement('span');
+            span.textContent = t.title || '無題';
+            item.appendChild(cb);
+            item.appendChild(span);
+            excludeTicketsList.appendChild(item);
+        });
+        updateExcludeButtonLabel();
+    }
+
+    // 除外ボタンラベルを更新
+    function updateExcludeButtonLabel() {
+        if (!excludeToggleBtn) return;
+        const count = excludedTicketSet.size;
+        excludeToggleBtn.textContent = count > 0 ? `除外チケット (${count}) ▼` : '除外チケットを選択 ▼';
+    }
+
+    // 除外チケットの選択ID一覧を取得
+    function getExcludedTicketIds() {
+        return Array.from(excludedTicketSet);
+    }
+
     // 選択されたラベルで表を更新
     function updateGraphPanel() {
         if (!graphLabelSelect) return;
         const labelName = graphLabelSelect.value;
         if (!labelName) {
             if (matrixContainer) matrixContainer.innerHTML = '';
+            if (excludeTicketsList) excludeTicketsList.innerHTML = '';
             return;
         }
+        // 除外チケットリストを更新
+        populateExcludeTicketsSelect(labelName);
         // 表を更新
-        renderProgressMatrix(matrixContainer, labelName);
+        const excludedIds = getExcludedTicketIds();
+        renderProgressMatrix(matrixContainer, labelName, excludedIds);
     }
 
     // グラフトグルボタン
@@ -427,8 +489,14 @@ function initGraphPanel() {
             state.graphPanelOpen = !state.graphPanelOpen;
             if (state.graphPanelOpen) {
                 // パネル表示
-                if (graphPanel) graphPanel.style.display = 'flex';
-                if (graphPanelBody) graphPanelBody.style.display = 'block';
+                if (graphPanel) {
+                    graphPanel.classList.remove('hidden');
+                    graphPanel.style.display = 'flex';
+                }
+                if (graphPanelBody) {
+                    graphPanelBody.classList.remove('hidden');
+                    graphPanelBody.style.display = 'block';
+                }
                 if (mainContainer) mainContainer.classList.add('graph-panel-open');
                 if (bottomLeftButtons) {
                     bottomLeftButtons.classList.add('graph-panel-open');
@@ -455,8 +523,14 @@ function initGraphPanel() {
                 }
             } else {
                 // パネル非表示
-                if (graphPanel) graphPanel.style.display = 'none';
-                if (graphPanelBody) graphPanelBody.style.display = 'none';
+                if (graphPanel) {
+                    graphPanel.classList.add('hidden');
+                    graphPanel.style.display = 'none';
+                }
+                if (graphPanelBody) {
+                    graphPanelBody.classList.add('hidden');
+                    graphPanelBody.style.display = 'none';
+                }
                 if (mainContainer) mainContainer.classList.remove('graph-panel-open');
                 if (bottomLeftButtons) {
                     bottomLeftButtons.classList.remove('graph-panel-open');
@@ -484,6 +558,62 @@ function initGraphPanel() {
         });
     }
 
+    // 除外チケットドロップダウントグル
+    if (excludeToggleBtn && excludeTicketsList) {
+        excludeToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            excludeTicketsList.classList.toggle('active');
+        });
+        // ドロップ内のクリックは伝播阻止
+        excludeTicketsList.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+    // クリックで閉じる
+    document.addEventListener('click', () => {
+        if (excludeTicketsList) {
+            excludeTicketsList.classList.remove('active');
+        }
+    });
+    if (excludeDropdown) {
+        excludeDropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+
+    // bottomLeftButtons の bottom とカンバンボードの高さをグラフパネルの高さに合わせて更新
+    function updatePanelLayout(panelHeight) {
+        if (bottomLeftButtons) {
+            bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
+        }
+        // カンバンボードの高さをグラフパネルの高さに応じて調整
+        const kanbanMain = document.querySelector('.kanban-main');
+        const kanbanBoard = document.querySelector('.kanban-board');
+        const remainingHeight = window.innerHeight - panelHeight;
+        if (kanbanMain) {
+            kanbanMain.style.height = `${remainingHeight}px`;
+        }
+        if (kanbanBoard) {
+            kanbanBoard.style.height = `${remainingHeight}px`;
+        }
+    }
+
+    // ブラウザサイズ変更・ズーム時にレイアウトを再計算
+    const handleBrowserResize = () => {
+        if (!state.graphPanelOpen) return;
+        const panelHeight = graphPanel.offsetHeight;
+        updatePanelLayout(panelHeight);
+        // グラフも再描画
+        if (graphLabelSelect && graphLabelSelect.value) {
+            const excludedIds = getExcludedTicketIds();
+            renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds);
+        }
+    };
+    window.addEventListener('resize', handleBrowserResize);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', handleBrowserResize);
+    }
+
     // リサイズハンドルによる高さ変更
     if (graphPanelResizeHandle && graphPanel) {
         let isResizing = false;
@@ -491,23 +621,6 @@ function initGraphPanel() {
         let startHeight = 0;
         const minHeight = 150; // 最小高さ (px)
         const maxHeight = window.innerHeight - 100; // 最大高さ (px)
-
-        // bottomLeftButtons の bottom とカンバンボードの高さをグラフパネルの高さに合わせて更新
-        function updatePanelLayout(panelHeight) {
-            if (bottomLeftButtons) {
-                bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
-            }
-            // カンバンボードの高さをグラフパネルの高さに応じて調整
-            const kanbanMain = document.querySelector('.kanban-main');
-            const kanbanBoard = document.querySelector('.kanban-board');
-            const remainingHeight = window.innerHeight - panelHeight;
-            if (kanbanMain) {
-                kanbanMain.style.height = `${remainingHeight}px`;
-            }
-            if (kanbanBoard) {
-                kanbanBoard.style.height = `${remainingHeight}px`;
-            }
-        }
 
         graphPanelResizeHandle.addEventListener('mousedown', (e) => {
             if (!state.graphPanelOpen) return;

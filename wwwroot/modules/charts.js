@@ -333,10 +333,15 @@ function columnToLabel(column) {
  * 列: チケット名（カラム順 archive → done → doing → todo でソート）
  * 行: 担当者（設定画面の順番）
  */
-export function renderProgressMatrix(container, labelName) {
+export function renderProgressMatrix(container, labelName, excludedTicketIds = []) {
     if (!container) return;
     
-    const tickets = getTicketsByLabel(labelName);
+    let tickets = getTicketsByLabel(labelName);
+    // 除外チケットをフィルタ（IDを数値で比較）
+    if (excludedTicketIds.length > 0) {
+        const excludedNumIds = excludedTicketIds.map(id => Number(id));
+        tickets = tickets.filter(t => !excludedNumIds.includes(Number(t.id)));
+    }
     if (tickets.length === 0) {
         container.innerHTML = '<p class="graph-placeholder">該当するチケットがありません</p>';
         return;
