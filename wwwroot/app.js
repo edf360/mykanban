@@ -92,7 +92,7 @@ async function initApp() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const column = btn.dataset.column;
-            openNewModal(null, column);
+            openNewModal(column);
         });
     });
 

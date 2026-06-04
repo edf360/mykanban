@@ -87,7 +87,7 @@ export function setupDropZones() {
             }
             
             // サーバーにカラム変更を通知
-            const newColumn = column.dataset.column;
+            const newColumn = list.closest('.column').dataset.column;
             const ticketId = draggedTicket.dataset.id;
             try {
                 // ドロップ先のカラム内のチケット（ドラッグ中のは除く）を取得

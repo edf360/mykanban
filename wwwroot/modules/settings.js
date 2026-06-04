@@ -649,11 +649,8 @@ async function handleImportFile(file) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const headers = {};
         const token = getToken();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
         const response = await fetch('/api/settings/import', {
             method: 'POST',
@@ -694,11 +691,8 @@ async function handleCsvImport(file) {
         const formData = new FormData();
         formData.append('file', file);
 
-        const headers = {};
         const token = getToken();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
         const response = await fetch('/api/settings/import-csv', {
             method: 'POST',

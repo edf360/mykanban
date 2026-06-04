@@ -418,7 +418,7 @@ public class SettingsController : ControllerBase
                 // 新規チケットのPosition設定
                 var maxPosition = await _context.Tickets
                     .Where(t => t.Column == ticket.Column)
-                    .MaxAsync(t => (int?)t.Position)
+                    .MaxAsync(t => (double?)t.Position)
                     .ConfigureAwait(true);
                 ticket.Position = (maxPosition ?? -1) + 1;
                 ticket.Id = GenerateNewId();
