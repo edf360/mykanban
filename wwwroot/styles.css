@@ -177,7 +177,7 @@ body {
     display: flex;
     gap: 20px;
     width: 100%;
-    max-width: 1400px;
+    max-width: 1580px;
     margin: 0 auto;
     height: calc(100dvh - 8px);
     padding: 4px;
@@ -203,7 +203,7 @@ body {
 
 .column-header {
     background: rgba(0, 0, 0, 0.02);
-    padding: 4px 20px;
+    padding: 12px 20px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
     text-align: center;
     border-radius: 16px 16px 0 0;
