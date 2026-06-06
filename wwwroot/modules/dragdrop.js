@@ -53,8 +53,10 @@ export function setupDropZones() {
             list.appendChild(indicator);
         });
 
-        list.addEventListener('dragleave', () => {
-            removeDropIndicators();
+        list.addEventListener('dragleave', (e) => {
+            if (!list.contains(e.relatedTarget)) {
+                removeDropIndicators();
+            }
         });
 
         list.addEventListener('drop', async (e) => {
@@ -92,39 +94,41 @@ export function setupDropZones() {
             try {
                 // state.allTicketsからドロップ先カラムの全チケットを取得（ドラッグ中除外）
                 const allColumnTickets = state.allTickets
-                    .filter(t => t.column === newColumn && t.ticketId !== ticketId)
+                    .filter(t => t.column === newColumn && String(t.ticketId) !== ticketId)
                     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-                
-                // フィルター後のチケットリスト（DOM上に表示されているものと同じ順序）
-                const filteredColumnTickets = allColumnTickets.filter(t => ticketMatchesFilter(t));
-                
-                // insertIndexはDOM上（フィルター後）のインデックス
-                // これをサーバー上の全チケットでの正しいインデックスに変換
+
+                // ドロップ後のDOMから可視チケット順を取得
+                const visibleTickets = Array.from(
+                    list.querySelectorAll('.ticket')
+                );
+                const visibleIndex = visibleTickets.findIndex(
+                    t => t.dataset.id === ticketId
+                );
+
+                // insertIdxをDOMベースで計算
                 let insertIdx;
                 if (allColumnTickets.length === 0) {
-                    // カラムが空の場合
                     insertIdx = 0;
-                } else if (insertIndex === -1 || insertIndex >= tickets.length) {
-                    // 末尾に挿入
+                } else if (visibleIndex === -1) {
+                    // ドロップしたチケットがDOMにない場合は末尾
                     insertIdx = allColumnTickets.length;
-                } else if (insertIndex === 0) {
-                    // 先頭に挿入
-                    insertIdx = 0;
                 } else {
-                    // 中間に挿入: フィルター後のinsertIndexに対応するチケットを特定し、
-                    // それが全チケットリストで何番目かを確認
-                    const targetTicket = filteredColumnTickets[insertIndex];
-                    if (targetTicket) {
-                        // 挿入位置の直後のチケット（フィルター後）が全チケットで何番目か
-                        insertIdx = allColumnTickets.findIndex(t => t.ticketId === targetTicket.ticketId);
-                        if (insertIdx === -1) insertIdx = allColumnTickets.length;
-                    } else {
-                        // insertIndexがfilteredColumnTicketsの範囲外の場合
+                    const nextVisible = visibleTickets[visibleIndex + 1];
+                    if (!nextVisible) {
+                        // 末尾にドロップ
                         insertIdx = allColumnTickets.length;
+                    } else {
+                        // 次に来る可視チケットが全チケットリストで何番目か
+                        insertIdx = allColumnTickets.findIndex(
+                            t => String(t.ticketId) === nextVisible.dataset.id
+                        );
+                        if (insertIdx === -1) {
+                            insertIdx = allColumnTickets.length;
+                        }
                     }
                 }
-                
-                const idx = state.allTickets.findIndex(t => t.ticketId === ticketId);
+
+                const idx = state.allTickets.findIndex(t => String(t.ticketId) === ticketId);
                 if (idx !== -1) {
                     const wasArchived = state.allTickets[idx].isArchived;
                     const isNowArchived = newColumn === 'archive';
@@ -149,6 +153,8 @@ export function setupDropZones() {
                 renderAllTickets();
             } catch (error) {
                 console.error('Failed to update column:', error);
+                await loadTickets();
+                renderAllTickets();
             }
         });
     });
