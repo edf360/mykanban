@@ -2,15 +2,27 @@
  * メモ機能モジュール（LocalStorageベース）
  */
 
+import { getFilterAssignee } from './state.js';
 import { renderAssigneeChart } from './charts.js';
+
+// ===== Storage層 =====
+
+const MEMO_KEY_PREFIX = 'assignee_memo_';
+
+/**
+ * メモのストレージキーを生成（エンコード済み）
+ */
+function getMemoKey(assignee) {
+    return `${MEMO_KEY_PREFIX}${encodeURIComponent(assignee)}`;
+}
 
 /**
  * 担当者のメモを取得
  */
-function getAssigneeMemo(assignee) {
+export function getMemo(assignee) {
     try {
-        return localStorage.getItem(`assignee_memo_${assignee}`) || '';
-    } catch (e) {
+        return localStorage.getItem(getMemoKey(assignee)) || '';
+    } catch {
         return '';
     }
 }
@@ -18,47 +30,50 @@ function getAssigneeMemo(assignee) {
 /**
  * 担当者のメモを保存
  */
-function saveAssigneeMemo(assignee, memo) {
+export function saveMemo(assignee, memo) {
     try {
-        localStorage.setItem(`assignee_memo_${assignee}`, memo);
+        localStorage.setItem(getMemoKey(assignee), memo);
+        return true;
     } catch (e) {
         console.error('Failed to save memo:', e);
+        alert('メモの保存に失敗しました');
+        return false;
     }
 }
 
-/**
- * 現在選択されているフィルター値を取得
- */
-function getSelectedAssignee() {
-    const select = document.getElementById('assigneeFilterSelect');
-    return select ? select.value : '';
-}
+// ===== State層 =====
 
 /**
- * メモカラムを更新（表示/非表示）
+ * 現在選択されている担当者を取得（filterState参照）
+ */
+function getSelectedAssignee() {
+    return getFilterAssignee();
+}
+
+// ===== UI層 =====
+
+let memoSaveTimeout = null;
+let memoInitialized = false;
+
+/**
+ * メモカラムを更新（表示/非表示・内容更新・グラフ描画）
  */
 export function updateMemoColumn() {
     const memoColumn = document.getElementById('memoColumn');
     const memoColumnTitle = document.getElementById('memoColumnTitle');
     const assigneeMemoText = document.getElementById('assigneeMemoText');
-    
-    if (!memoColumn || !assigneeMemoText) return;
-    
+
+    if (!memoColumn || !assigneeMemoText || !memoColumnTitle) return;
+
     const selectedAssignee = getSelectedAssignee();
-    if (!selectedAssignee) {
-        memoColumn.classList.add('hidden');
-        memoColumn.style.display = 'none';
-        return;
-    }
-    
-    assigneeMemoText.value = getAssigneeMemo(selectedAssignee);
-    if (memoColumnTitle) {
-        memoColumnTitle.textContent = `${selectedAssignee} - Memo`;
-    }
-    memoColumn.classList.remove('hidden');
-    memoColumn.style.display = 'flex';
-    
-    // 予実グラフを描画
+    memoColumn.classList.toggle('hidden', !selectedAssignee);
+
+    if (!selectedAssignee) return;
+
+    assigneeMemoText.value = getMemo(selectedAssignee);
+    memoColumnTitle.textContent = `${selectedAssignee} - Memo`;
+
+    // グラフ描画（担当者が変わった時のみ）
     const chartContainer = document.getElementById('assigneeChart');
     if (chartContainer) {
         renderAssigneeChart(chartContainer, selectedAssignee);
@@ -66,27 +81,25 @@ export function updateMemoColumn() {
 }
 
 /**
- * メモ機能を初期化
+ * メモ機能を初期化（重複実行防止）
  */
 export function initMemo() {
+    if (memoInitialized) return;
+    memoInitialized = true;
+
     const assigneeMemoText = document.getElementById('assigneeMemoText');
-    
     if (!assigneeMemoText) {
         console.warn('Memo textarea not found');
         return;
     }
-    
-    // メモテキスト変更時に自動保存（デバウンス）
-    let memoSaveTimeout = null;
-    assigneeMemoText.addEventListener('input', () => {
+
+    // oninput上書きで重複登録防止
+    assigneeMemoText.oninput = () => {
         const selectedAssignee = getSelectedAssignee();
         if (!selectedAssignee) return;
         clearTimeout(memoSaveTimeout);
         memoSaveTimeout = setTimeout(() => {
-            saveAssigneeMemo(selectedAssignee, assigneeMemoText.value);
+            saveMemo(selectedAssignee, assigneeMemoText.value);
         }, 300);
-    });
-    
-    // グローバルに公開（filter.jsから呼び出し用）
-    window.updateMemoColumn = updateMemoColumn;
+    };
 }

@@ -2,8 +2,11 @@
 import { apiRequest } from './api.js';
 import { isAdmin, getToken } from './auth.js';
 import { renderAllTickets } from './renderer.js';
+import { invalidateLabelColorCache } from './state.js';
 
 // 設定データ
+// users: { id, name } のオブジェクト配列（APIとのやり取りで変換）
+// labels: { id, name, color } のオブジェクト配列
 let settings = { users: [], labels: [], holidays: [] };
 let isOpen = false;
 
@@ -12,9 +15,19 @@ window.Settings = {
     settings: () => settings
 };
 
-// ドラッグ＆ドロップ用変数
-let dragItem = null;
+// ドラッグ＆ドロップ用変数（IDベース）
+let dragItemId = null;
 let dragType = null; // 'users' or 'labels'
+
+// インライン編集状態（外部ステート管理）
+let editingState = {
+    type: null,    // 'label' | 'user' | null
+    id: null,      // 編集中アイテムのID
+    originalData: null  // キャンセル用元データ
+};
+
+// 現在の管理者状態（open()で取得した値を共有）
+let currentAdminState = false;
 
 /**
  * 設定を読み込む
@@ -26,6 +39,22 @@ export async function load() {
         if (!settings.users) settings.users = [];
         if (!settings.labels) settings.labels = [];
         if (!settings.holidays) settings.holidays = [];
+        
+        // APIから読み込んだusers（文字列配列）を { id, name } へ変換
+        settings.users = settings.users.map(u => {
+            if (typeof u === 'string') {
+                return { id: crypto.randomUUID(), name: u };
+            }
+            return u;
+        });
+        
+        // labelsにidがない場合は付与
+        settings.labels = settings.labels.map(l => {
+            if (!l.id) {
+                return { ...l, id: crypto.randomUUID() };
+            }
+            return l;
+        });
     } catch (e) {
         console.error('設定の読み込みに失敗', e);
         settings = { users: [], labels: [], holidays: [] };
@@ -37,10 +66,16 @@ export async function load() {
  */
 export async function save() {
     try {
-        await apiRequest('PUT', '/api/settings', settings);
+        // API送信時にusersを { id, name } → name のみへ変換
+        const payload = {
+            users: settings.users.map(u => u.name),
+            labels: settings.labels.map(l => ({ name: l.name, color: l.color })),
+            holidays: settings.holidays
+        };
+        await apiRequest('PUT', '/api/settings', payload);
     } catch (e) {
-        console.error('設定の保存到失敗', e);
-        alert('設定の保存到失敗しました。');
+        console.error('設定の保存に失敗', e);
+        alert('設定の保存に失敗しました。');
     }
 }
 
@@ -57,21 +92,21 @@ export function getSettings() {
 export async function open() {
     console.log('[Settings] open called');
     await load();
-    const admin = isAdmin();
-    renderUsers(admin);
-    renderLabels(admin);
+    currentAdminState = isAdmin();
+    renderUsers(currentAdminState);
+    renderLabels(currentAdminState);
     renderHolidays();
 
     // 管理者のみ機能の表示/非表示
     const holidaysSection = document.querySelector('#holidaysTextarea')?.closest('.settings-section');
     if (holidaysSection) {
-        holidaysSection.style.display = admin ? '' : 'none';
+        holidaysSection.style.display = currentAdminState ? '' : 'none';
     }
 
     const importDbBtn = document.getElementById('importDbBtn');
     const importCsvBtn = document.getElementById('importCsvBtn');
-    if (importDbBtn) importDbBtn.style.display = admin ? '' : 'none';
-    if (importCsvBtn) importCsvBtn.style.display = admin ? '' : 'none';
+    if (importDbBtn) importDbBtn.style.display = currentAdminState ? '' : 'none';
+    if (importCsvBtn) importCsvBtn.style.display = currentAdminState ? '' : 'none';
 
     const panel = document.getElementById('settingsPanel');
     const btn = document.getElementById('settingsBtn');
@@ -91,6 +126,34 @@ export function close() {
     if (panel) panel.classList.remove('active');
     if (btn) btn.classList.remove('active');
     isOpen = false;
+    // 編集状態をクリア
+    editingState = { type: null, id: null, originalData: null };
+}
+
+/**
+ * 共通検証関数 - ラベル名
+ */
+function validateLabelName(name, excludeId = null) {
+    const trimmed = name.trim();
+    if (!trimmed) return { valid: false, message: '名前は必須です。' };
+    const duplicate = settings.labels.some(l =>
+        l.id !== excludeId && l.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicate) return { valid: false, message: '既に存在するラベル名です。' };
+    return { valid: true };
+}
+
+/**
+ * 共通検証関数 - ユーザー名
+ */
+function validateUserName(name, excludeId = null) {
+    const trimmed = name.trim();
+    if (!trimmed) return { valid: false, message: '名前は必須です。' };
+    const duplicate = settings.users.some(u =>
+        u.id !== excludeId && u.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicate) return { valid: false, message: '既に存在するユーザ名です。' };
+    return { valid: true };
 }
 
 /**
@@ -100,8 +163,8 @@ function renderUsers(admin) {
     const container = document.getElementById('usersList');
     if (!container) return;
     container.innerHTML = '';
-    settings.users.forEach((user, index) => {
-        const item = createUserItem(user, index, admin);
+    settings.users.forEach((user) => {
+        const item = createUserItem(user, admin);
         container.appendChild(item);
     });
 }
@@ -113,8 +176,8 @@ function renderLabels(admin) {
     const container = document.getElementById('labelsList');
     if (!container) return;
     container.innerHTML = '';
-    settings.labels.forEach((label, index) => {
-        const item = createLabelItem(index, label.name, label.color, admin);
+    settings.labels.forEach((label) => {
+        const item = createLabelItem(label, admin);
         container.appendChild(item);
     });
 }
@@ -123,16 +186,19 @@ function renderLabels(admin) {
  * ラベルアイテム要素を作成（インライン編集対応）
  * @param {boolean} admin - 管理者かどうか。非管理者は名前変更・削除不可、色変更のみ可
  */
-function createLabelItem(index, name, color, admin) {
+function createLabelItem(label, admin) {
+    const { id, name, color } = label;
+    const isEditing = editingState.type === 'label' && editingState.id === id;
+    
     const item = document.createElement('div');
     item.className = 'settings-item';
     item.dataset.type = 'labels';
-    item.dataset.index = index;
+    item.dataset.id = id;
 
     // 表示モードの要素
     const displayEl = document.createElement('div');
     displayEl.className = 'label-display';
-    displayEl.style.display = 'flex';
+    displayEl.style.display = isEditing ? 'none' : 'flex';
     displayEl.style.alignItems = 'center';
     displayEl.style.gap = '8px';
     displayEl.style.flex = '1';
@@ -151,10 +217,10 @@ function createLabelItem(index, name, color, admin) {
     displayEl.appendChild(nameSpan);
     item.appendChild(displayEl);
 
-    // 編集モードの要素（非表示）
+    // 編集モードの要素
     const editEl = document.createElement('div');
     editEl.className = 'label-edit';
-    editEl.style.display = 'none';
+    editEl.style.display = isEditing ? 'flex' : 'none';
     editEl.style.alignItems = 'center';
     editEl.style.gap = '8px';
     editEl.style.flex = '1';
@@ -181,6 +247,12 @@ function createLabelItem(index, name, color, admin) {
     colorInput.style.cursor = 'pointer';
     colorInput.style.padding = '2px';
 
+    // 非管理者は名前変更不可
+    if (!admin && isEditing) {
+        nameInput.disabled = true;
+        nameInput.style.opacity = '0.5';
+    }
+
     editEl.appendChild(nameInput);
     editEl.appendChild(colorInput);
     item.appendChild(editEl);
@@ -189,13 +261,14 @@ function createLabelItem(index, name, color, admin) {
     const actions = document.createElement('div');
     actions.className = 'settings-item-actions';
 
-    // 編集ボタン（表示モード時）- 非管理者は色変更のみ
+    // 編集ボタン（表示モード時）
     const editBtn = document.createElement('button');
     editBtn.className = 'settings-item-btn edit';
     editBtn.textContent = '✎';
     editBtn.title = '編集';
+    editBtn.style.display = isEditing ? 'none' : '';
     editBtn.addEventListener('click', () => {
-        startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index, admin);
+        startLabelInlineEdit(id, name, color, admin);
     });
     actions.appendChild(editBtn);
 
@@ -204,9 +277,9 @@ function createLabelItem(index, name, color, admin) {
     saveBtn.className = 'settings-item-btn save';
     saveBtn.textContent = '✓';
     saveBtn.title = '保存';
-    saveBtn.style.display = 'none';
+    saveBtn.style.display = isEditing ? '' : 'none';
     saveBtn.addEventListener('click', () => {
-        finishInlineEdit(index, nameInput.value, colorInput.value, admin);
+        finishLabelInlineEdit(id, nameInput.value, colorInput.value, admin);
     });
     actions.appendChild(saveBtn);
 
@@ -215,9 +288,9 @@ function createLabelItem(index, name, color, admin) {
     cancelBtn.className = 'settings-item-btn cancel';
     cancelBtn.textContent = '✕';
     cancelBtn.title = 'キャンセル';
-    cancelBtn.style.display = 'none';
+    cancelBtn.style.display = isEditing ? '' : 'none';
     cancelBtn.addEventListener('click', () => {
-        cancelInlineEdit(item, displayEl, editEl, nameSpan, colorPreview, name);
+        cancelLabelInlineEdit(id);
     });
     actions.appendChild(cancelBtn);
 
@@ -229,9 +302,10 @@ function createLabelItem(index, name, color, admin) {
         deleteBtn.title = '削除';
         deleteBtn.addEventListener('click', () => {
             if (confirm(`「${name}」を削除しますか？\n既存の割り当てには影響しません。`)) {
-                settings.labels.splice(index, 1);
-                renderLabels(isAdmin());
+                settings.labels = settings.labels.filter(l => l.id !== id);
+                renderLabels(currentAdminState);
                 save();
+                invalidateLabelColorCache();
                 renderAllTickets();
             }
         });
@@ -240,14 +314,14 @@ function createLabelItem(index, name, color, admin) {
 
     item.appendChild(actions);
 
-    // ドラッグ＆ドロップイベント
-    item.draggable = true;
+    // ドラッグ＆ドロップイベント（IDベース）
+    item.draggable = !isEditing;
     item.addEventListener('dragstart', (e) => {
-        if (editEl.style.display !== 'none') {
+        if (isEditing) {
             e.preventDefault();
             return;
         }
-        dragItem = index;
+        dragItemId = id;
         dragType = 'labels';
         item.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
@@ -255,13 +329,13 @@ function createLabelItem(index, name, color, admin) {
 
     item.addEventListener('dragend', () => {
         item.classList.remove('dragging');
-        dragItem = null;
+        dragItemId = null;
         dragType = null;
     });
 
     item.addEventListener('dragover', (e) => {
         e.preventDefault();
-        if (dragType === 'labels' && dragItem !== index) {
+        if (dragType === 'labels' && dragItemId !== id) {
             e.dataTransfer.dropEffect = 'move';
             item.style.borderTop = '2px solid #3b82f6';
         }
@@ -274,18 +348,24 @@ function createLabelItem(index, name, color, admin) {
     item.addEventListener('drop', (e) => {
         e.preventDefault();
         item.style.borderTop = '';
-        if (dragType === 'labels' && dragItem !== null && dragItem !== index) {
-            const moved = settings.labels.splice(dragItem, 1)[0];
-            settings.labels.splice(index, 0, moved);
-            renderLabels(isAdmin());
-            save();
-            renderAllTickets();
+        if (dragType === 'labels' && dragItemId !== null && dragItemId !== id) {
+            // IDベースで位置を交換
+            const fromIndex = settings.labels.findIndex(l => l.id === dragItemId);
+            const toIndex = settings.labels.findIndex(l => l.id === id);
+            if (fromIndex !== -1 && toIndex !== -1) {
+                const [moved] = settings.labels.splice(fromIndex, 1);
+                settings.labels.splice(toIndex, 0, moved);
+                renderLabels(currentAdminState);
+                save();
+                invalidateLabelColorCache();
+                renderAllTickets();
+            }
         }
     });
 
     nameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            finishInlineEdit(index, nameInput.value, colorInput.value, admin);
+            finishLabelInlineEdit(id, nameInput.value, colorInput.value, admin);
         }
     });
 
@@ -293,70 +373,48 @@ function createLabelItem(index, name, color, admin) {
 }
 
 /**
- * インライン編集を開始
- * @param {boolean} admin - 管理者かどうか。非管理者は名前入力フィールドを無効化
+ * ラベルのインライン編集を開始
  */
-function startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index, admin) {
-    displayEl.style.display = 'none';
-    editEl.style.display = 'flex';
-    item.draggable = false;
-
-    const actions = item.querySelector('.settings-item-actions');
-    const editBtn = actions.querySelector('.edit');
-    const saveBtn = actions.querySelector('.save');
-    const cancelBtn = actions.querySelector('.cancel');
-    editBtn.style.display = 'none';
-    saveBtn.style.display = '';
-    cancelBtn.style.display = '';
-
-    // 非管理者は名前変更不可
-    if (!admin) {
-        nameInput.disabled = true;
-        nameInput.style.opacity = '0.5';
-    }
-
-    nameInput.focus();
-    nameInput.select();
+function startLabelInlineEdit(id, name, color, admin) {
+    editingState = {
+        type: 'label',
+        id: id,
+        originalData: { name, color }
+    };
+    renderLabels(currentAdminState);
 }
 
 /**
- * インライン編集を確定
- * @param {boolean} admin - 管理者かどうか。非管理者は色のみ更新
+ * ラベルのインライン編集を確定
  */
-function finishInlineEdit(index, newName, newColor, admin) {
-    if (admin) {
-        const name = newName.trim();
-        if (!name) return;
+function finishLabelInlineEdit(id, newName, newColor, admin) {
+    const label = settings.labels.find(l => l.id === id);
+    if (!label) return;
 
-        if (settings.labels.some((l, i) => i !== index && l.name === name)) {
-            alert('既に存在するラベル名です。');
+    if (admin) {
+        const validation = validateLabelName(newName, id);
+        if (!validation.valid) {
+            alert(validation.message);
             return;
         }
-
-        settings.labels[index].name = name;
+        label.name = newName.trim();
     }
     // 色変更は管理者・非管理者問わず可能
-    settings.labels[index].color = newColor;
-    renderLabels(isAdmin());
+    label.color = newColor;
+    
+    editingState = { type: null, id: null, originalData: null };
+    renderLabels(currentAdminState);
     save();
+    invalidateLabelColorCache();
     renderAllTickets();
 }
 
 /**
- * インライン編集をキャンセル
+ * ラベルのインライン編集をキャンセル
  */
-function cancelInlineEdit(item, displayEl, editEl, nameSpan, colorPreview, originalName) {
-    displayEl.style.display = 'flex';
-    editEl.style.display = 'none';
-    item.draggable = true;
-
-    const actions = item.querySelector('.settings-item-actions');
-    const editBtn = actions.querySelector('.edit');
-    const saveBtn = actions.querySelector('.save');
-    const cancelBtn = actions.querySelector('.cancel');
-    editBtn.style.display = '';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
+function cancelLabelInlineEdit(id) {
+    editingState = { type: null, id: null, originalData: null };
+    renderLabels(currentAdminState);
 }
 
 /**
@@ -373,21 +431,24 @@ function renderHolidays() {
  * ユーザーアイテム要素作成（インライン編集対応）
  * @param {boolean} admin - 管理者かどうか。非管理者は編集・削除不可
  */
-function createUserItem(name, index, admin) {
+function createUserItem(user, admin) {
+    const { id, name } = user;
+    const isEditing = editingState.type === 'user' && editingState.id === id;
+
     const item = document.createElement('div');
     item.className = 'settings-item';
-    item.draggable = true;
     item.dataset.type = 'users';
-    item.dataset.index = index;
+    item.dataset.id = id;
 
     // 表示モードの要素
     const displayEl = document.createElement('span');
     displayEl.className = 'settings-item-name';
     displayEl.textContent = name;
+    displayEl.style.display = isEditing ? 'none' : '';
 
-    // 編集モードの要素（非表示）
+    // 編集モードの要素
     const editEl = document.createElement('div');
-    editEl.style.display = 'none';
+    editEl.style.display = isEditing ? 'block' : 'none';
     editEl.style.flex = '1';
 
     const nameInput = document.createElement('input');
@@ -415,8 +476,9 @@ function createUserItem(name, index, admin) {
         editBtn.className = 'settings-item-btn edit';
         editBtn.textContent = '✎';
         editBtn.title = '編集';
+        editBtn.style.display = isEditing ? 'none' : '';
         editBtn.addEventListener('click', () => {
-            startUserInlineEdit(item, displayEl, editEl, nameInput, index);
+            startUserInlineEdit(id, name);
         });
         actions.appendChild(editBtn);
 
@@ -425,9 +487,9 @@ function createUserItem(name, index, admin) {
         saveBtn.className = 'settings-item-btn save';
         saveBtn.textContent = '✓';
         saveBtn.title = '保存';
-        saveBtn.style.display = 'none';
+        saveBtn.style.display = isEditing ? '' : 'none';
         saveBtn.addEventListener('click', () => {
-            finishUserInlineEdit(index, nameInput.value);
+            finishUserInlineEdit(id, nameInput.value);
         });
         actions.appendChild(saveBtn);
 
@@ -436,9 +498,9 @@ function createUserItem(name, index, admin) {
         cancelBtn.className = 'settings-item-btn cancel';
         cancelBtn.textContent = '✕';
         cancelBtn.title = 'キャンセル';
-        cancelBtn.style.display = 'none';
+        cancelBtn.style.display = isEditing ? '' : 'none';
         cancelBtn.addEventListener('click', () => {
-            cancelUserInlineEdit(item, displayEl, editEl, displayEl, name);
+            cancelUserInlineEdit(id);
         });
         actions.appendChild(cancelBtn);
 
@@ -449,9 +511,10 @@ function createUserItem(name, index, admin) {
         deleteBtn.title = '削除';
         deleteBtn.addEventListener('click', () => {
             if (confirm(`「${name}」を削除しますか？\n既存の割り当てには影響しません。`)) {
-                settings.users.splice(index, 1);
-                renderUsers(isAdmin());
+                settings.users = settings.users.filter(u => u.id !== id);
+                renderUsers(currentAdminState);
                 save();
+                invalidateLabelColorCache();
                 renderAllTickets();
             }
         });
@@ -459,14 +522,15 @@ function createUserItem(name, index, admin) {
     }
     item.appendChild(actions);
 
-    // ドラッグ＆ドロップイベント（管理者のみ）
+    // ドラッグ＆ドロップイベント（管理者のみ、IDベース）
     if (admin) {
+        item.draggable = !isEditing;
         item.addEventListener('dragstart', (e) => {
-            if (editEl.style.display !== 'none') {
+            if (isEditing) {
                 e.preventDefault();
                 return;
             }
-            dragItem = index;
+            dragItemId = id;
             dragType = 'users';
             item.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
@@ -474,13 +538,13 @@ function createUserItem(name, index, admin) {
 
         item.addEventListener('dragend', () => {
             item.classList.remove('dragging');
-            dragItem = null;
+            dragItemId = null;
             dragType = null;
         });
 
         item.addEventListener('dragover', (e) => {
             e.preventDefault();
-            if (dragType === 'users' && dragItem !== index) {
+            if (dragType === 'users' && dragItemId !== id) {
                 e.dataTransfer.dropEffect = 'move';
                 item.style.borderTop = '2px solid #3b82f6';
             }
@@ -493,19 +557,25 @@ function createUserItem(name, index, admin) {
         item.addEventListener('drop', (e) => {
             e.preventDefault();
             item.style.borderTop = '';
-            if (dragType === 'users' && dragItem !== null && dragItem !== index) {
-                const moved = settings.users.splice(dragItem, 1)[0];
-                settings.users.splice(index, 0, moved);
-                renderUsers(isAdmin());
-                save();
-                renderAllTickets();
+            if (dragType === 'users' && dragItemId !== null && dragItemId !== id) {
+                // IDベースで位置を交換
+                const fromIndex = settings.users.findIndex(u => u.id === dragItemId);
+                const toIndex = settings.users.findIndex(u => u.id === id);
+                if (fromIndex !== -1 && toIndex !== -1) {
+                    const [moved] = settings.users.splice(fromIndex, 1);
+                    settings.users.splice(toIndex, 0, moved);
+                    renderUsers(currentAdminState);
+                    save();
+                    invalidateLabelColorCache();
+                    renderAllTickets();
+                }
             }
         });
     }
 
     nameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            finishUserInlineEdit(index, nameInput.value);
+            finishUserInlineEdit(id, nameInput.value);
         }
     });
 
@@ -515,56 +585,42 @@ function createUserItem(name, index, admin) {
 /**
  * ユーザーのインライン編集を開始
  */
-function startUserInlineEdit(item, displayEl, editEl, nameInput, index) {
-    displayEl.style.display = 'none';
-    editEl.style.display = 'block';
-    item.draggable = false;
-
-    const actions = item.querySelector('.settings-item-actions');
-    const editBtn = actions.querySelector('.edit');
-    const saveBtn = actions.querySelector('.save');
-    const cancelBtn = actions.querySelector('.cancel');
-    editBtn.style.display = 'none';
-    saveBtn.style.display = '';
-    cancelBtn.style.display = '';
-
-    nameInput.focus();
-    nameInput.select();
+function startUserInlineEdit(id, name) {
+    editingState = {
+        type: 'user',
+        id: id,
+        originalData: { name }
+    };
+    renderUsers(currentAdminState);
 }
 
 /**
  * ユーザーのインライン編集を確定
  */
-function finishUserInlineEdit(index, newName) {
-    const name = newName.trim();
-    if (!name) return;
+function finishUserInlineEdit(id, newName) {
+    const user = settings.users.find(u => u.id === id);
+    if (!user) return;
 
-    if (settings.users.some((u, i) => i !== index && u === name)) {
-        alert('既に存在するユーザ名です。');
+    const validation = validateUserName(newName, id);
+    if (!validation.valid) {
+        alert(validation.message);
         return;
     }
 
-    settings.users[index] = name;
-    renderUsers(isAdmin());
+    user.name = newName.trim();
+    editingState = { type: null, id: null, originalData: null };
+    renderUsers(currentAdminState);
     save();
+    invalidateLabelColorCache();
     renderAllTickets();
 }
 
 /**
  * ユーザーのインライン編集をキャンセル
  */
-function cancelUserInlineEdit(item, displayEl, editEl, nameSpan, originalName) {
-    displayEl.style.display = '';
-    editEl.style.display = 'none';
-    item.draggable = true;
-
-    const actions = item.querySelector('.settings-item-actions');
-    const editBtn = actions.querySelector('.edit');
-    const saveBtn = actions.querySelector('.save');
-    const cancelBtn = actions.querySelector('.cancel');
-    editBtn.style.display = '';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
+function cancelUserInlineEdit(id) {
+    editingState = { type: null, id: null, originalData: null };
+    renderUsers(currentAdminState);
 }
 
 /**
@@ -574,14 +630,18 @@ function addUser() {
     const input = document.getElementById('newUserInput');
     const name = input.value.trim();
     if (!name) return;
-    if (settings.users.includes(name)) {
-        alert('既に存在するユーザ名です。');
+    
+    const validation = validateUserName(name);
+    if (!validation.valid) {
+        alert(validation.message);
         return;
     }
-    settings.users.push(name);
+    
+    settings.users.push({ id: crypto.randomUUID(), name });
     input.value = '';
-    renderUsers(isAdmin());
+    renderUsers(currentAdminState);
     save();
+    invalidateLabelColorCache();
     renderAllTickets();
 }
 
@@ -594,16 +654,18 @@ function addLabel() {
     const name = nameInput.value.trim();
     if (!name) return;
     
-    if (settings.labels.some(l => l.name === name)) {
-        alert('既に存在するラベル名です。');
+    const validation = validateLabelName(name);
+    if (!validation.valid) {
+        alert(validation.message);
         return;
     }
     
-    settings.labels.push({ name, color: colorInput.value });
+    settings.labels.push({ id: crypto.randomUUID(), name, color: colorInput.value });
     nameInput.value = '';
     colorInput.value = '#808080';
-    renderLabels(isAdmin());
+    renderLabels(currentAdminState);
     save();
+    invalidateLabelColorCache();
     renderAllTickets();
 }
 

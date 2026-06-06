@@ -9,12 +9,12 @@ public class AuthController : ControllerBase
 {
     private readonly TokenStore _tokenStore;
 
-    // 管理者のユーザ名とパスワード
+    // 管理者のユーザ名とパスワード（環境変数から読み込み、デフォルト値を備える）
     private const string AdminUsername = "admin";
-    private const string AdminPassword = "clsw";
+    private static readonly string AdminPassword = Environment.GetEnvironmentVariable("KANBAN_ADMIN_PASSWORD") ?? "clsw";
 
-    // 一般ユーザーのパスワード
-    private const string UserPassword = "clsw";
+    // 一般ユーザーのパスワード（環境変数から読み込み、デフォルト値を備える）
+    private static readonly string UserPassword = Environment.GetEnvironmentVariable("KANBAN_USER_PASSWORD") ?? "clsw";
 
     public AuthController(TokenStore tokenStore)
     {
@@ -28,9 +28,9 @@ public class AuthController : ControllerBase
     /// ユーザー認証とトークン発行
     /// </summary>
     [HttpPost("login")]
-    public IActionResult Login([FromBody] LoginRequest request)
+    public IActionResult Login([FromBody] LoginRequest? request)
     {
-        if (string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Password))
+        if (request == null || string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Password))
         {
             return Unauthorized(new { error = "Username and password are required" });
         }

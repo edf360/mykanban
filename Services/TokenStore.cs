@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
+using System.Timers;
 
 namespace KanbanServer.Services;
 
@@ -9,6 +12,16 @@ namespace KanbanServer.Services;
 public class TokenStore
 {
     private static readonly ConcurrentDictionary<string, TokenInfo> _tokens = new();
+    private static readonly System.Timers.Timer _cleanupTimer;
+
+    static TokenStore()
+    {
+        // 1時間ごとに有効期限切れトークンをクリーンアップ
+        _cleanupTimer = new System.Timers.Timer(3600_000);
+        _cleanupTimer.Elapsed += (_, _) => CleanupExpiredTokens();
+        _cleanupTimer.AutoReset = true;
+        _cleanupTimer.Start();
+    }
 
     public record TokenInfo(string Username, bool IsAdmin, DateTimeOffset Expiry);
 
@@ -18,7 +31,9 @@ public class TokenStore
     /// </summary>
     public string CreateToken(string username, bool isAdmin, TimeSpan? expiry = null)
     {
-        var token = Guid.NewGuid().ToString("N");
+        // 暗号的に安全なトークンを生成（32バイト = 256ビット）
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace("+", "-").Replace("/", "_").Replace("=", "");
         var expiryTime = DateTimeOffset.UtcNow + (expiry ?? TimeSpan.FromHours(24));
         _tokens[token] = new TokenInfo(username, isAdmin, expiryTime);
         return token;
@@ -49,5 +64,20 @@ public class TokenStore
     public void RevokeToken(string token)
     {
         _tokens.TryRemove(token, out _);
+    }
+
+    /// <summary>
+    /// 有効期限切れのトークンを一括削除（メモリリーク対策）
+    /// </summary>
+    private static void CleanupExpiredTokens()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var kvp in _tokens)
+        {
+            if (now > kvp.Value.Expiry)
+            {
+                _tokens.TryRemove(kvp.Key, out _);
+            }
+        }
     }
 }

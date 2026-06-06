@@ -2,7 +2,7 @@
  * ドラッグ＆ドロップ処理モジュール
  */
 
-import { API_BASE, state } from './state.js';
+import { API_BASE, state, getAllTickets, getTicket, updateTicketField } from './state.js';
 import { apiRequest, loadTickets } from './api.js';
 import { draggedTicket, removeDropIndicators, renderAllTickets, ticketMatchesFilter } from './renderer.js';
 
@@ -92,8 +92,9 @@ export function setupDropZones() {
             const newColumn = list.closest('.column').dataset.column;
             const ticketId = draggedTicket.dataset.id;
             try {
-                // state.allTicketsからドロップ先カラムの全チケットを取得（ドラッグ中除外）
-                const allColumnTickets = state.allTickets
+                const allTickets = getAllTickets();
+                // ドロップ先カラムの全チケットを取得（ドラッグ中除外）
+                const allColumnTickets = allTickets
                     .filter(t => t.column === newColumn && String(t.ticketId) !== ticketId)
                     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
@@ -128,21 +129,21 @@ export function setupDropZones() {
                     }
                 }
 
-                const idx = state.allTickets.findIndex(t => String(t.ticketId) === ticketId);
-                if (idx !== -1) {
-                    const wasArchived = state.allTickets[idx].isArchived;
+                const ticket = getTicket(ticketId);
+                if (ticket) {
+                    const wasArchived = ticket.isArchived;
                     const isNowArchived = newColumn === 'archive';
                     
                     if (wasArchived && !isNowArchived) {
                         await apiRequest('PATCH', `${API_BASE}/${ticketId}/restore`, null);
-                        state.allTickets[idx].isArchived = false;
+                        updateTicketField(ticketId, 'isArchived', false);
                     } else if (!wasArchived && isNowArchived) {
                         // DELETE APIはNoContentを返すため、ローカルでisArchivedを設定
                         await apiRequest('DELETE', `${API_BASE}/${ticketId}`, null);
-                        state.allTickets[idx].isArchived = true;
+                        updateTicketField(ticketId, 'isArchived', true);
                     }
                     
-                    state.allTickets[idx].column = newColumn;
+                    updateTicketField(ticketId, 'column', newColumn);
                 }
                 
                 // サーバー側で中間値を計算してもらうためにインデックスを送信

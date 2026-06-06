@@ -3,43 +3,86 @@
  * 進捗予実グラフと担当者累積工数グラフのSVG描画
  */
 
-import { state, formatDateWithDay } from './state.js';
+import { state, formatDateWithDay, getAllTickets } from './state.js';
+
+// ===== 日付ユーティリティ =====
+
+/**
+ * YYYY-MM-DD 形式の文字列を 00:00:00 固定の Date に正規化
+ */
+function parseDate(dateStr) {
+    if (!dateStr) return new Date(NaN);
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return new Date(NaN);
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (isNaN(y) || isNaN(m) || isNaN(d)) return new Date(NaN);
+    const date = new Date(y, m, d);
+    if (isNaN(date.getTime())) return new Date(NaN);
+    return date;
+}
+
+/**
+ * 2日付の日数差を floor で計算（00:00正規化済み前提）
+ */
+function daysDiff(a, b) {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Math.floor((a.getTime() - b.getTime()) / msPerDay);
+}
+
+/**
+ * 今日を 00:00 固定で取得
+ */
+function getToday() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+}
+
+/**
+ * 数値のサニタイズ（NaN・空文字列 → 0）
+ */
+function sanitizeNum(val, fallback = 0) {
+    if (val === null || val === undefined || val === '') return fallback;
+    const n = Number(val);
+    return isNaN(n) ? fallback : n;
+}
+
+// ===== 個別チケット進捗グラフ =====
 
 /**
  * 個別チケットの進捗予実グラフを描画
  * @param {HTMLElement} container - グラフ配置コンテナ
- * @param {string} startDate - 開始日
- * @param {string} endDate - 終了日
+ * @param {string} startDate - 開始日 (YYYY-MM-DD)
+ * @param {string} endDate - 終了日 (YYYY-MM-DD)
+ * @param {number} currentProgress - 現在の進捗率（外部から渡す）
  */
-export function renderProgressChart(container, startDate, endDate) {
+export function renderProgressChart(container, startDate, endDate, currentProgress = 0) {
     const width = 260;
     const height = 50;
     const labelHeight = 18;
     const padding = { top: 5, right: 20, bottom: 5, left: 20 };
-    
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    const today = getToday();
+
+    // 無効日付の場合は描画しない
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        container.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:10px;font-size:12px;">日付データがありません</div>';
+        return;
+    }
+
     // グラフの右端は終了日と本日のうち遅い方
     const graphEnd = today > end ? today : end;
-    
-    // 今日が終了日以降の場合は進捗率を取得
-    // state.currentTicketData から直接取得（DOM要素に依存しない）
-    let currentProgress = 0;
-    const ticketId = container.closest('.ticket')?.dataset.id;
-    if (ticketId) {
-        const data = state.currentTicketData[ticketId];
-        if (data) {
-            currentProgress = data.progress || 0;
-        }
-    }
-    
+
+    currentProgress = sanitizeNum(currentProgress, 0);
+
     // グラフの描画領域
     const graphWidth = width - padding.left - padding.right;
     const graphHeight = height - padding.top - padding.bottom;
-    
+
     // 座標計算
     const xScale = (date) => {
         const time = date.getTime();
@@ -48,11 +91,11 @@ export function renderProgressChart(container, startDate, endDate) {
         if (graphEndTime === startTime) return 0;
         return ((time - startTime) / (graphEndTime - startTime)) * graphWidth + padding.left;
     };
-    
+
     const yScale = (progress) => {
         return graphHeight - (progress / 100) * graphHeight + padding.top;
     };
-    
+
     // 予定線: 開始日(0%) → 終了日(100%) — 青点線
     const plannedLine = `
         <line
@@ -61,7 +104,7 @@ export function renderProgressChart(container, startDate, endDate) {
             stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,4"
         />
     `;
-    
+
     // 実績線: 開始日(0%) → 今日(現在の進捗率) — 赤実線
     let actualLine = '';
     if (today >= start) {
@@ -76,7 +119,7 @@ export function renderProgressChart(container, startDate, endDate) {
             <circle cx="${actualEndX}" cy="${actualEndY}" r="3" fill="#ef4444"/>
         `;
     }
-    
+
     // グリッド線
     const gridLines = `
         <line x1="${padding.left}" y1="${yScale(0)}" x2="${width - padding.right}" y2="${yScale(0)}" stroke="#d1d5db" stroke-width="0.5"/>
@@ -85,15 +128,15 @@ export function renderProgressChart(container, startDate, endDate) {
         <line x1="${padding.left}" y1="${yScale(75)}" x2="${width - padding.right}" y2="${yScale(75)}" stroke="#e5e7eb" stroke-width="0.5"/>
         <line x1="${padding.left}" y1="${yScale(100)}" x2="${width - padding.right}" y2="${yScale(100)}" stroke="#d1d5db" stroke-width="0.5"/>
     `;
-    
-    // 日付ラベル
+
+    // 日付ラベル — text-anchor修正（左端=start、右端=end）
     const startDateLabel = formatDateWithDay(start);
     const rightDateLabel = today > end ? formatDateWithDay(today) : formatDateWithDay(end);
     const dateLabels = `
-        <text x="${padding.left}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="middle">${startDateLabel}</text>
-        <text x="${width - padding.right}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="middle">${rightDateLabel}</text>
+        <text x="${padding.left}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="start">${startDateLabel}</text>
+        <text x="${width - padding.right}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="end">${rightDateLabel}</text>
     `;
-    
+
     container.innerHTML = `
         <svg viewBox="0 0 ${width} ${height + labelHeight}" xmlns="http://www.w3.org/2000/svg">
             ${gridLines}
@@ -113,39 +156,42 @@ export function renderAssigneeChart(container, assigneeName) {
     const width = 400;
     const height = 180;
     const padding = { top: 10, right: 20, bottom: 25, left: 40 };
-    
-    // この担当者のチケットをフィルタ（アーカイブ除外）
-    const assigneeTickets = state.allTickets.filter(t =>
+
+    // この担当者のチケットをフィルタ（アーカイブ除外・日付有効チェック）
+    const assigneeTickets = getAllTickets().filter(t =>
         t.assignees && t.assignees.includes(assigneeName)
         && t.startDate && t.endDate
         && !t.isArchived
-    );
-    
+    ).map(t => ({
+        ...t,
+        _start: parseDate(t.startDate),
+        _end: parseDate(t.endDate),
+        _effort: sanitizeNum(t.effort, 0),
+        _progress: sanitizeNum(t.progress, 0)
+    })).filter(t => !isNaN(t._start.getTime()) && !isNaN(t._end.getTime()));
+
     if (assigneeTickets.length === 0) {
         container.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:20px;font-size:12px;">データがありません</div>';
         return;
     }
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+
+    const today = getToday();
+
     // 全チケットの開始日・終了日からグラフの範囲を計算
-    let minDate = new Date(assigneeTickets[0].startDate);
-    let maxDate = new Date(assigneeTickets[0].endDate);
-    
+    let minDate = assigneeTickets[0]._start;
+    let maxDate = assigneeTickets[0]._end;
+
     assigneeTickets.forEach(t => {
-        const s = new Date(t.startDate);
-        const e = new Date(t.endDate);
-        if (s < minDate) minDate = s;
-        if (e > maxDate) maxDate = e;
+        if (t._start < minDate) minDate = t._start;
+        if (t._end > maxDate) maxDate = t._end;
     });
-    
+
     // グラフの右端は最終終了日と本日のうち遅い方
     const graphEnd = today > maxDate ? today : maxDate;
-    
+
     const graphWidth = width - padding.left - padding.right;
     const graphHeight = height - padding.top - padding.bottom;
-    
+
     // 日付 → X座標
     const xScale = (date) => {
         const time = date.getTime();
@@ -154,64 +200,54 @@ export function renderAssigneeChart(container, assigneeName) {
         if (endTime === startTime) return 0;
         return ((time - startTime) / (endTime - startTime)) * graphWidth + padding.left;
     };
-    
-    // 各日付の累積予定工数・実績工数を計算
+
+    // 日リスト生成（00:00正規化済み）
     const days = [];
     const current = new Date(minDate);
     while (current <= graphEnd) {
         days.push(new Date(current));
         current.setDate(current.getDate() + 1);
     }
-    
+
+    // 予定累積・実績累積を計算
+    // 実績モデル: effort * progress / 100 を単純に日割り（バーンインモデル）
     const plannedCumulative = [];
     const actualCumulative = [];
     let totalPlanned = 0;
     let totalActual = 0;
-    
+
     days.forEach(day => {
         assigneeTickets.forEach(ticket => {
-            const start = new Date(ticket.startDate);
-            const end = new Date(ticket.endDate);
-            const effort = ticket.effort || 0;
-            
-            if (day >= start && day <= end) {
-                const durationDays = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
-                const dailyEffort = effort / durationDays;
+            const { _start, _end, _effort, _progress } = ticket;
+
+            // 予定: 期間中の日ごとに均等配分
+            if (day >= _start && day <= _end) {
+                const durationDays = Math.max(1, daysDiff(_end, _start) + 1);
+                const dailyEffort = _effort / durationDays;
                 totalPlanned += dailyEffort;
             }
-            
-            // 実績は「今日時点で完了した分」をバーンインとして累積
-            // 各日付において、その日までに完了した実績工数を計算
-            if (day <= today && day >= start) {
-                const progress = ticket.progress || 0;
-                const actualEffort = effort * (progress / 100);
-                const daysFromStart = Math.round((day - start) / (1000 * 60 * 60 * 24));
-                const totalDuration = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
-                // 経過日数比率に基づいてその日までの累積実績を計算
-                const ratio = Math.min(1, (daysFromStart + 1) / totalDuration);
-                const dailyActual = actualEffort * ratio;
-                // 前日までの実績を引いて日次分のみ加算（初日は全体）
-                if (daysFromStart === 0) {
-                    totalActual += dailyActual;
-                } else {
-                    const prevRatio = Math.min(1, daysFromStart / totalDuration);
-                    const prevDaily = actualEffort * prevRatio;
-                    totalActual += dailyActual - prevDaily;
-                }
+
+            // 実績: 単純モデル (effort * progress%) を期間中に均等バーンイン
+            // day <= today かつ 期間中のみカウント
+            if (day <= today && day >= _start && day <= _end) {
+                const actualEffort = _effort * (_progress / 100);
+                const durationDays = Math.max(1, daysDiff(_end, _start) + 1);
+                const dailyActual = actualEffort / durationDays;
+                totalActual += dailyActual;
             }
         });
-        
+
         plannedCumulative.push(totalPlanned);
         actualCumulative.push(Math.min(totalActual, totalPlanned));
     });
-    
+
     const maxEffort = Math.max(...plannedCumulative, 1);
     const yMax = Math.ceil(maxEffort * 1.1 / 5) * 5;
-    
+
     const yScale = (value) => {
         return graphHeight - (value / yMax) * graphHeight + padding.top;
     };
-    
+
     // 予定線（青色点線）
     let plannedPath = '';
     days.forEach((day, i) => {
@@ -223,7 +259,7 @@ export function renderAssigneeChart(container, assigneeName) {
             plannedPath += ` L ${x} ${y}`;
         }
     });
-    
+
     // 実績線（赤色実線）
     let actualPath = '';
     days.forEach((day, i) => {
@@ -235,7 +271,7 @@ export function renderAssigneeChart(container, assigneeName) {
             actualPath += ` L ${x} ${y}`;
         }
     });
-    
+
     // Y軸グリッド線とラベル
     const gridSteps = 5;
     let gridLines = '';
@@ -293,7 +329,7 @@ function getProgressColor(progress) {
  * ラベルでフィルタしたチケット一覧を取得（アーカイブ含む）
  */
 export function getTicketsByLabel(labelName) {
-    return state.allTickets.filter(t =>
+    return getAllTickets().filter(t =>
         t.labels && t.labels.includes(labelName)
     );
 }
@@ -423,7 +459,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
                 td.appendChild(span);
             } else {
                 const avgProgress = Math.round(
-                    titleTickets.reduce((sum, t) => sum + (t.progress || 0), 0) / titleTickets.length
+                    titleTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / titleTickets.length
                 );
                 const color = getProgressColor(avgProgress);
                 

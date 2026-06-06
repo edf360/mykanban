@@ -35,16 +35,21 @@ function getDeviceInfo() {
 }
 
 /**
+ * デバイス情報をモジュール初期化時にキャッシュ
+ */
+const deviceInfoCache = getDeviceInfo();
+
+/**
  * ログエントリを作成
  */
 function createEntry(level, message, data = null) {
     return {
-        id: Date.now() + Math.random(),
+        id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
         level,
         message,
         data,
-        deviceInfo: getDeviceInfo()
+        deviceInfo: deviceInfoCache
     };
 }
 
@@ -66,7 +71,7 @@ function notifyUI(entry) {
         try {
             listener(entry);
         } catch (e) {
-            // リスナーのエラーはログに記録のみ
+            console.error('Log listener error', e);
         }
     }
 }
@@ -77,6 +82,16 @@ function notifyUI(entry) {
 export function onUIUpdate(listener) {
     if (typeof listener === 'function') {
         uiListeners.push(listener);
+    }
+}
+
+/**
+ * UI更新リスナーを削除
+ */
+export function offUIUpdate(listener) {
+    const idx = uiListeners.indexOf(listener);
+    if (idx >= 0) {
+        uiListeners.splice(idx, 1);
     }
 }
 
@@ -119,24 +134,24 @@ export function logError(message, data = null) {
 }
 
 /**
- * APIリクエストログ
+ * APIリクエストログ（構造化）
  */
 export function logApiRequest(method, url) {
-    log('INFO', `[API Request] ${method} ${url}`);
+    log('INFO', 'API_REQUEST', { method, url });
 }
 
 /**
- * APIレスポンスログ
+ * APIレスポンスログ（構造化）
  */
 export function logApiResponse(method, url, status) {
-    log('INFO', `[API Response] ${method} ${url} -> ${status}`);
+    log('INFO', 'API_RESPONSE', { method, url, status });
 }
 
 /**
- * APIエラーログ
+ * APIエラーログ（構造化）
  */
 export function logApiError(method, url, error) {
-    log('ERROR', `[API Error] ${method} ${url} -> ${error?.message || String(error)}`, { error });
+    log('ERROR', 'API_ERROR', { method, url, error: error?.message || String(error) });
 }
 
 /**
@@ -176,7 +191,7 @@ function fallbackCopy(text) {
     try {
         document.execCommand('copy');
     } catch (e) {
-        // コピー失敗
+        console.error('Copy to clipboard failed', e);
     }
     document.body.removeChild(textarea);
 }
@@ -193,7 +208,7 @@ export function exportAsText(filterLevel = 'DEBUG') {
  * エントリ配列をテキスト形式に変換
  */
 function formatEntriesAsText(entries) {
-    const deviceInfo = getDeviceInfo();
+    const deviceInfo = deviceInfoCache;
     let text = `=== カンバンボード ログエクスポート ===\n`;
     text += `エクスポート時刻: ${new Date().toISOString()}\n`;
     text += `ブラウザ: ${deviceInfo.browser}\n`;
@@ -234,8 +249,8 @@ export function clearLogs() {
 }
 
 /**
- * 生バッファ参照を返す（UI描画用）
+ * ログバッファのコピーを返す（UI描画用）
  */
 export function getLogBuffer() {
-    return logBuffer;
+    return [...logBuffer];
 }

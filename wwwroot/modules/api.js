@@ -3,9 +3,38 @@
  * HTTPリクエストの共通処理とデータ取得
  */
 
-import { API_BASE, state, initTicketData } from './state.js';
+import { API_BASE, initTickets, setLabelSuggestions, setAssigneeSuggestions } from './state.js';
 import { getToken } from './auth.js';
 import { logApiRequest, logApiResponse, logApiError } from './logger.js';
+
+/**
+ * 認証失敗専用例外
+ * 呼び出し側でフィルタして不要なエラーログを抑制する
+ */
+export class UnauthorizedError extends Error {
+    constructor() {
+        super('Unauthorized');
+        this.name = 'UnauthorizedError';
+    }
+}
+
+/**
+ * 安全にエラーメッセージ文字列を取得
+ */
+function getErrorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * レスポンスボディを Content-Type に応じてパース
+ */
+async function parseResponseBody(response) {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+        return response.json();
+    }
+    return response.text();
+}
 
 /**
  * 共通APIリクエスト関数
@@ -14,9 +43,15 @@ export async function apiRequest(method, url, body) {
     // リクエストログ
     logApiRequest(method, url);
 
+    // GET 以外にのみ Content-Type を付与
+    const headers = {};
+    if (body !== undefined && body !== null) {
+        headers['Content-Type'] = 'application/json';
+    }
+
     const options = {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
     };
 
     // 認証トークンを付与
@@ -25,7 +60,7 @@ export async function apiRequest(method, url, body) {
         options.headers['Authorization'] = `Bearer ${token}`;
     }
 
-    if (body) {
+    if (body !== undefined && body !== null) {
         options.body = JSON.stringify(body);
     }
 
@@ -35,17 +70,17 @@ export async function apiRequest(method, url, body) {
         // 401: 認証失敗 → ログイン画面に戻る
         if (response.status === 401) {
             console.warn('[api] Unauthorized - redirecting to login');
-            logApiError(method, url, new Error('Unauthorized'));
+            logApiError(method, url, new UnauthorizedError());
             window.location.href = '/';
-            throw new Error('Unauthorized');
+            throw new UnauthorizedError();
         }
 
         if (!response.ok) {
             const errorText = await response.text();
             let errorMessage = 'API request failed';
             try {
-                const error = JSON.parse(errorText);
-                errorMessage = error.error || errorMessage;
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || errorMessage;
             } catch {
                 errorMessage = 'API request failed: ' + errorText;
             }
@@ -59,10 +94,15 @@ export async function apiRequest(method, url, body) {
         if (response.status === 204) {
             return;
         }
-        return response.json();
+        return parseResponseBody(response);
     } catch (error) {
         // fetch 自体が失敗した場合（ネットワークエラー等）
-        if (!error.message.includes('Unauthorized') && !error.message.includes('API request failed')) {
+        // UnauthorizedError は既にログ出力済みなのでスキップ
+        if (error instanceof UnauthorizedError) {
+            throw error;
+        }
+        const message = getErrorMessage(error);
+        if (!message.includes('Unauthorized') && !message.includes('API request failed')) {
             logApiError(method, url, error);
         }
         throw error;
@@ -75,9 +115,12 @@ export async function apiRequest(method, url, body) {
 export async function loadTickets() {
     try {
         const tickets = await apiRequest('GET', API_BASE, null);
-        initTicketData(tickets);
+        initTickets(tickets);
     } catch (error) {
-        console.error('Failed to load tickets:', error);
+        // UnauthorizedError は apiRequest 側でログ出力済み
+        if (!(error instanceof UnauthorizedError)) {
+            console.error('Failed to load tickets:', error);
+        }
         throw error;
     }
 }
@@ -87,17 +130,31 @@ export async function loadTickets() {
  */
 export async function loadSuggestions() {
     try {
-        const labelData = await apiRequest('GET', `${API_BASE}/labels/suggest`, null);
-        state.labelSuggestions = Array.isArray(labelData) ? labelData.map(l => l.name || String(l)) : [];
-        const assigneeData = await apiRequest('GET', `${API_BASE}/assignees/suggest`, null);
+        // ラベルと担当者を並列取得
+        const [labelData, assigneeData] = await Promise.all([
+            apiRequest('GET', `${API_BASE}/labels/suggest`, null),
+            apiRequest('GET', `${API_BASE}/assignees/suggest`, null)
+        ]);
         console.log('[loadSuggestions] t=', Date.now(), 'data:', assigneeData);
-        // 担当者データもラベル側と同様に文字列に変換（オブジェクト配列の場合の互換性）
-        state.assigneeSuggestions = Array.isArray(assigneeData)
-            ? assigneeData.map(a => a.name || String(a))
+
+        // 安全に文字列配列に変換（文字列はそのまま、オブジェクトは name プロパティを使用）
+        const labels = Array.isArray(labelData)
+            ? labelData.map(item => typeof item === 'string' ? item : (item.name || ''))
+                       .filter(Boolean)
             : [];
-        console.log('[loadSuggestions] SET state.assigneeSuggestions =', state.assigneeSuggestions);
+        setLabelSuggestions(labels);
+
+        const assignees = Array.isArray(assigneeData)
+            ? assigneeData.map(item => typeof item === 'string' ? item : (item.name || ''))
+                          .filter(Boolean)
+            : [];
+        setAssigneeSuggestions(assignees);
+        console.log('[loadSuggestions] SET assigneeSuggestions =', assignees);
     } catch (error) {
-        console.error('Failed to load suggestions:', error);
+        // UnauthorizedError は apiRequest 側でログ出力済み
+        if (!(error instanceof UnauthorizedError)) {
+            console.error('Failed to load suggestions:', error);
+        }
         throw error;
     }
 }
@@ -109,7 +166,10 @@ export async function loadHistory(ticketId) {
     try {
         return await apiRequest('GET', `${API_BASE}/${ticketId}/history`, null);
     } catch (error) {
-        console.error('Failed to load history:', error);
+        // UnauthorizedError は apiRequest 側でログ出力済み
+        if (!(error instanceof UnauthorizedError)) {
+            console.error('Failed to load history:', error);
+        }
         throw error;
     }
 }

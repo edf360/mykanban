@@ -24,7 +24,8 @@ public class KanbanDbContext : DbContext
         modelBuilder.Entity<Ticket>(entity =>
         {
             entity.HasKey(e => e.TicketId);
-            entity.Property(e => e.TicketId).ValueGeneratedOnAdd();
+            // Id は DB 上の AUTOINCREMENT 列だが、主キーは TicketId
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.Property(e => e.Title).IsRequired();
             entity.Property(e => e.Column).HasDefaultValue("todo");
             entity.Property(e => e.AssigneesJson).HasDefaultValue("[]");
@@ -38,6 +39,11 @@ public class KanbanDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TicketId).IsRequired();
             entity.Property(e => e.Type).IsRequired();
+            // 外部キー制約を追加
+            entity.HasOne<Ticket>()
+                .WithMany()
+                .HasForeignKey(e => e.TicketId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Setting>(entity =>

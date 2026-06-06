@@ -3,16 +3,20 @@
  * チケット要素の生成・描画・更新
  */
 
-import { API_BASE, state, escapeHtml } from './state.js';
+import { API_BASE, state, escapeHtml, labelColorCacheInvalidated, getSettings, getAllTickets, getTicket, setTicket, removeTicket, updateTicketField } from './state.js';
 import { apiRequest, loadTickets } from './api.js';
 import { renderProgressChart } from './charts.js';
 import { openEditModal } from './modal.js';
+import { updateMemoColumn } from './memo.js';
 
 /**
  * ラベル名から色情報を取得するマップ（設定データから構築）
  */
 // グローバルイベントリスナーのクリーンアップ用配列
 const progressEventListeners = new Map();
+
+// ラベルカラーキャッシュ
+let cachedLabelColors = null;
 
 /**
  * 色値が有効なHEXコードか検証する（#RGB または #RRGGBB のみ許可）
@@ -38,19 +42,26 @@ function sanitizeColor(color) {
 }
 
 function getLabelColorMap() {
+    if (cachedLabelColors !== null) {
+        if (labelColorCacheInvalidated) {
+            cachedLabelColors = null;
+        } else {
+            return cachedLabelColors;
+        }
+    }
     const map = {};
     try {
-        if (typeof Settings !== 'undefined' && Settings.settings) {
-            const labels = Settings.settings().labels || [];
-            labels.forEach(l => {
-                if (l && l.name) {
-                    map[l.name] = sanitizeColor(l.color || '#808080');
-                }
-            });
-        }
+        const s = getSettings();
+        const labels = s.labels || [];
+        labels.forEach(l => {
+            if (l && l.name) {
+                map[l.name] = sanitizeColor(l.color || '#808080');
+            }
+        });
     } catch (e) {
         console.warn('[renderer] Failed to get label colors:', e);
     }
+    cachedLabelColors = map;
     return map;
 }
 
@@ -67,25 +78,17 @@ function getContrastColor(hex) {
 }
 
 /**
- * 現在選択されているフィルター値を取得（filter.jsからインポート可能にするため）
- */
-export function getSelectedAssignee() {
-    const select = document.getElementById('assigneeFilterSelect');
-    return select ? select.value : '';
-}
-
-/**
  * チケットがフィルター条件に一致するかチェック
  */
 export function ticketMatchesFilter(ticket) {
     // 担当者フィルター
-    const selectedAssignee = getSelectedAssignee();
+    const selectedAssignee = state.filterAssignee;
     if (selectedAssignee && !(ticket.assignees?.includes(selectedAssignee))) {
         return false;
     }
 
     // メイン担当限定フィルター（担当者が選択されている場合のみ有効）
-    if (state.mainAssigneeOnly && selectedAssignee) {
+    if (state.filterMainOnly && selectedAssignee) {
         if (ticket.mainAssignee !== selectedAssignee) {
             return false;
         }
@@ -133,7 +136,7 @@ export function renderAllTickets() {
     });
     
     // Positionでソートして描画（ドラッグ＆ドロップ後の順番を反映）
-    const sortedTickets = [...state.allTickets].sort((a, b) => {
+    const sortedTickets = getAllTickets().sort((a, b) => {
         if (a.column !== b.column) {
             return a.column.localeCompare(b.column);
         }
@@ -170,10 +173,10 @@ export function createTicketElement(data) {
     ticket.className = 'ticket';
     ticket.draggable = true;
     ticket.dataset.id = data.ticketId;
-    state.currentTicketData[data.ticketId] = data;
+    setTicket(data.ticketId, data);
 
-    // 色分けクラスの付与
-    const today = new Date().toISOString().split('T')[0];
+    // 色分けクラスの付与（ローカルタイムゾーン使用）
+    const today = new Date().toLocaleDateString('sv-SE');
     if (data.endDate) {
         if (data.endDate < today) {
             ticket.classList.add('overdue');
@@ -220,11 +223,12 @@ export function createTicketElement(data) {
     let childTasksHtml = '';
     if (data.childTasks && data.childTasks.length > 0) {
         childTasksHtml = '<div class="ticket-child-tasks">';
-        data.childTasks.forEach((task, i) => {
+        data.childTasks.forEach((task) => {
             const doneClass = task.done ? ' done' : '';
+            const childId = task.id || '';
             childTasksHtml += `
-                <div class="ticket-child-task-item${doneClass}" data-child-index="${i}">
-                    <input type="checkbox" ${task.done ? 'checked' : ''} data-child-check="${i}">
+                <div class="ticket-child-task-item${doneClass}" data-child-id="${childId}">
+                    <input type="checkbox" ${task.done ? 'checked' : ''} data-child-check="${childId}">
                     <span class="ticket-child-task-text">${escapeHtml(task.text)}</span>
                 </div>`;
         });
@@ -268,10 +272,9 @@ export function createTicketElement(data) {
     ticket.addEventListener('dragend', handleDragEnd);
     
     // チケットクリックでモーダルを開く
-    let wasProgressDragging = false;
     ticket.addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-bar') || e.target.closest('[data-child-check]')) return;
-        if (wasProgressDragging) return;
+        if (ticket.dataset.progressDragging === 'true') return;
         if (data.isArchived) return;
         openEditModal(ticket.dataset.id);
     });
@@ -281,12 +284,10 @@ export function createTicketElement(data) {
     childCheckboxes.forEach(checkbox => {
         checkbox.addEventListener('change', async (e) => {
             e.stopPropagation();
-            const index = parseInt(checkbox.dataset.childCheck);
+            const childId = checkbox.dataset.childCheck;
             try {
-                const updated = await apiRequest('PATCH', `${API_BASE}/${ticket.dataset.id}/child-task/${index}`, { done: checkbox.checked });
-                state.currentTicketData[ticket.dataset.id] = updated;
-                const idx = state.allTickets.findIndex(t => t.ticketId === ticket.dataset.id);
-                if (idx !== -1) state.allTickets[idx] = updated;
+                const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/child-task/${encodeURIComponent(childId)}`, { done: checkbox.checked });
+                setTicket(ticket.dataset.id, updated);
                 
                 // 進捗バー/テキストを更新
                 const progressFill = ticket.querySelector('.progress-fill');
@@ -297,13 +298,11 @@ export function createTicketElement(data) {
                 // 進捗グラフを更新
                 const chartEl = ticket.querySelector('.ticket-chart');
                 if (chartEl && updated.startDate && updated.endDate) {
-                    renderProgressChart(chartEl, updated.startDate, updated.endDate);
+                    renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0);
                 }
                 
                 // メモカラムの累積進捗グラフを更新
-                if (typeof window.updateMemoColumn === 'function') {
-                    window.updateMemoColumn();
-                }
+                updateMemoColumn();
             } catch (error) {
                 console.error('Failed to update child task:', error);
                 checkbox.checked = !checkbox.checked;
@@ -323,7 +322,7 @@ export function createTicketElement(data) {
     // グラフを描画
     const chartEl = ticket.querySelector('.ticket-chart');
     if (chartEl) {
-        renderProgressChart(chartEl, data.startDate, data.endDate);
+        renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0);
     }
     
     // 進捗バーのドラッグ処理（メモリリーク修正: 名前付き関数でremoveEventListener可能に）
@@ -345,7 +344,7 @@ export function createTicketElement(data) {
         e.stopPropagation();
         e.preventDefault();
         isDragging = true;
-        wasProgressDragging = false;
+        ticket.dataset.progressDragging = 'true';
         updateProgress(e.clientX);
         
         ticket.draggable = false;
@@ -355,7 +354,6 @@ export function createTicketElement(data) {
     const onMouseMove = (e) => {
         if (isDragging) {
             e.preventDefault();
-            wasProgressDragging = true;
             updateProgress(e.clientX);
         }
     };
@@ -368,17 +366,10 @@ export function createTicketElement(data) {
             const percentage = parseInt(progressText.textContent);
             
             try {
-                await apiRequest('PATCH', `${API_BASE}/${ticket.dataset.id}/progress`, { progress: percentage });
+                await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/progress`, { progress: percentage });
 
                 // 進捗値をローカル状態に反映（カラム移動は行わない）
-                const idx = state.allTickets.findIndex(t => t.ticketId === ticket.dataset.id);
-                if (idx !== -1) {
-                    state.allTickets[idx].progress = percentage;
-                }
-                // state.currentTicketData にも反映（グラフ再描画用）
-                if (state.currentTicketData[ticket.dataset.id]) {
-                    state.currentTicketData[ticket.dataset.id].progress = percentage;
-                }
+                updateTicketField(ticket.dataset.id, 'progress', percentage);
             } catch (error) {
                 console.error('Failed to update progress:', error);
             }
@@ -386,20 +377,16 @@ export function createTicketElement(data) {
             // 対象チケットの進捗グラフを更新
             const chartEl = ticket.querySelector('.ticket-chart');
             if (chartEl) {
-                const ticketData = state.currentTicketData[ticket.dataset.id];
+                const ticketData = getTicket(ticket.dataset.id);
                 if (ticketData && ticketData.startDate && ticketData.endDate) {
-                    renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate);
+                    renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0);
                 }
             }
             
             // 個人の累積進捗グラフを更新（メモカラムに表示されている場合）
-            if (typeof window.updateMemoColumn === 'function') {
-                window.updateMemoColumn();
-            }
+            updateMemoColumn();
             
-            setTimeout(() => {
-                wasProgressDragging = false;
-            }, 100);
+            ticket.dataset.progressDragging = 'false';
         }
     };
     
@@ -412,7 +399,9 @@ export function createTicketElement(data) {
     const deleteBtn = ticket.querySelector('.delete-btn');
     deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const ticketData = state.currentTicketData[ticket.dataset.id];
+        // リスナーを即座に削除（リーク防止）
+        progressEventListeners.delete(ticket.dataset.id);
+        const ticketData = getTicket(ticket.dataset.id);
         const isArchived = ticketData && ticketData.isArchived;
         
         if (isArchived) {
@@ -422,21 +411,14 @@ export function createTicketElement(data) {
         }
         
         try {
-            const result = await apiRequest('DELETE', `${API_BASE}/${ticket.dataset.id}`, null);
+            const result = await apiRequest('DELETE', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}`, null);
             if (isArchived) {
                 // 完全削除の場合（result は undefined）
-                delete state.currentTicketData[ticket.dataset.id];
-                state.allTickets = state.allTickets.filter(t => t.ticketId !== ticket.dataset.id);
+                removeTicket(ticket.dataset.id);
             } else {
                 // アーカイブ移動の場合（result にアーカイブされたチケットデータが含まれる）
                 const archivedTicket = result;
-                state.currentTicketData[ticket.dataset.id] = archivedTicket;
-                const idx = state.allTickets.findIndex(t => t.ticketId === ticket.dataset.id);
-                if (idx !== -1) {
-                    state.allTickets[idx] = archivedTicket;
-                } else {
-                    state.allTickets.push(archivedTicket);
-                }
+                setTicket(ticket.dataset.id, archivedTicket);
             }
             renderAllTickets();
         } catch (error) {
@@ -461,9 +443,9 @@ export function recreateTicket(ticketEl, data, column) {
         progressEventListeners.delete(oldId);
     }
     
+    // oldIdをdataに設定してcreateTicketElement内で処理させる
+    data.ticketId = oldId;
     const newTicket = createTicketElement(data);
-    newTicket.dataset.id = oldId;
-    state.currentTicketData[oldId] = data;
     
     // 新しいデータの進捗値を使用（古いDOMの値を無視）
     const percentage = data.progress || 0;
@@ -476,7 +458,7 @@ export function recreateTicket(ticketEl, data, column) {
     if (data.startDate && data.endDate) {
         const chartEl = newTicket.querySelector('.ticket-chart');
         if (chartEl) {
-            renderProgressChart(chartEl, data.startDate, data.endDate);
+            renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0);
         }
     }
     

@@ -1,72 +1,79 @@
 /**
  * 子タスク管理モジュール
+ * IDベース管理（index依存を排除）
  */
 
-import { state, escapeHtml } from './state.js';
+import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks } from './state.js';
 
 /**
  * 子タスクを追加
  */
-export function addChildTask(text, done = false, index = null) {
-    const task = { text: text.trim(), done };
-    if (index !== null) {
-        state.currentChildTasks.splice(index, 1, task);
-    } else {
-        state.currentChildTasks.push(task);
-    }
+export function addChildTask(text, done = false, id = null) {
+    const task = {
+        id: id || crypto.randomUUID(),
+        text: text.trim(),
+        done
+    };
+    addChildTaskToState(task);
     renderChildTasks();
 }
 
 /**
- * 子タスクを削除
+ * 子タスクを更新（IDベース）
  */
-export function removeChildTask(index) {
-    state.currentChildTasks.splice(index, 1);
+export function updateChildTask(id, updates) {
+    updateChildTaskInState(id, updates);
+}
+
+/**
+ * 子タスクを削除（IDベース）
+ */
+export function removeChildTask(id) {
+    removeChildTaskFromState(id);
     renderChildTasks();
 }
 
 /**
  * 子タスクをDOMに追加
  */
-export function addChildTaskToDom(text = '', done = false, index) {
+function addChildTaskToDom(task) {
     const childTasksEl = document.getElementById('childTasks');
+    if (!childTasksEl) return;
+
     const div = document.createElement('div');
     div.className = 'child-task-item';
-    div.dataset.index = index;
-    
+    div.dataset.childId = task.id;
+
     // XSS対策: innerHTML ではなく createElement/setAttribute を使用
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.checked = done;
-    checkbox.dataset.childIndex = index;
-    
+    checkbox.checked = task.done;
+
     const textInput = document.createElement('input');
     textInput.type = 'text';
-    textInput.value = text; // createElement で生成するためXSS安全
+    textInput.value = task.text;
     textInput.placeholder = '子タスク名';
-    textInput.dataset.childText = index;
-    
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-child-task';
-    removeBtn.dataset.removeChild = index;
     removeBtn.textContent = '\u00d7'; // ×記号
-    
+
     div.appendChild(checkbox);
     div.appendChild(textInput);
     div.appendChild(removeBtn);
     childTasksEl.appendChild(div);
-    
-    // イベント（上部で定義した変数を直接使用）
+
+    // イベント（IDベースでstate更新）
     checkbox.addEventListener('change', () => {
-        state.currentChildTasks[index].done = checkbox.checked;
+        updateChildTask(task.id, { done: checkbox.checked });
     });
-    
+
     textInput.addEventListener('input', () => {
-        state.currentChildTasks[index].text = textInput.value;
+        updateChildTask(task.id, { text: textInput.value });
     });
-    
+
     removeBtn.addEventListener('click', () => {
-        removeChildTask(index);
+        removeChildTask(task.id);
     });
 }
 
@@ -75,8 +82,9 @@ export function addChildTaskToDom(text = '', done = false, index) {
  */
 export function renderChildTasks() {
     const childTasksEl = document.getElementById('childTasks');
+    if (!childTasksEl) return;
     childTasksEl.innerHTML = '';
-    state.currentChildTasks.forEach((task, i) => {
-        addChildTaskToDom(task.text, task.done, i);
+    getChildTasks().forEach(task => {
+        addChildTaskToDom(task);
     });
 }

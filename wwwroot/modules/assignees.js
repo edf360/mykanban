@@ -2,35 +2,46 @@
  * 担当者管理モジュール
  */
 
-import { API_BASE, state, escapeHtml } from './state.js';
-import { apiRequest } from './api.js';
-import { recreateTicket } from './renderer.js';
+import { getCurrentAssignees, getMainAssignee, setMainAssignee, getAssigneeSuggestions,
+         addAssigneeToState, removeAssigneeFromState, escapeHtml, setModalState } from './state.js';
 
 /**
  * 担当者を追加
  */
 export function addAssignee(text) {
-    if (text.trim() && !state.currentAssignees.includes(text.trim())) {
-        state.currentAssignees.push(text.trim());
-        // メイン担当者が未設定の場合は自動的にメインに設定
-        if (!state.mainAssignee) {
-            state.mainAssignee = text.trim();
-        }
-        renderAssigneeTags();
-    }
+    addAssigneeToState(text);
+    renderAssigneeTags();
 }
 
 /**
  * 担当者を削除
  */
 export function removeAssignee(index) {
-    const removed = state.currentAssignees[index];
-    state.currentAssignees.splice(index, 1);
-    // メイン担当者が削除された場合はnullにリセット
-    if (state.mainAssignee === removed) {
-        state.mainAssignee = state.currentAssignees[0] || null;
-    }
+    removeAssigneeFromState(index);
     renderAssigneeTags();
+}
+
+/**
+ * 担当者タグのイベントハンドラ（イベント委譲用）
+ */
+function handleAssigneeTagClick(e) {
+    const removeBtn = e.target.closest('.remove-assignee');
+    if (removeBtn) {
+        e.stopPropagation();
+        const index = Number(removeBtn.dataset.index);
+        if (Number.isNaN(index)) {
+            return;
+        }
+        removeAssignee(index);
+        renderAssigneeSelect();
+        return;
+    }
+    const tag = e.target.closest('.assignee-tag');
+    if (tag) {
+        const clickedAssignee = tag.dataset.assignee;
+        setMainAssignee(clickedAssignee);
+        renderAssigneeTags();
+    }
 }
 
 /**
@@ -39,29 +50,28 @@ export function removeAssignee(index) {
  */
 export function renderAssigneeTags() {
     const assigneeTagsEl = document.getElementById('assigneeTags');
+    if (!assigneeTagsEl) return;
+
     assigneeTagsEl.innerHTML = '';
-    state.currentAssignees.forEach((assignee, i) => {
-        const isMain = assignee === state.mainAssignee;
+
+    const currentAssignees = getCurrentAssignees();
+    const mainAssignee = getMainAssignee();
+
+    currentAssignees.forEach((assignee, i) => {
+        const isMain = assignee === mainAssignee;
+        const tag = document.createElement('span');
+        tag.className = `assignee-tag${isMain ? ' main' : ''}`;
+        tag.dataset.assignee = assignee;
+        tag.title = 'クリックでメイン担当者に設定';
+
         const crownIcon = isMain ? '👑 ' : '';
-        assigneeTagsEl.innerHTML += `<span class="assignee-tag ${isMain ? 'main' : ''}" data-assignee="${escapeHtml(assignee)}" title="クリックでメイン担当者に設定">${crownIcon}${escapeHtml(assignee)} <span class="remove-assignee" data-index="${i}">&times;</span></span>`;
+        tag.innerHTML = `${crownIcon}${escapeHtml(assignee)} <span class="remove-assignee" data-index="${i}">&times;</span>`;
+
+        assigneeTagsEl.appendChild(tag);
     });
-    
-    // 担当者タグのクリックイベントをバインド（メイン担当者切り替え）
-    assigneeTagsEl.querySelectorAll('.assignee-tag').forEach(tag => {
-        tag.addEventListener('click', (e) => {
-            // ×ボタンクリックの場合は担当者を削除
-            if (e.target.classList.contains('remove-assignee')) {
-                e.stopPropagation();
-                const index = parseInt(e.target.dataset.index);
-                removeAssignee(index);
-                renderAssigneeSelect();
-                return;
-            }
-            const clickedAssignee = e.currentTarget.dataset.assignee;
-            state.mainAssignee = clickedAssignee;
-            renderAssigneeTags();
-        });
-    });
+
+    // イベント委譲（1回だけ設定）
+    assigneeTagsEl.onclick = handleAssigneeTagClick;
 }
 
 /**
@@ -71,15 +81,15 @@ export function renderAssigneeSelect() {
     const listEl = document.getElementById('assigneeList');
     const toggleBtn = document.getElementById('assigneeToggleBtn');
     if (!listEl || !toggleBtn) return;
-    
+
     // ドロップダウンを閉じる
     listEl.classList.remove('active');
-    
+
     listEl.innerHTML = '';
-    
-    const allAssignees = state.assigneeSuggestions || [];
-    const currentAssignees = state.currentAssignees || [];
-    
+
+    const allAssignees = getAssigneeSuggestions();
+    const currentAssignees = getCurrentAssignees();
+
     allAssignees.forEach(assignee => {
         const item = document.createElement('div');
         item.className = 'dropdown-item';
@@ -87,20 +97,20 @@ export function renderAssigneeSelect() {
         if (isSelected) {
             item.classList.add('selected');
         }
-        
+
         item.innerHTML = `<span class="dropdown-checkmark">✓</span>${escapeHtml(assignee)}`;
-        
+
         // アイテムクリックで担当者をトグル
         item.addEventListener('click', () => {
             toggleAssignee(assignee);
             renderAssigneeTags();
             renderAssigneeSelect();
         });
-        
+
         listEl.appendChild(item);
     });
-    
-    // ボタンクリックでドロップダウン表示/非表示
+
+    // ボタンクリックでドロップダウン表示/非表示（addEventListener使用）
     toggleBtn.onclick = (e) => {
         e.stopPropagation();
         listEl.classList.toggle('active');
@@ -111,20 +121,18 @@ export function renderAssigneeSelect() {
  * 担当者をトグル
  */
 function toggleAssignee(assignee) {
-    const idx = state.currentAssignees.indexOf(assignee);
+    const current = getCurrentAssignees();
+    const idx = current.indexOf(assignee);
 
     if (idx >= 0) {
-        state.currentAssignees.splice(idx, 1);
-
-        if (state.mainAssignee === assignee) {
-            state.mainAssignee = state.currentAssignees[0] || null;
+        // 削除
+        setModalState({ currentAssignees: current.filter(a => a !== assignee) });
+        if (getMainAssignee() === assignee) {
+            setMainAssignee(current.filter(a => a !== assignee)[0] || null);
         }
     } else {
-        state.currentAssignees.push(assignee);
-
-        if (!state.mainAssignee) {
-            state.mainAssignee = assignee;
-        }
+        // 追加
+        addAssigneeToState(assignee);
     }
 }
 
@@ -134,4 +142,3 @@ function toggleAssignee(assignee) {
 export function syncAssigneesFromSelect() {
     // カスタムドロップダウンでは直接使用しないが、後方互換のため残す
 }
-

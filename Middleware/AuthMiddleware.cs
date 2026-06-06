@@ -1,4 +1,5 @@
 using KanbanServer.Services;
+using Serilog;
 
 namespace KanbanServer.Middleware;
 
@@ -20,64 +21,79 @@ public class AuthMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var path = context.Request.Path.Value ?? "";
-
-        // 認証エンドポイントはスキップ
-        if (path == "/api/auth/login" || path == "/api/auth/login/")
+        try
         {
+            var path = context.Request.Path.Value ?? "";
+
+            // 認証エンドポイントはスキップ
+            if (path == "/api/auth/login" || path == "/api/auth/login/")
+            {
+                await _next(context);
+                return;
+            }
+
+            // 静的ファイルはスキップ
+            if (!path.StartsWith("/api/"))
+            {
+                await _next(context);
+                return;
+            }
+
+            // Authorizationヘッダーからトークンを取得
+            var authHeader = context.Request.Headers["Authorization"].ToString();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Warning("認証ヘッダーがありません: Path={Path}, Method={Method}", path, context.Request.Method);
+                await WriteJsonResponse(context, 401, "{\"error\":\"Unauthorized\"}");
+                return;
+            }
+
+            var token = authHeader["Bearer ".Length..].Trim();
+            var info = _tokenStore.ValidateToken(token);
+
+            if (info == null)
+            {
+                Log.Warning("無効または期限切れのトークン: Path={Path}, Method={Method}", path, context.Request.Method);
+                await WriteJsonResponse(context, 401, "{\"error\":\"Invalid or expired token\"}");
+                return;
+            }
+
+            // 管理者権限が必要なエンドポイントのチェック
+            var isAdminRequired = IsAdminRequired(path, context.Request.Method);
+            if (isAdminRequired && !info.IsAdmin)
+            {
+                Log.Warning("管理者権限が必要です: User={User}, Path={Path}, Method={Method}", info.Username, path, context.Request.Method);
+                await WriteJsonResponse(context, 403, "{\"error\":\"Admin access required\"}");
+                return;
+            }
+
+            // ユーザー情報を次のミドルウェアに渡す
+            context.Items["Username"] = info.Username;
+            context.Items["IsAdmin"] = info.IsAdmin;
+
             await _next(context);
-            return;
         }
-
-        // 静的ファイルはスキップ
-        if (!path.StartsWith("/api/"))
+        catch (Exception ex)
         {
-            await _next(context);
-            return;
+            Log.Error(ex, "認証ミドルウェアで予期せぬエラーが発生しました: Path={Path}", context.Request.Path.Value);
+            if (!context.Response.HasStarted)
+            {
+                await WriteJsonResponse(context, 500, "{\"error\":\"Internal server error\"}");
+            }
         }
+    }
 
-        // Authorizationヘッダーからトークンを取得
-        var authHeader = context.Request.Headers["Authorization"].ToString();
-        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync("{\"error\":\"Unauthorized\"}");
-            return;
-        }
-
-        var token = authHeader["Bearer ".Length..].Trim();
-        var info = _tokenStore.ValidateToken(token);
-
-        if (info == null)
-        {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync("{\"error\":\"Invalid or expired token\"}");
-            return;
-        }
-
-        // 管理者権限が必要なエンドポイントのチェック
-        var isAdminRequired = IsAdminRequired(path, context.Request.Method);
-        if (isAdminRequired && !info.IsAdmin)
-        {
-            context.Response.StatusCode = 403;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync("{\"error\":\"Admin access required\"}");
-            return;
-        }
-
-        // ユーザー情報を次のミドルウェアに渡す
-        context.Items["Username"] = info.Username;
-        context.Items["IsAdmin"] = info.IsAdmin;
-
-        await _next(context);
+    private static async Task WriteJsonResponse(HttpContext context, int statusCode, string json)
+    {
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync(json);
     }
 
     private static bool IsAdminRequired(string path, string method)
     {
-        // 設定系
-        if (path.StartsWith("/api/settings"))
+        // 設定系（パスセパレータを含む正確なマッチング）
+        if (path.StartsWith("/api/settings/") || path == "/api/settings")
         {
             // GET は読み取りのみなので管理者不要
             if (method == "GET")
@@ -89,8 +105,8 @@ public class AuthMiddleware
             return false;
         }
 
-        // チケットの削除は管理者のみ
-        if (path.StartsWith("/api/tickets") && method == "DELETE")
+        // チケットの削除は管理者のみ（正確なパスマッチング）
+        if ((path.StartsWith("/api/tickets/") || path == "/api/tickets") && method == "DELETE")
         {
             return true;
         }

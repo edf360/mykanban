@@ -402,7 +402,8 @@ public class TicketTests : IDisposable
         await _context.SaveChangesAsync();
 
         // Act: そのチケットをdoingカラムのPosition 0に移動（コントローラー経由）
-        var controller = new KanbanServer.Controllers.TicketsController(_context);
+        var service = new KanbanServer.Services.TicketService(_context);
+        var controller = new KanbanServer.Controllers.TicketsController(service);
         var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         var result = await controller.UpdateColumn("single-a", dto);
 
@@ -450,7 +451,8 @@ public class TicketTests : IDisposable
     public async Task BulkCreate_PositionsAssignedCorrectly()
     {
         // Arrange: コントローラーを使用して複数チケットを連続作成
-        var controller = new KanbanServer.Controllers.TicketsController(_context);
+        var service = new KanbanServer.Services.TicketService(_context);
+        var controller = new KanbanServer.Controllers.TicketsController(service);
 
         // Act: 5つのチケットをtodoカラムに連続作成
         var createdTickets = new List<Ticket>();
@@ -464,10 +466,10 @@ public class TicketTests : IDisposable
             createdTickets.Add(ticket);
         }
 
-        // Assert: Positionが0, 1, 2, 3, 4と正しく割り当てられる
+        // Assert: Positionが0, 1000, 2000, 3000, 4000と正しく割り当てられる
         for (int i = 0; i < 5; i++)
         {
-            Assert.Equal(i, createdTickets[i].Position);
+            Assert.Equal(i * 1000, createdTickets[i].Position);
         }
 
         // DBから取得しても順序が維持されている
@@ -480,7 +482,7 @@ public class TicketTests : IDisposable
         for (int i = 0; i < 5; i++)
         {
             Assert.Equal($"Bulk-{i}", dbTickets[i].Title);
-            Assert.Equal(i, dbTickets[i].Position);
+            Assert.Equal(i * 1000, dbTickets[i].Position);
         }
     }
 }

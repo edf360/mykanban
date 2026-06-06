@@ -20,6 +20,7 @@ public class TicketDto
 
 public class ChildTaskDto
 {
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Text { get; set; } = string.Empty;
     public bool Done { get; set; }
 }

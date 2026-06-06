@@ -2,130 +2,163 @@
  * モーダル操作モジュール
  */
 
-import { API_BASE, state, escapeHtml } from './state.js';
-import { apiRequest } from './api.js';
-import { recreateTicket, renderAllTickets } from './renderer.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
-import { addChildTaskToDom, renderChildTasks } from './childtasks.js';
+import { renderChildTasks } from './childtasks.js';
+import { createTicket, updateTicket } from './ticketService.js';
+
+// ===== DOM要素キャッシュ =====
+const el = {
+    modal: null,
+    modalContent: null,
+    modalTitle: null,
+    ticketTitle: null,
+    startDate: null,
+    endDate: null,
+    effort: null,
+    memo: null,
+    assigneeTags: null,
+    childTasks: null,
+    cancelBtn: null,
+    saveBtn: null,
+    lockBtn: null,
+};
 
 /**
- * 新規チケットモーダルを開く
+ * DOM要素をキャッシュ
  */
-export function openNewModal(defaultColumn) {
-    console.log('[Modal] openNewModal called with defaultColumn:', defaultColumn);
-    state.editingTicketId = null;
-    window.__editingTicketId = null;
-    state.currentLabels = [];
-    state.currentAssignees = [];
-    state.mainAssignee = null;
-    state.currentChildTasks = [];
-    state.newTicketColumn = defaultColumn || 'todo';
-    
-    // チケット作成時はロック解除状態
-    state.ticketLocked = false;
-    updateLockButton();
-    applyLockToModal();
-    
-    // フィルターで選択された担当者をデフォルトに設定
-    const selectedAssignee = getSelectedAssignee();
-    state.currentAssignees = selectedAssignee ? [selectedAssignee] : [];
-    
-    document.getElementById('modalTitle').textContent = '新しいチケット';
-    document.getElementById('ticketTitle').value = '';
-    document.getElementById('startDate').value = '';
-    document.getElementById('endDate').value = '';
-    document.getElementById('effort').value = '';
-    document.getElementById('memo').value = '';
-    document.getElementById('assigneeTags').innerHTML = '';
-    document.getElementById('childTasks').innerHTML = '';
-    
-    renderAssigneeTags();
-    renderAssigneeSelect();
-    renderLabelSelect();
-    
-    const modal = document.getElementById('ticketModal');
-    console.log('[Modal] ticketModal element:', modal);
-    modal.classList.add('active');
-    console.log('[Modal] modal active class added, visible:', modal.classList.contains('active'));
-    
-    // モーダル表示後にタイトル入力フィールドにフォーカス
-    // CSS transition (0.3s) 完了後にフォーカスを適用
-    setTimeout(() => {
-        const titleInput = document.getElementById('ticketTitle');
-        if (titleInput) {
-            titleInput.focus();
-            titleInput.select();
-        }
-    }, 350);
+function cacheElements() {
+    el.modal = document.getElementById('ticketModal');
+    el.modalContent = el.modal ? el.modal.querySelector('.modal') : null;
+    el.modalTitle = document.getElementById('modalTitle');
+    el.ticketTitle = document.getElementById('ticketTitle');
+    el.startDate = document.getElementById('startDate');
+    el.endDate = document.getElementById('endDate');
+    el.effort = document.getElementById('effort');
+    el.memo = document.getElementById('memo');
+    el.assigneeTags = document.getElementById('assigneeTags');
+    el.childTasks = document.getElementById('childTasks');
+    el.cancelBtn = document.getElementById('cancelBtn');
+    el.saveBtn = document.getElementById('saveBtn');
+    el.lockBtn = document.getElementById('modalLockBtn');
 }
 
 /**
- * 既存チケットの編集モーダルを開く
+ * 内部用モーダルオープン処理
  */
-export function openEditModal(ticketId) {
-    console.log('[Modal] openEditModal called with ticketId:', ticketId);
-    state.editingTicketId = ticketId;
-    window.__editingTicketId = ticketId;
-    const data = state.currentTicketData[ticketId];
-    console.log('[Modal] ticket data from state.currentTicketData:', data);
-    if (!data) {
-        console.warn('[Modal] No ticket data found for ticketId:', ticketId);
-        return;
+function _openModal(options) {
+    // options: { mode: 'new'|'edit', column?: string, ticketId?: string }
+    
+    if (options.mode === 'new') {
+        // 新規チケット状態
+        resetModalState();
+        setModalState({ newTicketColumn: options.column || 'todo' });
+        setTicketLocked(false);
+        
+        // フィルターで選択された担当者をデフォルトに設定
+        const selectedAssignee = getFilterAssignee();
+        if (selectedAssignee) {
+            setModalState({ currentAssignees: [selectedAssignee] });
+        }
+        
+        // DOM初期化
+        if (el.modalTitle) el.modalTitle.textContent = '新しいチケット';
+        if (el.ticketTitle) el.ticketTitle.value = '';
+        if (el.startDate) el.startDate.value = '';
+        if (el.endDate) el.endDate.value = '';
+        if (el.effort) el.effort.value = '';
+        if (el.memo) el.memo.value = '';
+        if (el.assigneeTags) el.assigneeTags.innerHTML = '';
+        if (el.childTasks) el.childTasks.innerHTML = '';
+        
+    } else if (options.mode === 'edit') {
+        // 編集モード
+        const data = getTicket(options.ticketId);
+        if (!data) {
+            console.warn('[Modal] No ticket data found for ticketId:', options.ticketId);
+            return;
+        }
+        
+        setModalState({
+            editingTicketId: options.ticketId,
+            currentLabels: data.labels ? [...data.labels] : [],
+            currentAssignees: data.assignees ? [...data.assignees] : [],
+            mainAssignee: data.mainAssignee || null,
+            currentChildTasks: data.childTasks ? data.childTasks.map(t => ({...t})) : []
+        });
+        setTicketLocked(data.isLocked || false);
+        
+        // DOM更新
+        if (el.modalTitle) el.modalTitle.textContent = 'チケットを編集';
+        if (el.ticketTitle) el.ticketTitle.value = data.title || '';
+        if (el.startDate) el.startDate.value = data.startDate ? data.startDate.substring(0, 10) : '';
+        if (el.endDate) el.endDate.value = data.endDate ? data.endDate.substring(0, 10) : '';
+        if (el.effort) el.effort.value = data.effort || '';
+        if (el.memo) el.memo.value = data.memo || '';
     }
     
-    state.currentLabels = data.labels ? [...data.labels] : [];
-    state.currentAssignees = data.assignees ? [...data.assignees] : [];
-    state.mainAssignee = data.mainAssignee || null;
-    state.currentChildTasks = data.childTasks ? data.childTasks.map(t => ({...t})) : [];
-    
-    // チケットの永続化されたロック状態を復元
-    state.ticketLocked = data.isLocked || false;
+    // ロックUI更新
     updateLockButton();
     applyLockToModal();
     
-    document.getElementById('modalTitle').textContent = 'チケットを編集';
-    document.getElementById('ticketTitle').value = data.title || '';
-    document.getElementById('startDate').value = data.startDate ? data.startDate.substring(0, 10) : '';
-    document.getElementById('endDate').value = data.endDate ? data.endDate.substring(0, 10) : '';
-    document.getElementById('effort').value = data.effort || '';
-    document.getElementById('memo').value = data.memo || '';
-    
-    // 担当者表示
+    // レンダリング
     renderAssigneeTags();
-    
-    // 子タスク表示
-    const childTasksEl = document.getElementById('childTasks');
-    childTasksEl.innerHTML = '';
-    state.currentChildTasks.forEach((task, i) => {
-        addChildTaskToDom(task.text, task.done, i);
-    });
-    
     renderAssigneeSelect();
     renderLabelSelect();
     
-    const modal = document.getElementById('ticketModal');
-    modal.classList.add('active');
+    if (options.mode === 'edit') {
+        renderChildTasks();
+    }
+    
+    // モーダル表示
+    if (el.modal) {
+        el.modal.classList.add('active');
+    }
+    
+    // 新規作成時はタイトルにフォーカス
+    if (options.mode === 'new') {
+        setTimeout(() => {
+            if (el.ticketTitle) {
+                el.ticketTitle.focus();
+                el.ticketTitle.select();
+            }
+        }, 350);
+    }
+}
+
+/**
+ * 新規チケットモーダルを開く（後方互換ラッパー）
+ */
+export function openNewModal(column) {
+    _openModal({ mode: 'new', column });
+}
+
+/**
+ * 既存チケットの編集モーダルを開く（後方互換ラッパー）
+ */
+export function openEditModal(ticketId) {
+    _openModal({ mode: 'edit', ticketId });
 }
 
 /**
  * モーダルを閉じる
  */
 export function closeModal() {
-    const modal = document.getElementById('ticketModal');
-    modal.classList.remove('active');
-    modal.querySelector('.modal').classList.remove('locked');
-    state.editingTicketId = null;
-    window.__editingTicketId = null;
+    if (!el.modal) return;
+    el.modal.classList.remove('active');
+    if (el.modalContent) {
+        el.modalContent.classList.remove('locked');
+    }
+    setModalState({ editingTicketId: null });
 }
 
 /**
  * ロックボタンを更新（テキストアイコン）
  */
 function updateLockButton() {
-    const btn = document.getElementById('modalLockBtn');
-    if (btn) {
-        btn.textContent = state.ticketLocked ? '🔒' : '🔓';
+    if (el.lockBtn) {
+        el.lockBtn.textContent = isTicketLocked() ? '🔒' : '🔓';
     }
 }
 
@@ -133,13 +166,12 @@ function updateLockButton() {
  * モーダルにロック状態を適用（フィールドをグレーアウト）
  */
 function applyLockToModal() {
-    const modal = document.getElementById('ticketModal');
-    const modalContent = modal.querySelector('.modal');
+    if (!el.modalContent) return;
     
-    if (state.ticketLocked) {
-        modalContent.classList.add('locked');
+    if (isTicketLocked()) {
+        el.modalContent.classList.add('locked');
     } else {
-        modalContent.classList.remove('locked');
+        el.modalContent.classList.remove('locked');
     }
 }
 
@@ -147,61 +179,55 @@ function applyLockToModal() {
  * ロック/アンロックをトグル
  */
 export function toggleLock() {
-    state.ticketLocked = !state.ticketLocked;
+    setTicketLocked(!isTicketLocked());
     updateLockButton();
     applyLockToModal();
+}
+
+/**
+ * フォームからチケットデータを収集
+ */
+function collectFormData() {
+    if (!el.ticketTitle) return null;
+    const title = el.ticketTitle.value.trim();
+    if (!title) {
+        alert('タイトルを入力してください');
+        return null;
+    }
+    
+    const startDateVal = el.startDate ? el.startDate.value : '';
+    const endDateVal = el.endDate ? el.endDate.value : '';
+    const effortVal = el.effort ? el.effort.value : '';
+    const memoVal = el.memo ? el.memo.value.trim() : '';
+    
+    return {
+        title,
+        startDate: startDateVal || null,
+        endDate: endDateVal || null,
+        effort: parseInt(effortVal) || null,
+        assignees: getCurrentAssignees(),
+        mainAssignee: getMainAssignee(),
+        labels: getCurrentLabels(),
+        memo: memoVal,
+        childTasks: getChildTasks().map(t => ({...t})),
+        isLocked: isTicketLocked()
+    };
 }
 
 /**
  * チケットを保存
  */
 export async function saveTicket() {
-    const title = document.getElementById('ticketTitle').value.trim();
-    
-    // タイトル必須チェック
-    if (!title) {
-        alert('タイトルを入力してください');
-        return;
-    }
-    
-    const startDateVal = document.getElementById('startDate').value;
-    const endDateVal = document.getElementById('endDate').value;
-    const data = {
-        title,
-        startDate: startDateVal || null,
-        endDate: endDateVal || null,
-        effort: parseInt(document.getElementById('effort').value) || null,
-        assignees: [...state.currentAssignees],
-        mainAssignee: state.mainAssignee,
-        labels: [...state.currentLabels],
-        memo: document.getElementById('memo').value.trim(),
-        childTasks: state.currentChildTasks.map(t => ({...t})),
-        isLocked: state.ticketLocked
-    };
+    const data = collectFormData();
+    if (!data) return;
     
     try {
-        if (state.editingTicketId) {
-            // 既存チケットの更新
-            const updated = await apiRequest('PUT', `${API_BASE}/${state.editingTicketId}`, data);
-            state.currentTicketData[state.editingTicketId] = updated;
-            
-            const idx = state.allTickets.findIndex(t => t.ticketId === state.editingTicketId);
-            if (idx !== -1) state.allTickets[idx] = updated;
-            
-            const ticketEl = document.querySelector(`.ticket[data-id="${state.editingTicketId}"]`);
-            if (ticketEl) {
-                const column = ticketEl.closest('.column');
-                recreateTicket(ticketEl, updated, column);
-            }
+        const editingId = getEditingTicketId();
+        if (editingId) {
+            await updateTicket(editingId, data);
         } else {
-            // 新規作成
-            data.column = state.newTicketColumn || 'todo';
-            const created = await apiRequest('POST', API_BASE, data);
-            state.currentTicketData[created.ticketId] = created;
-            state.allTickets.push(created);
-            
-            // 再描画で追加
-            renderAllTickets();
+            data.column = getNewTicketColumn() || 'todo';
+            await createTicket(data);
         }
     } catch (error) {
         console.error('Failed to save ticket:', error);
@@ -213,35 +239,35 @@ export async function saveTicket() {
 }
 
 /**
- * 現在選択されているフィルター値を取得
- */
-function getSelectedAssignee() {
-    const select = document.getElementById('assigneeFilterSelect');
-    return select ? select.value : '';
-}
-
-/**
  * モーダル関連のイベントを初期化
  */
 export function initModal() {
-    const modal = document.getElementById('ticketModal');
+    cacheElements();
     
-    document.getElementById('cancelBtn').addEventListener('click', closeModal);
-    document.getElementById('saveBtn').addEventListener('click', saveTicket);
-    document.getElementById('modalLockBtn').addEventListener('click', toggleLock);
+    if (!el.modal) return;
+    
+    if (el.cancelBtn) {
+        el.cancelBtn.addEventListener('click', closeModal);
+    }
+    if (el.saveBtn) {
+        el.saveBtn.addEventListener('click', saveTicket);
+    }
+    if (el.lockBtn) {
+        el.lockBtn.addEventListener('click', toggleLock);
+    }
     
     // モーダル外クリックで保存
     // テキスト選択ドラッグによる誤判定を防ぐため、mousedown/mouseup で判断
     let mouseDownOnOverlay = false;
     
-    modal.addEventListener('mousedown', (e) => {
+    el.modal.addEventListener('mousedown', (e) => {
         // オーバーレイ（バックドロップ）上でマウスダウンした場合のみフラグを設定
         if (e.target.id === 'ticketModal') {
             mouseDownOnOverlay = true;
         }
     });
     
-    modal.addEventListener('mouseup', (e) => {
+    el.modal.addEventListener('mouseup', (e) => {
         if (mouseDownOnOverlay && e.target.id === 'ticketModal') {
             // オーバーレイ上で mousedown と mouseup の両方があった場合のみ保存
             saveTicket();

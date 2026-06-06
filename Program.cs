@@ -26,15 +26,31 @@ builder.Services.AddDbContext<KanbanDbContext>(options =>
 // トークンストア（認証用）
 builder.Services.AddSingleton<TokenStore>();
 
-// CORS設定
+// チケットサービス
+builder.Services.AddScoped<TicketService>();
+
+// CORS設定（開発環境のみ開放的設定）
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    if (builder.Environment.IsDevelopment())
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
+        options.AddPolicy("AllowAll", policy =>
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+    }
+    else
+    {
+        // 本番環境では同じオリジンのみ許可（SPAとAPIが同じドメインの場合）
+        options.AddPolicy("SameOrigin", policy =>
+        {
+            policy.WithOrigins(builder.Configuration.GetValue<string>("AllowedOrigin") ?? "")
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+    }
 });
 
 // コントローラーとJSONシリアライザー設定
@@ -47,22 +63,9 @@ builder.Services.AddControllers()
 var app = builder.Build();
 
 // 1. CORSを有効化
-app.UseCors("AllowAll");
+app.UseCors(builder.Environment.IsDevelopment() ? "AllowAll" : "SameOrigin");
 
-// 2. 認証ミドルウェア
-app.UseMiddleware<AuthMiddleware>();
-
-// 3. SQLite DB自動作成
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<KanbanDbContext>();
-    db.Database.EnsureCreated();
-}
-
-// 4. APIルートをマップ（/api/プレフィックスのみ）
-app.MapControllers();
-
-// 5. wwwrootからの静的ファイル配信
+// 2. wwwrootからの静的ファイル配信（APIの前に配置）
 var wwwRootPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
 if (Directory.Exists(wwwRootPath))
 {
@@ -72,6 +75,19 @@ if (Directory.Exists(wwwRootPath))
         RequestPath = ""  // ルートから直接配信
     });
 }
+
+// 3. 認証ミドルウェア
+app.UseMiddleware<AuthMiddleware>();
+
+// 4. SQLite DB自動作成
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<KanbanDbContext>();
+    db.Database.EnsureCreated();
+}
+
+// 5. APIルートをマップ（/api/プレフィックスのみ）
+app.MapControllers();
 
 // 6. SPAフォールバック - API以外のすべてのリクエストでkanban.htmlを返す
 app.MapFallback(async context =>

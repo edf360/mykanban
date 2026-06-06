@@ -4,30 +4,45 @@
  */
 
 const AUTH_STORAGE_KEY = 'kanban_auth';
+let authCache = null;
 
 /**
- * 認証情報を取得
+ * 認証情報を取得（キャッシュ優先）
  */
 export function getAuth() {
+    if (authCache) {
+        return authCache;
+    }
     try {
         const data = sessionStorage.getItem(AUTH_STORAGE_KEY);
-        return data ? JSON.parse(data) : null;
-    } catch {
+        if (!data) {
+            return null;
+        }
+        const auth = JSON.parse(data);
+        if (typeof auth.token !== 'string' || typeof auth.isAdmin !== 'boolean') {
+            return null;
+        }
+        authCache = auth;
+        return auth;
+    } catch (error) {
+        console.warn('Invalid auth data', error);
         return null;
     }
 }
 
 /**
- * 認証情報を保存
+ * 認証情報を保存（キャッシュ更新）
  */
 export function setAuth(token, isAdmin, username) {
-    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token, isAdmin, username }));
+    authCache = { token, isAdmin, username };
+    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authCache));
 }
 
 /**
- * 認証情報を削除（ログアウト）
+ * 認証情報を削除（キャッシュクリア）
  */
 export function clearAuth() {
+    authCache = null;
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
@@ -56,11 +71,10 @@ export function getUsername() {
 }
 
 /**
- * 管理者チェック。一般ユーザーの場合はエラーダイアログを表示
+ * 管理者チェック。一般ユーザーの場合は false を返す
  */
 export function requireAdmin() {
     if (!isAdmin()) {
-        alert('この機能は管理者のみ利用できます。');
         return false;
     }
     return true;
@@ -70,11 +84,16 @@ export function requireAdmin() {
  * ログインAPIを呼び出す
  */
 export async function login(username, password) {
-    const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
+    let response;
+    try {
+        response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+    } catch {
+        throw new Error('サーバーに接続できません');
+    }
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -91,17 +110,28 @@ export async function login(username, password) {
  */
 export async function logout() {
     const token = getToken();
-    if (token) {
-        try {
+    try {
+        if (token) {
             await fetch('/api/auth/logout', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-        } catch {
-            // ログアウトAPIの失敗は無視
         }
+    } catch {
+        // ログアウトAPIの失敗は無視
+    } finally {
+        clearAuth();
     }
-    clearAuth();
+}
+
+/**
+ * 要素の表示/非表示を切り替え
+ */
+function setVisible(el, visible) {
+    if (!el) {
+        return;
+    }
+    el.classList.toggle('hidden', !visible);
 }
 
 /**
@@ -113,26 +143,14 @@ export function showLoginScreen() {
     const bottomButtons = document.querySelector('.bottom-left-buttons');
     const filterArea = document.getElementById('filterArea');
 
-    if (loginScreen) {
-        loginScreen.classList.remove('hidden');
-        loginScreen.style.display = 'flex';
-    }
-    if (appContent) {
-        appContent.classList.add('hidden');
-        appContent.style.display = 'none';
-    }
-    if (bottomButtons) {
-        bottomButtons.classList.add('hidden');
-        bottomButtons.style.display = 'none';
-    }
-    if (filterArea) {
-        filterArea.classList.add('hidden');
-        filterArea.style.display = 'none';
-    }
+    setVisible(loginScreen, true);
+    setVisible(appContent, false);
+    setVisible(bottomButtons, false);
+    setVisible(filterArea, false);
 }
 
 /**
- * アプリ画面を表示する（ログイン成功后）
+ * アプリ画面を表示する（ログイン成功後）
  */
 export function showAppScreen() {
     const loginScreen = document.getElementById('loginScreen');
@@ -140,20 +158,8 @@ export function showAppScreen() {
     const bottomButtons = document.querySelector('.bottom-left-buttons');
     const filterArea = document.getElementById('filterArea');
 
-    if (loginScreen) {
-        loginScreen.classList.add('hidden');
-        loginScreen.style.display = 'none';
-    }
-    if (appContent) {
-        appContent.classList.remove('hidden');
-        appContent.style.display = '';
-    }
-    if (bottomButtons) {
-        bottomButtons.classList.remove('hidden');
-        bottomButtons.style.display = '';
-    }
-    if (filterArea) {
-        filterArea.classList.remove('hidden');
-        filterArea.style.display = '';
-    }
+    setVisible(loginScreen, false);
+    setVisible(appContent, true);
+    setVisible(bottomButtons, true);
+    setVisible(filterArea, true);
 }

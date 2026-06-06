@@ -1,100 +1,144 @@
 /**
  * フィルター機能モジュール
+ * DOM取得・state更新・render呼び出しを一元管理
  */
 
-import { state } from './state.js';
+import { setFilter, getFilterAssignee, getAssigneeSuggestions } from './state.js';
 import { renderAllTickets } from './renderer.js';
+import { updateMemoColumn } from './memo.js';
+
+// ===== DOM要素を一元化 =====
+const elements = {
+    assigneeSelect: null,
+    mainAssigneeCheckbox: null,
+    searchInput: null,
+    filterToggleBtn: null,
+    filterArea: null,
+};
+
+/**
+ * DOM要素をまとめて取得・キャッシュ
+ */
+function cacheElements() {
+    elements.assigneeSelect = document.getElementById('assigneeFilterSelect');
+    elements.mainAssigneeCheckbox = document.getElementById('mainAssigneeOnlyCheckbox');
+    elements.searchInput = document.getElementById('titleSearchInput');
+    elements.filterToggleBtn = document.getElementById('filterToggleBtn');
+    elements.filterArea = document.getElementById('filterArea');
+}
+
+// ===== debounceユーティリティ =====
+function debounce(fn, delay) {
+    let timer = null;
+    return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+/**
+ * 再描画をまとめた集約関数
+ */
+function triggerRender() {
+    renderAllTickets();
+    updateMemoColumn();
+}
+
+const debouncedRender = debounce(triggerRender, 200);
+
+// ===== メイン担当チェックボックスのdisabled状態を同期 =====
+function syncMainAssigneeCheckbox() {
+    if (!elements.mainAssigneeCheckbox) return;
+    const hasAssignee = !!getFilterAssignee();
+    elements.mainAssigneeCheckbox.disabled = !hasAssignee;
+    if (!hasAssignee) {
+        elements.mainAssigneeCheckbox.checked = false;
+        setFilter({ mainOnly: false });
+    }
+}
+
+// ===== 担当者フィルター変更ハンドラー =====
+function onAssigneeChange() {
+    setFilter({ assignee: elements.assigneeSelect?.value || '' });
+    syncMainAssigneeCheckbox();
+    triggerRender();
+}
+
+// ===== 検索入力ハンドラー（debounce適用） =====
+function onSearchInput() {
+    setFilter({ keyword: elements.searchInput?.value || '' });
+    debouncedRender();
+}
+
+// ===== メイン担当チェックボックス変更ハンドラー =====
+function onMainAssigneeChange() {
+    setFilter({ mainOnly: elements.mainAssigneeCheckbox?.checked || false });
+    triggerRender();
+}
+
+// ===== フィルター表示トグルハンドラー =====
+function onFilterToggle() {
+    if (!elements.filterArea || !elements.filterToggleBtn) return;
+    elements.filterArea.classList.toggle('hidden');
+    elements.filterToggleBtn.classList.toggle('active');
+}
 
 /**
  * 担当者フィルターをpopulate
  */
 export function populateAssigneeFilter() {
-    const select = document.getElementById('assigneeFilterSelect');
-    if (!select) {
+    if (!elements.assigneeSelect) {
         console.warn('[populateAssigneeFilter] assigneeFilterSelect element not found');
         return;
     }
-    select.innerHTML = '<option value="">すべて</option>';
-    (state.assigneeSuggestions || []).forEach(assignee => {
+    elements.assigneeSelect.innerHTML = '<option value="">すべて</option>';
+    getAssigneeSuggestions().forEach(assignee => {
         const option = document.createElement('option');
         option.value = assignee;
         option.textContent = assignee;
-        select.appendChild(option);
+        elements.assigneeSelect.appendChild(option);
     });
 }
 
 /**
- * フィルター機能を初期化
+ * フィルター機能をすべて初期化（一元化）
  */
-export async function initFilter() {
-    const assigneeSelect = document.getElementById('assigneeFilterSelect');
-    const mainAssigneeCheckbox = document.getElementById('mainAssigneeOnlyCheckbox');
-    
-    if (assigneeSelect) {
-        assigneeSelect.addEventListener('change', () => {
-            // 担当者が選択されていない場合はメイン担当限定を無効化
-            if (!assigneeSelect.value && mainAssigneeCheckbox) {
-                mainAssigneeCheckbox.checked = false;
-                state.mainAssigneeOnly = false;
-                mainAssigneeCheckbox.disabled = true;
-            } else if (assigneeSelect.value && mainAssigneeCheckbox) {
-                mainAssigneeCheckbox.disabled = false;
-            }
-            renderAllTickets();
-            // メモカラム更新（memo.jsから）
-            if (typeof window.updateMemoColumn === 'function') {
-                window.updateMemoColumn();
-            }
-        });
+export function initFilter() {
+    cacheElements();
+
+    // 担当者フィルター
+    if (elements.assigneeSelect) {
+        elements.assigneeSelect.addEventListener('change', onAssigneeChange);
         // 初期状態：担当者が選択されていないので無効化
-        if (mainAssigneeCheckbox) {
-            mainAssigneeCheckbox.disabled = true;
-        }
+        syncMainAssigneeCheckbox();
+    }
+
+    // 検索入力
+    if (elements.searchInput) {
+        elements.searchInput.addEventListener('input', onSearchInput);
+    }
+
+    // メイン担当限定フィルター
+    if (elements.mainAssigneeCheckbox) {
+        elements.mainAssigneeCheckbox.addEventListener('change', onMainAssigneeChange);
+    }
+
+    // フィルター表示トグル
+    if (elements.filterToggleBtn && elements.filterArea) {
+        elements.filterToggleBtn.classList.add('active');
+        elements.filterToggleBtn.addEventListener('click', onFilterToggle);
     }
 }
 
 /**
- * チケット検索機能を初期化（タイトル・メモ・子タスク名を検索対象）
+ * 後方互換用（個別初期化関数はdeprecated、initFilterのみを使用）
  */
-export function initTicketSearch() {
-    const searchInput = document.getElementById('titleSearchInput');
-    
-    if (searchInput) {
-        searchInput.addEventListener('input', () => {
-            state.searchKeyword = searchInput.value;
-            renderAllTickets();
-        });
-    }
-}
+export const initTicketSearch = deprecated('initTicketSearch', 'initFilter');
+export const initMainAssigneeFilter = deprecated('initMainAssigneeFilter', 'initFilter');
+export const initFilterToggle = deprecated('initFilterToggle', 'initFilter');
 
-/**
- * メイン担当限定フィルターを初期化
- */
-export function initMainAssigneeFilter() {
-    const checkbox = document.getElementById('mainAssigneeOnlyCheckbox');
-    
-    if (checkbox) {
-        checkbox.addEventListener('change', () => {
-            state.mainAssigneeOnly = checkbox.checked;
-            renderAllTickets();
-        });
-    }
-}
-
-/**
- * 検索ウィンドウの表示/非表示をトグル
- */
-export function initFilterToggle() {
-    const toggleBtn = document.getElementById('filterToggleBtn');
-    const filterArea = document.getElementById('filterArea');
-    
-    if (!toggleBtn || !filterArea) return;
-    
-    // デフォルトは表示（active状態）
-    toggleBtn.classList.add('active');
-    
-    toggleBtn.addEventListener('click', () => {
-        filterArea.classList.toggle('hidden');
-        toggleBtn.classList.toggle('active');
-    });
+function deprecated(name, replacement) {
+    return function () {
+        console.warn(`[filter] ${name} is deprecated. Use ${replacement} instead.`);
+    };
 }

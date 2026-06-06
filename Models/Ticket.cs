@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -7,6 +9,7 @@ public class Ticket
 {
     public string TicketId { get; set; } = string.Empty;
     
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
@@ -90,6 +93,9 @@ public class Ticket
 
 public class ChildTask
 {
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
     [JsonPropertyName("text")]
     public string Text { get; set; } = string.Empty;
 

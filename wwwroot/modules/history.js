@@ -2,166 +2,227 @@
  * 履歴表示モジュール
  */
 
-import { API_BASE, escapeHtml } from './state.js';
+import { API_BASE, escapeHtml, state, getEditingTicketId } from './state.js';
 import { apiRequest } from './api.js';
+
+/**
+ * CSSクラス名として安全な文字列にサニタイズ
+ */
+function sanitizeClassName(str) {
+    return String(str).replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+/**
+ * ISO文字列から時間を安全に抽出 (HH:mm)
+ */
+function extractTime(isoString) {
+    if (!isoString) return '';
+    const parts = isoString.split('T');
+    if (parts.length < 2) return '';
+    const match = parts[1].match(/^(\d{2}:\d{2})/);
+    return match ? match[1] : '';
+}
+
+/**
+ * 履歴を日付でグループ化（降順ソート済みMapを返す）
+ */
+function groupByDate(histories) {
+    const grouped = new Map();
+    for (const h of histories) {
+        if (!h.date) continue;
+        const dateKey = h.date.split('T')[0];
+        if (!grouped.has(dateKey)) grouped.set(dateKey, []);
+        grouped.get(dateKey).push(h);
+    }
+    // 日付降順でソート
+    const sortedDates = [...grouped.keys()].sort((a, b) => b.localeCompare(a));
+    const sorted = new Map();
+    for (const date of sortedDates) {
+        sorted.set(date, grouped.get(date));
+    }
+    return sorted;
+}
+
+/**
+ * 履歴タイプごとの表示ラベル
+ */
+const typeLabels = {
+    created: '作成',
+    progress: '進捗',
+    column: '移動',
+    assignee: '担当者',
+    title: 'タイトル',
+    label: 'ラベル',
+    childtask: '子タスク',
+    memo: 'メモ',
+    'date-start': '開始日',
+    'date-end': '終了日',
+    effort: '工数'
+};
+
+/**
+ * 履歴タイプごとの詳細テキスト生成（ディスパッチテーブル）
+ */
+const historyDetailRenderers = {
+    created: () => 'チケットが作成されました',
+
+    progress: (item) => {
+        const prev = item.previousValue != null ? item.previousValue : '-';
+        const next = item.value != null ? item.value : '-';
+        return `進捗を ${prev}% → ${next}% に変更`;
+    },
+
+    column: (item) => {
+        const names = { todo: 'To Do', doing: 'Doing', done: 'Done', archive: 'Archive' };
+        const from = item.previousValue ? (names[item.previousValue] || escapeHtml(String(item.previousValue))) : '-';
+        const to = item.value ? (names[item.value] || escapeHtml(String(item.value))) : '-';
+        return `${from} → ${to} に移動`;
+    },
+
+    assignee: (item) => {
+        try {
+            const oldVal = item.previousValue || '';
+            const newVal = item.value || '';
+            if (oldVal.startsWith('main:') && newVal.startsWith('main:')) {
+                const oldMain = oldVal.substring(5) || '-';
+                const newMain = newVal.substring(5) || '-';
+                return `メイン担当者: ${escapeHtml(oldMain)} → ${escapeHtml(newMain)}`;
+            } else {
+                const oldList = JSON.parse(oldVal || '[]');
+                const newList = JSON.parse(newVal || '[]');
+                return `担当者: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
+            }
+        } catch (e) {
+            console.warn('[historyDetail] Failed to parse assignee:', e);
+            return `担当者が変更されました`;
+        }
+    },
+
+    title: (item) => {
+        const oldTitle = item.previousValue ? escapeHtml(item.previousValue) : '-';
+        const newTitle = item.value ? escapeHtml(item.value) : '-';
+        return `${oldTitle} → ${newTitle}`;
+    },
+
+    label: (item) => {
+        try {
+            const oldList = JSON.parse(item.previousValue || '[]');
+            const newList = JSON.parse(item.value || '[]');
+            return `ラベル: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
+        } catch (e) {
+            console.warn('[historyDetail] Failed to parse label:', e);
+            return `ラベルが変更されました`;
+        }
+    },
+
+    childtask: () => '子タスクが変更されました',
+
+    memo: () => 'メモが変更されました',
+
+    'date-start': (item) => {
+        const oldDate = item.previousValue || '-';
+        const newDate = item.value || '-';
+        return `開始日: ${oldDate} → ${newDate}`;
+    },
+
+    'date-end': (item) => {
+        const oldDate = item.previousValue || '-';
+        const newDate = item.value || '-';
+        return `終了日: ${oldDate} → ${newDate}`;
+    },
+
+    effort: (item) => {
+        const oldEffort = item.previousValue || '-';
+        const newEffort = item.value || '-';
+        return `工数: ${oldEffort}h → ${newEffort}h`;
+    },
+};
+
+/**
+ * グループ化された履歴をDOMに描画
+ */
+function renderHistoryList(historyListEl, grouped) {
+    for (const [date, items] of grouped) {
+        // 日付ヘッダー
+        const dateDiv = document.createElement('div');
+        dateDiv.className = 'history-date';
+        dateDiv.style.marginBottom = '4px';
+        dateDiv.style.marginTop = '8px';
+        dateDiv.style.fontWeight = '600';
+        dateDiv.textContent = date;
+        historyListEl.appendChild(dateDiv);
+
+        for (const item of items) {
+            const div = document.createElement('div');
+            div.className = 'history-item';
+
+            // タイプラベル
+            const typeLabel = typeLabels[item.type] || escapeHtml(String(item.type));
+            const typeSpan = document.createElement('span');
+            typeSpan.className = `history-type ${sanitizeClassName(item.type)}`;
+            typeSpan.textContent = typeLabel;
+
+            // 詳細テキスト（ディスパッチテーブル使用）
+            const renderer = historyDetailRenderers[item.type];
+            const detail = renderer ? renderer(item) : '変更がありました';
+            const detailSpan = document.createElement('span');
+            detailSpan.className = 'history-detail';
+            detailSpan.textContent = detail;
+
+            // 時刻表示
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'history-time';
+            const timeStr = extractTime(item.date);
+            if (timeStr) {
+                timeSpan.textContent = timeStr;
+            }
+
+            div.appendChild(typeSpan);
+            div.appendChild(detailSpan);
+            div.appendChild(timeSpan);
+            historyListEl.appendChild(div);
+        }
+    }
+}
 
 /**
  * 履歴を取得して表示
  */
 export async function showHistory(ticketId) {
+    // DOM要素を冒頭で取得
+    const historyListEl = document.getElementById('historyList');
+    const historyModal = document.getElementById('historyModal');
+
+    if (!historyListEl || !historyModal) {
+        console.error('[showHistory] Required DOM elements not found');
+        return;
+    }
+
+    // DOMを完全リセット
+    historyListEl.replaceChildren();
+
     try {
         const histories = await apiRequest('GET', `${API_BASE}/${ticketId}/history`, null);
-        const historyListEl = document.getElementById('historyList');
-        const historyModal = document.getElementById('historyModal');
-        
-        if (!historyListEl || !historyModal) {
-            console.error('[showHistory] Required DOM elements not found');
-            return;
-        }
-        
+
         if (!histories || histories.length === 0) {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'history-empty';
             emptyDiv.textContent = '履歴はありません';
             historyListEl.appendChild(emptyDiv);
         } else {
-            historyListEl.innerHTML = '';
-            
-            // 日付順にグループ化
-            const grouped = {};
-            for (const h of histories) {
-                if (!h.date) continue;
-                const dateKey = h.date.split('T')[0];
-                if (!grouped[dateKey]) grouped[dateKey] = [];
-                grouped[dateKey].push(h);
-            }
-            
-            const typeLabels = {
-                created: '作成',
-                progress: '進捗',
-                column: '移動',
-                assignee: '担当者',
-                title: 'タイトル',
-                label: 'ラベル',
-                childtask: '子タスク',
-                memo: 'メモ',
-                'date-start': '開始日',
-                'date-end': '終了日',
-                effort: '工数'
-            };
-
-            for (const [date, items] of Object.entries(grouped)) {
-                const dateDiv = document.createElement('div');
-                dateDiv.className = 'history-date';
-                dateDiv.style.marginBottom = '4px';
-                dateDiv.style.marginTop = '8px';
-                dateDiv.style.fontWeight = '600';
-                dateDiv.textContent = date;
-                historyListEl.appendChild(dateDiv);
-                
-                for (const item of items) {
-                    const div = document.createElement('div');
-                    div.className = 'history-item';
-                    
-                    const typeLabel = typeLabels[item.type] || escapeHtml(String(item.type));
-                    let detail = '';
-                    
-                    if (item.type === 'created') {
-                        detail = 'チケットが作成されました';
-                    } else if (item.type === 'progress') {
-                        const prevVal = item.previousValue != null ? item.previousValue : '-';
-                        const newVal = item.value != null ? item.value : '-';
-                        detail = `進捗を ${prevVal}% → ${newVal}% に変更`;
-                    } else if (item.type === 'column') {
-                        const columnNames = { todo: 'To Do', doing: 'Doing', done: 'Done', archive: 'Archive' };
-                        const from = item.previousValue ? (columnNames[item.previousValue] || escapeHtml(String(item.previousValue))) : '-';
-                        const to = item.value ? (columnNames[item.value] || escapeHtml(String(item.value))) : '-';
-                        detail = `${from} → ${to} に移動`;
-                    } else if (item.type === 'assignee') {
-                        try {
-                            const oldVal = item.previousValue || '';
-                            const newVal = item.value || '';
-                            // main:xxx 形式のメイン担当者変更
-                            if (oldVal.startsWith('main:') && newVal.startsWith('main:')) {
-                                const oldMain = oldVal.substring(5) || '-';
-                                const newMain = newVal.substring(5) || '-';
-                                detail = `メイン担当者: ${escapeHtml(oldMain)} → ${escapeHtml(newMain)}`;
-                            } else {
-                                const oldList = JSON.parse(oldVal || '[]');
-                                const newList = JSON.parse(newVal || '[]');
-                                detail = `担当者: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
-                            }
-                        } catch {
-                            detail = `担当者が変更されました`;
-                        }
-                    } else if (item.type === 'title') {
-                        const oldTitle = item.previousValue ? escapeHtml(item.previousValue) : '-';
-                        const newTitle = item.value ? escapeHtml(item.value) : '-';
-                        detail = `${oldTitle} → ${newTitle}`;
-                    } else if (item.type === 'label') {
-                        try {
-                            const oldList = JSON.parse(item.previousValue || '[]');
-                            const newList = JSON.parse(item.value || '[]');
-                            detail = `ラベル: [${oldList.join(', ')}] → [${newList.join(', ')}]`;
-                        } catch {
-                            detail = `ラベルが変更されました`;
-                        }
-                    } else if (item.type === 'childtask') {
-                        detail = '子タスクが変更されました';
-                    } else if (item.type === 'memo') {
-                        detail = 'メモが変更されました';
-                    } else if (item.type === 'date-start') {
-                        const oldDate = item.previousValue || '-';
-                        const newDate = item.value || '-';
-                        detail = `開始日: ${oldDate} → ${newDate}`;
-                    } else if (item.type === 'date-end') {
-                        const oldDate = item.previousValue || '-';
-                        const newDate = item.value || '-';
-                        detail = `終了日: ${oldDate} → ${newDate}`;
-                    } else if (item.type === 'effort') {
-                        const oldEffort = item.previousValue || '-';
-                        const newEffort = item.value || '-';
-                        detail = `工数: ${oldEffort}h → ${newEffort}h`;
-                    }
-                    
-                    const typeSpan = document.createElement('span');
-                    typeSpan.className = `history-type ${escapeHtml(String(item.type))}`;
-                    typeSpan.textContent = typeLabel;
-                    
-                    const detailSpan = document.createElement('span');
-                    detailSpan.className = 'history-detail';
-                    detailSpan.textContent = detail;
-                    
-                    // 時刻表示
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'history-time';
-                    const timePart = item.date ? item.date.split('T')[1] : '';
-                    if (timePart) {
-                        timeSpan.textContent = timePart.substring(0, 5);
-                    }
-                    
-                    div.appendChild(typeSpan);
-                    div.appendChild(detailSpan);
-                    div.appendChild(timeSpan);
-                    historyListEl.appendChild(div);
-                }
-            }
+            // データ変換 → UI描画 の分離
+            const grouped = groupByDate(histories);
+            renderHistoryList(historyListEl, grouped);
         }
-        
+
         historyModal.classList.add('active');
     } catch (error) {
-        console.error('Failed to load history:', error);
-        const historyListEl = document.getElementById('historyList');
-        const historyModal = document.getElementById('historyModal');
-        if (historyListEl) {
-            const emptyDiv = document.createElement('div');
-            emptyDiv.className = 'history-empty';
-            emptyDiv.textContent = '履歴の読み込みに失敗しました';
-            historyListEl.appendChild(emptyDiv);
-        }
-        if (historyModal) {
-            historyModal.classList.add('active');
-        }
+        console.error('[showHistory] Failed to load history:', error);
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'history-empty';
+        errorDiv.textContent = '履歴の読み込みに失敗しました';
+        historyListEl.appendChild(errorDiv);
+        historyModal.classList.add('active');
     }
 }
 
@@ -174,8 +235,9 @@ export function initHistory() {
     const closeHistoryBtn = document.getElementById('closeHistoryBtn');
 
     viewHistoryBtn.addEventListener('click', () => {
-        if (window.__editingTicketId) {
-            showHistory(window.__editingTicketId);
+        const editingId = getEditingTicketId();
+        if (editingId) {
+            showHistory(editingId);
         }
     });
 

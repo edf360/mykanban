@@ -2,38 +2,65 @@
  * ラベル管理モジュール
  */
 
-import { state, escapeHtml } from './state.js';
+import { getCurrentLabels, getLabelSuggestions, escapeHtml, addLabelToState, removeLabelFromState } from './state.js';
+import { getSettings } from './settings.js';
 
 /**
  * ラベルを追加
  */
 export function addLabel(text) {
-    if (text.trim() && !state.currentLabels.includes(text.trim())) {
-        state.currentLabels.push(text.trim());
-        renderLabelTags();
-    }
+    addLabelToState(text);
+    renderLabelTags();
 }
 
 /**
- * ラベルを削除
+ * ラベルを削除（ラベル名ベース）
  */
-export function removeLabel(index) {
-    state.currentLabels.splice(index, 1);
+export function removeLabel(labelName) {
+    removeLabelFromState(labelName);
     renderLabelTags();
 }
 
 /**
  * ラベルタグを再描画
  */
+let removeLabelDelegateAttached = false;
+
 function renderLabelTags() {
     const labelTagsEl = document.getElementById('labelTags');
+    if (!labelTagsEl) return;
+
+    // イベント委任（1回だけ設定）
+    if (!removeLabelDelegateAttached) {
+        labelTagsEl.addEventListener('click', (e) => {
+            const removeBtn = e.target.closest('.remove-label');
+            if (removeBtn) {
+                removeLabel(removeBtn.dataset.label);
+            }
+        });
+        removeLabelDelegateAttached = true;
+    }
+
     labelTagsEl.innerHTML = '';
     const labelColors = getLabelColorMap();
-    state.currentLabels.forEach((label, i) => {
+    const frag = document.createDocumentFragment();
+    getCurrentLabels().forEach((label) => {
         const color = labelColors[label] || '#808080';
         const contrast = getContrastColor(color);
-        labelTagsEl.innerHTML += `<span class="label-tag" style="background-color:${color};color:${contrast}">${escapeHtml(label)} <span class="remove-label" data-index="${i}">&times;</span></span>`;
+        const tag = document.createElement('span');
+        tag.className = 'label-tag';
+        tag.style.backgroundColor = color;
+        tag.style.color = contrast;
+        const textNode = document.createTextNode(escapeHtml(label) + ' ');
+        tag.appendChild(textNode);
+        const removeSpan = document.createElement('span');
+        removeSpan.className = 'remove-label';
+        removeSpan.dataset.label = label;
+        removeSpan.textContent = '\u00d7';
+        tag.appendChild(removeSpan);
+        frag.appendChild(tag);
     });
+    labelTagsEl.appendChild(frag);
 }
 
 /**
@@ -41,12 +68,11 @@ function renderLabelTags() {
  */
 function getLabelColorMap() {
     const map = {};
-    if (typeof Settings !== 'undefined' && Settings.settings) {
-        const labels = Settings.settings().labels || [];
-        labels.forEach(l => {
-            map[l.name] = l.color || '#808080';
-        });
-    }
+    const settings = getSettings();
+    const labels = settings.labels || [];
+    labels.forEach(l => {
+        map[l.name] = l.color || '#808080';
+    });
     return map;
 }
 
@@ -65,8 +91,8 @@ function getContrastColor(hex) {
 /**
  * サジェスト表示関数
  */
-export function showSuggestions(suggestEl, suggestions, filter, callback) {
-    let filtered = suggestions.filter(s => !callback.exclude.includes(s));
+export function showSuggestions(suggestEl, suggestions, filter, excludeList, onSelect) {
+    let filtered = suggestions.filter(s => !excludeList.includes(s));
     
     if (filter) {
         filtered = filtered.filter(s => s.toLowerCase().includes(filter.toLowerCase()));
@@ -82,7 +108,7 @@ export function showSuggestions(suggestEl, suggestions, filter, callback) {
         
         suggestEl.querySelectorAll('.suggest-item').forEach(item => {
             item.addEventListener('click', () => {
-                callback.select(item.textContent);
+                onSelect(item.textContent);
             });
         });
     } else {
@@ -92,8 +118,10 @@ export function showSuggestions(suggestEl, suggestions, filter, callback) {
 }
 
 /**
-  * ラベル選択ドロップダウンを描画（設定から取得した一覧）
-  */
+ * ラベル選択ドロップダウンを描画（設定から取得した一覧）
+ */
+let toggleListenerAttached = false;
+
 export function renderLabelSelect() {
     const listEl = document.getElementById('labelList');
     const toggleBtn = document.getElementById('labelToggleBtn');
@@ -104,8 +132,8 @@ export function renderLabelSelect() {
     
     listEl.innerHTML = '';
     
-    const allLabels = state.labelSuggestions || [];
-    const currentLabels = state.currentLabels || [];
+    const allLabels = getLabelSuggestions();
+    const currentLabels = getCurrentLabels();
     const labelColors = getLabelColorMap();
     
     allLabels.forEach(label => {
@@ -119,34 +147,32 @@ export function renderLabelSelect() {
         item.addEventListener('click', () => {
             toggleLabel(label);
             item.classList.toggle('selected');
+            renderLabelTags();
         });
         listEl.appendChild(item);
     });
     
-    // ボタンクリックでドロップダウン表示/非表示
-    toggleBtn.onclick = (e) => {
-        e.stopPropagation();
-        listEl.classList.toggle('active');
-    };
+    // ボタンクリックでドロップダウン表示/非表示（重複防止）
+    if (!toggleListenerAttached) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            listEl.classList.toggle('active');
+        });
+        toggleListenerAttached = true;
+    }
 }
 
 /**
  * ラベルをトグル
  */
 function toggleLabel(label) {
-    const idx = state.currentLabels.indexOf(label);
+    const current = getCurrentLabels();
+    const idx = current.indexOf(label);
     if (idx >= 0) {
-        state.currentLabels.splice(idx, 1);
+        removeLabelFromState(label);
     } else {
-        state.currentLabels.push(label);
+        addLabelToState(label);
     }
-}
-
-/**
- * ドロップダウンの変更からラベル配列を更新（後方互換用）
- */
-export function syncLabelsFromSelect() {
-    // カスタムドロップダウンでは直接使用しないが、後方互換のため残す
 }
 
 /**

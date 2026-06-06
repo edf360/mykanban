@@ -1,11 +1,13 @@
+using CsvHelper;
+using KanbanServer.Constants;
 using KanbanServer.Data;
 using KanbanServer.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
@@ -16,10 +18,12 @@ namespace KanbanServer.Controllers;
 public class SettingsController : ControllerBase
 {
     private readonly KanbanDbContext _context;
+    private readonly ILogger<SettingsController> _logger;
 
-    public SettingsController(KanbanDbContext context)
+    public SettingsController(KanbanDbContext context, ILogger<SettingsController> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     /// <summary>
@@ -28,14 +32,7 @@ public class SettingsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<Setting>> Get()
     {
-        var setting = await _context.Settings.FirstOrDefaultAsync();
-        if (setting == null)
-        {
-            // 初回アクセス時はデフォルト設定を作成
-            setting = new Setting { Id = 1 };
-            _context.Settings.Add(setting);
-            await _context.SaveChangesAsync();
-        }
+        var setting = await GetOrCreateSettingAsync();
         return Ok(setting);
     }
 
@@ -43,14 +40,11 @@ public class SettingsController : ControllerBase
     /// 設定を全体更新
     /// </summary>
     [HttpPut]
-    public async Task<IActionResult> Update([FromBody] SettingDto dto)
+    public async Task<IActionResult> Update([FromBody] SettingDto? dto)
     {
-        var setting = await _context.Settings.FirstOrDefaultAsync();
-        if (setting == null)
-        {
-            setting = new Setting { Id = 1 };
-            _context.Settings.Add(setting);
-        }
+        if (dto == null)
+            return BadRequest(new { error = "Request body is required" });
+        var setting = await GetOrCreateSettingAsync();
 
         // 変更前のユーザー名・ラベル名を取得（名前変更検出用）
         var oldUsers = setting.Users.ToList();
@@ -122,14 +116,14 @@ public class SettingsController : ControllerBase
     {
         var map = new Dictionary<string, string>();
 
-        // 旧リストと新リストをインデックスで比較して変更を検出
-        int maxLen = Math.Max(oldList.Count, newList.Count);
-        for (int i = 0; i < maxLen; i++)
+        // List.Except() は元のリストの順序を維持する
+        var removed = oldList.Except(newList).ToList();
+        var added = newList.Except(oldList).ToList();
+
+        int count = Math.Min(removed.Count, added.Count);
+        for (int i = 0; i < count; i++)
         {
-            if (i < oldList.Count && i < newList.Count && oldList[i] != newList[i])
-            {
-                map[oldList[i]] = newList[i];
-            }
+            map[removed[i]] = added[i];
         }
 
         return map;
@@ -187,7 +181,7 @@ public class SettingsController : ControllerBase
         };
 
         var json = JsonSerializer.Serialize(exportData, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
-        var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
         var filename = $"kanban_backup_{timestamp}.json";
 
         return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", filename);
@@ -216,93 +210,94 @@ public class SettingsController : ControllerBase
             if (importData == null)
                 return BadRequest(new { error = "無効なファイル形式です" });
 
-            // 全データを削除してからインポート（完全上書き）
-            _context.TicketHistories.RemoveRange(_context.TicketHistories);
-            _context.Tickets.RemoveRange(_context.Tickets);
-            _context.Settings.RemoveRange(_context.Settings);
-            await _context.SaveChangesAsync();
+            using var tx = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 全データを削除してからインポート（完全上書き）
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM TicketHistories");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM Tickets");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM Settings");
 
-            // チケットをインポート
-            foreach (var t in importData.Tickets ?? new List<ImportTicket>())
-            {
-                var ticket = new Ticket
+                // チケットをインポート
+                foreach (var t in importData.Tickets ?? new List<ImportTicket>())
                 {
-                    TicketId = t.TicketId,
-                    Id = t.Id,
-                    Title = t.Title,
-                    IsArchived = t.IsArchived,
-                    Column = t.Column,
-                    Position = t.Position,
-                    Progress = t.Progress,
-                    StartDate = t.StartDate,
-                    EndDate = t.EndDate,
-                    Effort = t.Effort,
-                    Assignees = t.Assignees ?? new List<string>(),
-                    MainAssignee = t.MainAssignee,
-                    Labels = t.Labels ?? new List<string>(),
-                    Memo = t.Memo ?? string.Empty,
-                    ChildTasks = t.ChildTasks?.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList() ?? new List<ChildTask>()
-                };
-                _context.Tickets.Add(ticket);
-            }
-
-            // 履歴をインポート（履歴がない場合は自動生成）
-            if (importData.Histories != null && importData.Histories.Count > 0)
-            {
-                foreach (var h in importData.Histories)
-                {
-                    var history = new TicketHistory
-                    {
-                        Id = h.Id,
-                        TicketId = h.TicketId,
-                        Type = h.Type,
-                        Value = h.Value,
-                        PreviousValue = h.PreviousValue,
-                        Date = h.Date
-                    };
-                    _context.TicketHistories.Add(history);
-                }
-            }
-            else if (importData.Tickets != null && importData.Tickets.Count > 0)
-            {
-                // 履歴がない古いバックアップの場合、各チケットに作成履歴を自動生成
-                foreach (var t in importData.Tickets)
-                {
-                    var history = new TicketHistory
+                    var ticket = new Ticket
                     {
                         TicketId = t.TicketId,
-                        Type = "created",
-                        Value = t.Title,
-                        PreviousValue = null,
-                        Date = DateTime.Now
+                        Id = t.Id,
+                        Title = t.Title,
+                        IsArchived = t.IsArchived,
+                        Column = t.Column,
+                        Position = t.Position,
+                        Progress = t.Progress,
+                        StartDate = t.StartDate,
+                        EndDate = t.EndDate,
+                        Effort = t.Effort,
+                        Assignees = t.Assignees ?? new List<string>(),
+                        MainAssignee = t.MainAssignee,
+                        Labels = t.Labels ?? new List<string>(),
+                        Memo = t.Memo ?? string.Empty,
+                        ChildTasks = t.ChildTasks?.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList() ?? new List<ChildTask>()
                     };
-                    _context.TicketHistories.Add(history);
+                    _context.Tickets.Add(ticket);
                 }
-            }
 
-            // 設定をインポート
-            foreach (var s in importData.Settings ?? new List<ImportSetting>())
-            {
-                var setting = new Setting
+                // 履歴をインポート（履歴がない場合は自動生成）
+                if (importData.Histories != null && importData.Histories.Count > 0)
                 {
-                    Id = s.Id,
-                    Users = s.Users ?? new List<string>(),
-                    Labels = s.Labels ?? new List<LabelConfig>(),
-                    Holidays = s.Holidays ?? new List<string>()
-                };
-                _context.Settings.Add(setting);
-            }
+                    foreach (var h in importData.Histories)
+                    {
+                        var history = new TicketHistory
+                        {
+                            TicketId = h.TicketId,
+                            Type = h.Type,
+                            Value = h.Value,
+                            PreviousValue = h.PreviousValue,
+                            Date = h.Date
+                        };
+                        _context.TicketHistories.Add(history);
+                    }
+                }
+                else if (importData.Tickets != null && importData.Tickets.Count > 0)
+                {
+                    // 履歴がない古いバックアップの場合、各チケットに作成履歴を自動生成
+                    foreach (var t in importData.Tickets)
+                    {
+                        AddHistory(t.TicketId, HistoryTypes.Created, t.Title, null);
+                    }
+                }
 
-            await _context.SaveChangesAsync();
-            return Ok(new { message = "インポートが完了しました" });
+                // 設定をインポート
+                foreach (var s in importData.Settings ?? new List<ImportSetting>())
+                {
+                    var setting = new Setting
+                    {
+                        Id = s.Id,
+                        Users = s.Users ?? new List<string>(),
+                        Labels = s.Labels ?? new List<LabelConfig>(),
+                        Holidays = s.Holidays ?? new List<string>()
+                    };
+                    _context.Settings.Add(setting);
+                }
+
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+                return Ok(new { message = "インポートが完了しました" });
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            return BadRequest(new { error = $"JSONパースエラー: {ex.Message}" });
+            return BadRequest(new { error = "無効なJSON形式です" });
         }
         catch (Exception ex)
         {
-            return BadRequest(new { error = $"インポートエラー: {ex.Message}" });
+            _logger.LogError(ex, "JSONインポートに失敗しました");
+            return BadRequest(new { error = "インポートに失敗しました" });
         }
     }
 
@@ -320,17 +315,23 @@ public class SettingsController : ControllerBase
         if (file.Length > maxFileSize)
             return BadRequest(new { error = $"ファイルサイズが制限を超えています（最大10MB）" });
 
-        // ストリームベースCSVパーサー（改行を含むクォートセルを正しく処理）
-        var csvRows = await ParseCsvStreamAsync(file.OpenReadStream());
-        if (csvRows.Count < 2)
-            return BadRequest(new { error = "CSVデータが空です" });
-
-        // ヘッダー行をパース
-        var headers = csvRows[0];
-        var columnIndexes = new Dictionary<string, int>();
-        for (int i = 0; i < headers.Length; i++)
+        // CsvHelperでCSVをパース
+        try
         {
-            columnIndexes[headers[i].Trim()] = i;
+            using var csvStream = file.OpenReadStream();
+            using var csvReader = new StreamReader(csvStream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            using var csv = new CsvReader(csvReader, CultureInfo.InvariantCulture);
+            csv.Read();
+            csv.ReadHeader();
+            
+            if (csv.HeaderRecord == null)
+                return BadRequest(new { error = "CSVヘッダーが見つかりません" });
+
+        // ヘッダー行からカラムインデックスを構築
+        var columnIndexes = new Dictionary<string, int>();
+        for (int i = 0; i < csv.HeaderRecord.Length; i++)
+        {
+            columnIndexes[csv.HeaderRecord[i].Trim()] = i;
         }
 
         // 必須列の確認
@@ -348,16 +349,23 @@ public class SettingsController : ControllerBase
         var discoveredAssignees = new HashSet<string>();
         var discoveredLabels = new HashSet<string>();
 
-        for (int row = 1; row < csvRows.Count; row++)
+        // 既存チケットを事前ロード（N+1問題回避）
+        var existingTicketsDict = await _context.Tickets.ToDictionaryAsync(t => t.TicketId);
+
+        // カラム別最大Positionを事前計算（ループ中のDBアクセスを回避）
+        var maxPositionByColumn = await _context.Tickets
+            .GroupBy(t => t.Column)
+            .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1);
+
+        while (csv.Read())
         {
-            var values = csvRows[row];
-            
             // 空行をスキップ
-            if (values.Length < 2 || string.IsNullOrWhiteSpace(values[columnIndexes["タスクID"]]))
+            var ticketIdRaw = csv.GetField(columnIndexes["タスクID"]);
+            if (string.IsNullOrWhiteSpace(ticketIdRaw))
                 continue;
 
-            var ticketId = values[columnIndexes["タスクID"]].Trim();
-            var title = GetSafeValue(values, columnIndexes, "タスク名").Trim();
+            var ticketId = ticketIdRaw.Trim();
+            var title = csv.GetField(columnIndexes["タスク名"])?.Trim() ?? "";
             
             if (string.IsNullOrEmpty(title))
             {
@@ -365,18 +373,18 @@ public class SettingsController : ControllerBase
                 continue;
             }
 
-            // 既存チケットを検索
-            var existingTicket = await _context.Tickets.FirstOrDefaultAsync(t => t.TicketId == ticketId);
+            // 既存チケットをDictionaryから検索
+            existingTicketsDict.TryGetValue(ticketId, out var existingTicket);
 
             var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
             
             ticket.Title = title;
-            ticket.Progress = ParseProgress(GetSafeValue(values, columnIndexes, "バケット"));
-            ticket.Column = MapStateToColumn(GetSafeValue(values, columnIndexes, "状態"));
+            ticket.Progress = ParseProgress(csv.GetField(columnIndexes["バケット"]) ?? "");
+            ticket.Column = MapStateToColumn(csv.GetField(columnIndexes["状態"]) ?? "");
             ticket.IsArchived = false;
             
             // 担当者の処理（;区切りで複数対応）
-            var assigneesStr = GetSafeValue(values, columnIndexes, "担当者");
+            var assigneesStr = csv.GetField(columnIndexes["担当者"]) ?? "";
             var assignees = ParseSemicolonSeparated(assigneesStr);
             ticket.Assignees = assignees;
             foreach (var a in assignees)
@@ -389,16 +397,16 @@ public class SettingsController : ControllerBase
             }
 
             // 日付の処理
-            ticket.StartDate = ParseDate(GetSafeValue(values, columnIndexes, "開始日"));
-            ticket.EndDate = ParseDate(GetSafeValue(values, columnIndexes, "完了日"));
+            ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
+            ticket.EndDate = ParseDate(csv.GetField(columnIndexes["完了日"]) ?? "");
 
             // チェックリストの処理
-            var checklistItems = GetSafeValue(values, columnIndexes, "チェックリスト項目");
-            var completedChecklist = GetSafeValue(values, columnIndexes, "完成したチェックリスト項目");
+            var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
+            var completedChecklist = csv.GetField(columnIndexes["完成したチェックリスト項目"]) ?? "";
             ticket.ChildTasks = ParseChecklist(checklistItems, completedChecklist);
 
             // ラベルの処理
-            var labelsStr = GetSafeValue(values, columnIndexes, "ラベル");
+            var labelsStr = csv.GetField(columnIndexes["ラベル"]) ?? "";
             var labels = ParseSemicolonSeparated(labelsStr);
             ticket.Labels = labels;
             foreach (var label in labels)
@@ -407,261 +415,75 @@ public class SettingsController : ControllerBase
             }
 
             // メモの処理
-            ticket.Memo = GetSafeValue(values, columnIndexes, "メモ");
+            ticket.Memo = csv.GetField(columnIndexes["メモ"]) ?? "";
 
             if (existingTicket == null)
             {
-                // 新規チケットのPosition設定
-                var maxPosition = await _context.Tickets
-                    .Where(t => t.Column == ticket.Column)
-                    .MaxAsync(t => (double?)t.Position)
-                    .ConfigureAwait(true);
-                ticket.Position = (maxPosition ?? -1) + 1;
-                ticket.Id = GenerateNewId();
+                // 新規チケットのPosition設定（事前計算値を使用）
+                if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
+                    maxPos = -1;
+                ticket.Position = maxPos + 1.0;
+                maxPositionByColumn[ticket.Column] = ticket.Position;
                 _context.Tickets.Add(ticket);
-                
+
                 // 作成履歴を記録
-                var history = new TicketHistory
-                {
-                    TicketId = ticket.TicketId,
-                    Type = "created",
-                    Value = ticket.Title,
-                    PreviousValue = null,
-                    Date = DateTime.Now
-                };
-                _context.TicketHistories.Add(history);
+                AddHistory(ticket.TicketId, HistoryTypes.Created, ticket.Title, null);
             }
             else
             {
                 // 既存チケット更新 - 変更フィールドを比較して履歴記録
                 if (existingTicket.Title != ticket.Title)
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "title",
-                        Value = ticket.Title,
-                        PreviousValue = existingTicket.Title,
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Title, ticket.Title, existingTicket.Title);
                 }
                 if (existingTicket.AssigneesJson != ticket.AssigneesJson)
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "assignee",
-                        Value = ticket.AssigneesJson,
-                        PreviousValue = existingTicket.AssigneesJson,
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Assignee, ticket.AssigneesJson, existingTicket.AssigneesJson);
                 }
                 if (existingTicket.LabelsJson != ticket.LabelsJson)
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "label",
-                        Value = ticket.LabelsJson,
-                        PreviousValue = existingTicket.LabelsJson,
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Label, ticket.LabelsJson, existingTicket.LabelsJson);
                 }
                 if (existingTicket.Column != ticket.Column)
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "status",
-                        Value = ticket.Column,
-                        PreviousValue = existingTicket.Column,
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Status, ticket.Column, existingTicket.Column);
                 }
                 if (!Equals(existingTicket.StartDate, ticket.StartDate))
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "date",
-                        Value = ticket.StartDate?.ToString("yyyy-MM-dd") ?? "",
-                        PreviousValue = existingTicket.StartDate?.ToString("yyyy-MM-dd") ?? "",
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Date,
+                        ticket.StartDate?.ToString("yyyy-MM-dd") ?? "",
+                        existingTicket.StartDate?.ToString("yyyy-MM-dd") ?? "");
                 }
                 if (!Equals(existingTicket.Effort, ticket.Effort))
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "effort",
-                        Value = ticket.Effort?.ToString() ?? "",
-                        PreviousValue = existingTicket.Effort?.ToString() ?? "",
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Effort,
+                        ticket.Effort?.ToString() ?? "",
+                        existingTicket.Effort?.ToString() ?? "");
                 }
                 if (existingTicket.Memo != ticket.Memo)
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "memo",
-                        Value = ticket.Memo,
-                        PreviousValue = existingTicket.Memo,
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.Memo, ticket.Memo, existingTicket.Memo);
                 }
                 if (existingTicket.ChildTasksJson != ticket.ChildTasksJson)
                 {
-                    var history = new TicketHistory
-                    {
-                        TicketId = ticket.TicketId,
-                        Type = "childtask",
-                        Value = ticket.ChildTasksJson,
-                        PreviousValue = existingTicket.ChildTasksJson,
-                        Date = DateTime.Now
-                    };
-                    _context.TicketHistories.Add(history);
+                    AddHistory(ticket.TicketId, HistoryTypes.ChildTask, ticket.ChildTasksJson, existingTicket.ChildTasksJson);
                 }
             }
 
             imported++;
         }
 
-        // 発見した担当者とラベルを設定に追加
-        await MergeDiscoveredSettingsAsync(discoveredAssignees, discoveredLabels);
+            // 発見した担当者とラベルを設定に追加
+            await MergeDiscoveredSettingsAsync(discoveredAssignees, discoveredLabels);
 
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "インポートが完了しました", count = imported, skipped = skipped });
-    }
-
-    private static string[] ParseCsvLine(string line)
-    {
-        var result = new List<string>();
-        var current = new StringBuilder();
-        var inQuotes = false;
-        
-        foreach (char c in line)
-        {
-            if (c == '"')
-            {
-                inQuotes = !inQuotes;
-            }
-            else if (c == ',' && !inQuotes)
-            {
-                result.Add(current.ToString());
-                current.Clear();
-            }
-            else
-            {
-                current.Append(c);
-            }
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "インポートが完了しました", count = imported, skipped = skipped });
         }
-        result.Add(current.ToString());
-        
-        return result.ToArray();
-    }
-
-    /// <summary>
-    /// ストリームからCSVをパース（改行を含むクォートセルを正しく処理）
-    /// </summary>
-    private static async Task<List<string[]>> ParseCsvStreamAsync(Stream stream)
-    {
-        var allRows = new List<string[]>();
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        
-        var currentRow = new List<string>();
-        var currentCell = new StringBuilder();
-        var inQuotes = false;
-        
-        string? line;
-        while ((line = await reader.ReadLineAsync()) != null)
+        catch (Exception ex)
         {
-            // CRLF → LF の変換は ReadLineAsync で行われる
-            // 行末に改行コードが付くため、各文字を処理
-            var chars = line.ToCharArray();
-            for (int i = 0; i < chars.Length; i++)
-            {
-                char c = chars[i];
-                if (inQuotes)
-                {
-                    if (c == '"')
-                    {
-                        // 次の文字も " ならエスケープされた "
-                        if (i + 1 < chars.Length && chars[i + 1] == '"')
-                        {
-                            currentCell.Append('"');
-                            i++;
-                        }
-                        else
-                        {
-                            inQuotes = false;
-                        }
-                    }
-                    else
-                    {
-                        currentCell.Append(c);
-                    }
-                }
-                else
-                {
-                    if (c == '"')
-                    {
-                        inQuotes = true;
-                    }
-                    else if (c == ',')
-                    {
-                        currentRow.Add(currentCell.ToString());
-                        currentCell.Clear();
-                    }
-                    else
-                    {
-                        currentCell.Append(c);
-                    }
-                }
-            }
-            
-            // 行末処理
-            if (!inQuotes)
-            {
-                // 行が完了
-                currentRow.Add(currentCell.ToString());
-                currentCell.Clear();
-                allRows.Add(currentRow.ToArray());
-                currentRow.Clear();
-            }
-            else
-            {
-                // クォート内での改行なのでセルに改行を追加
-                currentCell.Append('\n');
-            }
+            _logger.LogError(ex, "CSVインポートに失敗しました");
+            return BadRequest(new { error = "インポートに失敗しました" });
         }
-        
-        // 残りのセル・行を処理（ファイル末尾が改行でない場合）
-        if (currentCell.Length > 0 || currentRow.Count > 0)
-        {
-            currentRow.Add(currentCell.ToString());
-            allRows.Add(currentRow.ToArray());
-        }
-        
-        return allRows;
-    }
-
-    private static string GetSafeValue(string[] values, Dictionary<string, int> columnIndexes, string columnName)
-    {
-        if (!columnIndexes.ContainsKey(columnName))
-            return string.Empty;
-        var index = columnIndexes[columnName];
-        if (index >= values.Length)
-            return string.Empty;
-        return values[index];
     }
 
     private static string MapStateToColumn(string state)
@@ -738,10 +560,34 @@ public class SettingsController : ControllerBase
             .ToList();
     }
 
-    private int GenerateNewId()
+    /// <summary>
+    /// 履歴を追加
+    /// </summary>
+    private void AddHistory(string ticketId, string type, string? value, string? previousValue)
     {
-        var maxId = _context.Tickets.Max(t => (int?)t.Id) ?? 0;
-        return maxId + 1;
+        _context.TicketHistories.Add(new TicketHistory
+        {
+            TicketId = ticketId,
+            Type = type,
+            Value = value,
+            PreviousValue = previousValue,
+            Date = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// 設定を取得または作成
+    /// </summary>
+    private async Task<Setting> GetOrCreateSettingAsync()
+    {
+        var setting = await _context.Settings.FirstOrDefaultAsync();
+        if (setting != null)
+            return setting;
+
+        setting = new Setting { Id = 1 };
+        _context.Settings.Add(setting);
+        await _context.SaveChangesAsync();
+        return setting;
     }
 
     /// <summary>
@@ -754,12 +600,7 @@ public class SettingsController : ControllerBase
         if (assignees.Count == 0 && labels.Count == 0)
             return;
 
-        var setting = await _context.Settings.FirstOrDefaultAsync();
-        if (setting == null)
-        {
-            setting = new Setting { Id = 1 };
-            _context.Settings.Add(setting);
-        }
+        var setting = await GetOrCreateSettingAsync();
 
         // 既存リストを取得（getter は毎回新しいインスタンスを返す）
         var users = setting.Users;

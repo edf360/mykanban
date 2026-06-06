@@ -1,6 +1,7 @@
 using KanbanServer.Controllers;
 using KanbanServer.Data;
 using KanbanServer.Models;
+using KanbanServer.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,12 +13,14 @@ namespace Tests;
 public class ControllerTests : IDisposable
 {
     private readonly KanbanDbContext _context;
+    private readonly TicketService _ticketService;
     private readonly TicketsController _controller;
 
     public ControllerTests()
     {
         _context = TestDbContextFactory.Create();
-        _controller = new TicketsController(_context);
+        _ticketService = new TicketService(_context);
+        _controller = new TicketsController(_ticketService);
     }
 
     public void Dispose()
@@ -79,9 +82,9 @@ public class ControllerTests : IDisposable
         var createdResult = Assert.IsType<CreatedAtActionResult>(actionResult.Result!);
         var ticket = Assert.IsAssignableFrom<Ticket>(createdResult.Value!);
 
-        // Idは6（最大5+1）、Positionは11（最大10+1）
+        // Idは6（最大5+1）、Positionは1010（最大10+1000）
         Assert.Equal(6, ticket.Id);
-        Assert.Equal(11, ticket.Position);
+        Assert.Equal(1010, ticket.Position);
         Assert.Equal("todo", ticket.Column);
         Assert.Single(ticket.Labels);
         Assert.Contains("テスト", ticket.Labels);
@@ -165,27 +168,56 @@ public class ControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateChildTask_InvalidIndex_ReturnsBadRequest()
+    public async Task UpdateChildTask_InvalidId_ReturnsBadRequest()
     {
         // Arrange: 子タスク1つのチケット
-        _context.Tickets.Add(new Ticket 
-        { 
-            TicketId = "child-ticket", 
-            Id = 1, 
-            Title = "子タスクテスト", 
-            Column = "todo", 
+        var childTaskId = Guid.NewGuid().ToString("N");
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "child-ticket",
+            Id = 1,
+            Title = "子タスクテスト",
+            Column = "todo",
             Position = 0,
-            ChildTasks = new List<ChildTask> { new() { Text = "タスク1", Done = false } }
+            ChildTasks = new List<ChildTask> { new() { Id = childTaskId, Text = "タスク1", Done = false } }
         });
         await _context.SaveChangesAsync();
 
-        // Act: インデックス 5（範囲外）を更新 시도
+        // Act: 存在しないIDで更新 시도
         var dto = new ChildTaskUpdateDto { Done = true };
-        var result = await _controller.UpdateChildTask("child-ticket", 5, dto);
+        var result = await _controller.UpdateChildTask("child-ticket", "non-existent-id", dto);
 
-        // Assert: BadRequestが返る
+        // Assert: NotFoundが返る
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
-        Assert.IsType<BadRequestObjectResult>(actionResult.Result);
+        Assert.IsType<NotFoundObjectResult>(actionResult.Result);
+    }
+
+    [Fact]
+    public async Task UpdateChildTask_ValidId_ShouldUpdateDone()
+    {
+        // Arrange
+        var childTaskId = Guid.NewGuid().ToString("N");
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "child-ticket-2",
+            Id = 2,
+            Title = "子タスクテスト2",
+            Column = "todo",
+            Position = 0,
+            ChildTasks = new List<ChildTask> { new() { Id = childTaskId, Text = "タスク1", Done = false } }
+        });
+        await _context.SaveChangesAsync();
+
+        // Act: 有効なIDで更新
+        var dto = new ChildTaskUpdateDto { Done = true };
+        var result = await _controller.UpdateChildTask("child-ticket-2", childTaskId, dto);
+
+        // Assert: OKが返り、Doneがtrueになっている
+        var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+        Assert.True(ticket.ChildTasks[0].Done);
+        Assert.Equal(childTaskId, ticket.ChildTasks[0].Id);
     }
 
     [Fact]
@@ -310,6 +342,8 @@ public class ControllerTests : IDisposable
     public async Task UpdateChildTask_Success()
     {
         // Arrange: 子タスク2つのチケット
+        var childId1 = Guid.NewGuid().ToString("N");
+        var childId2 = Guid.NewGuid().ToString("N");
         _context.Tickets.Add(new Ticket
         {
             TicketId = "child-update",
@@ -319,15 +353,15 @@ public class ControllerTests : IDisposable
             Position = 0,
             ChildTasks = new List<ChildTask>
             {
-                new() { Text = "タスク1", Done = false },
-                new() { Text = "タスク2", Done = false }
+                new() { Id = childId1, Text = "タスク1", Done = false },
+                new() { Id = childId2, Text = "タスク2", Done = false }
             }
         });
         await _context.SaveChangesAsync();
 
-        // Act: 2番目の子タスクを完了
+        // Act: 2番目の子タスクを完了（IDベース）
         var dto = new ChildTaskUpdateDto { Done = true };
-        var result = await _controller.UpdateChildTask("child-update", 1, dto);
+        var result = await _controller.UpdateChildTask("child-update", childId2, dto);
 
         // Assert: Okで更新後のチケットが返る
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
@@ -493,8 +527,8 @@ public class ControllerTests : IDisposable
         var ticket3 = Assert.IsAssignableFrom<Ticket>(created3.Value!);
 
         Assert.Equal(0, ticket1.Position);
-        Assert.Equal(1, ticket2.Position);
-        Assert.Equal(2, ticket3.Position);
+        Assert.Equal(1000, ticket2.Position);
+        Assert.Equal(2000, ticket3.Position);
 
         // Idもインクリメントされる
         Assert.Equal(ticket2.Id, ticket1.Id + 1);
@@ -535,7 +569,7 @@ public class ControllerTests : IDisposable
     {
         // Act: 存在しないチケットの子タスク更新を試みる
         var dto = new ChildTaskUpdateDto { Done = true };
-        var result = await _controller.UpdateChildTask("non-existent-ticket", 0, dto);
+        var result = await _controller.UpdateChildTask("non-existent-ticket", "0", dto);
 
         // Assert: NotFoundが返る
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
@@ -860,12 +894,14 @@ public class ControllerTests : IDisposable
 public class AdditionalControllerTests : IDisposable
 {
     private readonly KanbanDbContext _context;
+    private readonly TicketService _ticketService;
     private readonly TicketsController _controller;
 
     public AdditionalControllerTests()
     {
         _context = TestDbContextFactory.Create();
-        _controller = new TicketsController(_context);
+        _ticketService = new TicketService(_context);
+        _controller = new TicketsController(_ticketService);
     }
 
     public void Dispose()
@@ -886,8 +922,9 @@ public class AdditionalControllerTests : IDisposable
         // Act
         var result = await _controller.Restore("restore-a");
 
-        // Assert: NoContentが返り、IsArchivedがfalseに
-        Assert.IsType<NoContentResult>(result);
+        // Assert: Okが返り、IsArchivedがfalseに
+        var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+        Assert.IsType<OkObjectResult>(actionResult.Result);
         var ticket = await _context.Tickets.FindAsync("restore-a");
         Assert.False(ticket!.IsArchived);
     }
@@ -898,8 +935,9 @@ public class AdditionalControllerTests : IDisposable
         // Act: 存在しないチケットを復帰 시도
         var result = await _controller.Restore("non-existent");
 
-        // Assert: NotFoundが返る
-        Assert.IsType<NotFoundObjectResult>(result);
+        // Assert: NotFoundが返る（ActionResult<Ticket>ラップ）
+        var actionResult2 = Assert.IsType<ActionResult<Ticket>>(result);
+        Assert.IsType<NotFoundObjectResult>(actionResult2.Result);
     }
 
     [Fact]
@@ -940,8 +978,8 @@ public class AdditionalControllerTests : IDisposable
         // Act: 2度目のDELETE（完全削除）
         var result = await _controller.Delete("hard-delete");
 
-        // Assert: NoContentが返り、DBから完全に削除される
-        Assert.IsType<NoContentResult>(result);
+        // Assert: NotFoundが返り、DBから完全に削除される
+        Assert.IsType<NotFoundObjectResult>(result);
         var found = await _context.Tickets.FindAsync("hard-delete");
         Assert.Null(found);
     }
@@ -960,9 +998,9 @@ public class AdditionalControllerTests : IDisposable
         Assert.NotNull(afterFirst);
         Assert.True(afterFirst!.IsArchived);
 
-        // Act: 2度目のDELETE（完全削除）
+        // Act: 2度目のDELETE（完全削除 → NotFound）
         var result2 = await _controller.Delete("double-del");
-        Assert.IsType<NoContentResult>(result2);
+        Assert.IsType<NotFoundObjectResult>(result2);
         var afterSecond = await _context.Tickets.FindAsync("double-del");
         Assert.Null(afterSecond);
     }
@@ -1140,16 +1178,17 @@ public class AdditionalControllerTests : IDisposable
     public async Task UpdateChildTask_ShouldToggleDoneToFalse()
     {
         // Arrange: 完了済み子タスクを持つチケットを作成
+        var childId = Guid.NewGuid().ToString("N");
         _context.Tickets.Add(new Ticket
         {
             TicketId = "child-toggle", Id = 1, Title = "トグルテスト", Column = "todo", Position = 0,
-            ChildTasks = new List<ChildTask> { new() { Text = "タスク1", Done = true } }
+            ChildTasks = new List<ChildTask> { new() { Id = childId, Text = "タスク1", Done = true } }
         });
         await _context.SaveChangesAsync();
 
         // Act: 完了を解除（Done=false）
         var dto = new ChildTaskUpdateDto { Done = false };
-        var result = await _controller.UpdateChildTask("child-toggle", 0, dto);
+        var result = await _controller.UpdateChildTask("child-toggle", childId, dto);
 
         // Assert: Okが返り、子タスクのDoneがfalseに
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
@@ -1169,13 +1208,13 @@ public class AdditionalControllerTests : IDisposable
         });
         await _context.SaveChangesAsync();
 
-        // Act: 負のインデックスで更新 시도
+        // Act: 存在しないIDで更新 시도
         var dto = new ChildTaskUpdateDto { Done = true };
-        var result = await _controller.UpdateChildTask("child-neg", -1, dto);
+        var result = await _controller.UpdateChildTask("child-neg", "non-existent-id", dto);
 
-        // Assert: BadRequestが返る
+        // Assert: NotFoundが返る
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
-        Assert.IsType<BadRequestObjectResult>(actionResult.Result);
+        Assert.IsType<NotFoundObjectResult>(actionResult.Result);
     }
 
     [Fact]
