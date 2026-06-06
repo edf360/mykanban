@@ -1291,6 +1291,78 @@ public class AdditionalControllerTests : IDisposable
         var assignees = Assert.IsAssignableFrom<List<string>>(okResult.Value!);
         Assert.Empty(assignees);
     }
+
+    // ===== 名無し子タスク削除テスト =====
+
+    [Fact]
+    public async Task Create_ShouldRemoveEmptyChildTasks()
+    {
+        // Arrange: 空Textの子タスクを含むDTO
+        var dto = new TicketDto
+        {
+            Title = "テストチケット",
+            Column = "todo",
+            ChildTasks = new List<ChildTaskDto>
+            {
+                new() { Text = "有効なタスク", Done = false },
+                new() { Text = "", Done = false },
+                new() { Text = "  ", Done = true },
+                new() { Text = "もう一つのタスク", Done = true }
+            }
+        };
+
+        // Act
+        var result = await _controller.Create(dto);
+        
+        // Assert
+        var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+        var createdResult = Assert.IsType<CreatedAtActionResult>(actionResult.Result!);
+        var ticket = Assert.IsAssignableFrom<Ticket>(createdResult.Value!);
+
+        // 空Textの子タスクは除外される
+        Assert.Equal(2, ticket.ChildTasks.Count);
+        Assert.Equal("有効なタスク", ticket.ChildTasks[0].Text);
+        Assert.Equal("もう一つのタスク", ticket.ChildTasks[1].Text);
+    }
+
+    [Fact]
+    public async Task Update_ShouldRemoveEmptyChildTasks()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "update-empty-child",
+            Id = 1,
+            Title = "元タイトル",
+            Column = "todo",
+            Position = 0,
+            ChildTasks = new List<ChildTask> { new() { Text = "既存タスク", Done = false } }
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto
+        {
+            Title = "更新タイトル",
+            ChildTasks = new List<ChildTaskDto>
+            {
+                new() { Text = "新しいタスク", Done = false },
+                new() { Text = "", Done = false },
+                new() { Text = "", Done = true }
+            }
+        };
+
+        // Act
+        var result = await _controller.Update("update-empty-child", dto);
+        
+        // Assert
+        var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+
+        // 空Textの子タスクは除外される
+        Assert.Single(ticket.ChildTasks);
+        Assert.Equal("新しいタスク", ticket.ChildTasks[0].Text);
+    }
 }
 
 /// <summary>

@@ -321,14 +321,6 @@ function getAssigneeOrder() {
 const COLUMN_ORDER = ['archive', 'done', 'doing', 'todo'];
 
 /**
- * カラム名を表示用ラベルに変換
- */
-function columnToLabel(column) {
-    const map = { archive: 'Archive', done: 'Done', doing: 'Doing', todo: 'To Do' };
-    return map[column] || column;
-}
-
-/**
  * 進捗マトリックス表を描画
  * 列: チケット名（カラム順 archive → done → doing → todo でソート）
  * 行: 担当者（設定画面の順番）
@@ -402,15 +394,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     
     titles.forEach(title => {
         const th = document.createElement('th');
-        const titleTickets = titleMap.get(title);
-        // 複数カラムに跨る場合はカラム情報をヘッダーに表示
-        const columns = new Set(titleTickets.map(t => t.column || 'todo'));
-        if (columns.size > 1) {
-            const sortedCols = Array.from(columns).sort((a, b) => COLUMN_ORDER.indexOf(a) - COLUMN_ORDER.indexOf(b));
-            th.textContent = `${title} (${sortedCols.map(columnToLabel).join(', ')})`;
-        } else {
-            th.textContent = title;
-        }
+        th.textContent = title;
         th.title = title;
         headerRow.appendChild(th);
     });

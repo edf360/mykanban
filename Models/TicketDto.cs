@@ -15,6 +15,7 @@ public class TicketDto
     public List<string> Labels { get; set; } = new();
     public string Memo { get; set; } = string.Empty;
     public List<ChildTaskDto> ChildTasks { get; set; } = new();
+    public bool IsLocked { get; set; }
 }
 
 public class ChildTaskDto

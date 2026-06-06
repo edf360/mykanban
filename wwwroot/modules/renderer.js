@@ -496,6 +496,14 @@ function handleDragStart(e) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', this.dataset.id);
     
+    // ドラッグ中のチケット自身にもdragoverリスナーを設定
+    // これがないとドラッグ中のチケット上でdragoverが発火した際にpreventDefault()が呼ばれず、dropイベントが発火しない
+    this._dragOverHandler = (ev) => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+    };
+    this.addEventListener('dragover', this._dragOverHandler);
+    
     removeDropIndicators();
 }
 
@@ -503,6 +511,11 @@ function handleDragStart(e) {
  * ドラッグ終了処理
  */
 function handleDragEnd(e) {
+    // ドラッグ中のチケットからdragoverリスナーを削除
+    if (this._dragOverHandler) {
+        this.removeEventListener('dragover', this._dragOverHandler);
+        delete this._dragOverHandler;
+    }
     this.classList.remove('dragging');
     draggedTicket = null;
     

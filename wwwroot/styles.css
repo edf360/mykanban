@@ -525,7 +525,7 @@ body {
     border-radius: 16px;
     padding: 24px;
     width: 90%;
-    max-width: 500px;
+    max-width: 1000px;
     max-height: 85vh;
     overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
@@ -533,15 +533,84 @@ body {
     transition: transform 0.3s ease;
 }
 
+/* 2カラムレイアウト */
+.modal-body-two-column {
+    display: flex;
+    gap: 20px;
+}
+
+.modal-left-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-right-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-right-column .memo-full-height {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 300px;
+}
+
+.modal-right-column .memo-full-height textarea {
+    flex: 1;
+    min-height: 250px;
+    resize: vertical;
+}
+
 .modal-overlay.active .modal {
     transform: scale(1);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
 }
 
 .modal-title {
     font-size: 20px;
     font-weight: 600;
     color: #1f2937;
-    margin-bottom: 20px;
+}
+
+.modal-lock-btn {
+    background: none;
+    border: 1px solid rgba(0, 0, 0, 0);
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    color: #6b7280;
+    line-height: 1;
+}
+
+.modal-lock-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
+/* ロック時のグレー表示 */
+.modal.locked #ticketTitle,
+.modal.locked #startDate,
+.modal.locked #endDate,
+.modal.locked #effort,
+.modal.locked #assigneeTags,
+.modal.locked #assigneeDropdown,
+.modal.locked #labelTags,
+.modal.locked #labelDropdown,
+.modal.locked #childTasks,
+.modal.locked #addChildTaskBtn {
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 .form-group {
@@ -2131,6 +2200,18 @@ body {
         width: 95vw;
         max-width: 95vw;
         margin: 20px auto;
+    }
+
+    .modal-body-two-column {
+        flex-direction: column;
+    }
+
+    .modal-right-column .memo-full-height {
+        min-height: auto;
+    }
+
+    .modal-right-column .memo-full-height textarea {
+        min-height: 100px;
     }
 
     .bottom-left-buttons {

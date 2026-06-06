@@ -22,6 +22,11 @@ export function openNewModal(defaultColumn) {
     state.currentChildTasks = [];
     state.newTicketColumn = defaultColumn || 'todo';
     
+    // チケット作成時はロック解除状態
+    state.ticketLocked = false;
+    updateLockButton();
+    applyLockToModal();
+    
     // フィルターで選択された担当者をデフォルトに設定
     const selectedAssignee = getSelectedAssignee();
     state.currentAssignees = selectedAssignee ? [selectedAssignee] : [];
@@ -43,6 +48,16 @@ export function openNewModal(defaultColumn) {
     console.log('[Modal] ticketModal element:', modal);
     modal.classList.add('active');
     console.log('[Modal] modal active class added, visible:', modal.classList.contains('active'));
+    
+    // モーダル表示後にタイトル入力フィールドにフォーカス
+    // CSS transition (0.3s) 完了後にフォーカスを適用
+    setTimeout(() => {
+        const titleInput = document.getElementById('ticketTitle');
+        if (titleInput) {
+            titleInput.focus();
+            titleInput.select();
+        }
+    }, 350);
 }
 
 /**
@@ -64,6 +79,11 @@ export function openEditModal(ticketId) {
     state.mainAssignee = data.mainAssignee || null;
     state.currentChildTasks = data.childTasks ? data.childTasks.map(t => ({...t})) : [];
     
+    // チケットの永続化されたロック状態を復元
+    state.ticketLocked = data.isLocked || false;
+    updateLockButton();
+    applyLockToModal();
+    
     document.getElementById('modalTitle').textContent = 'チケットを編集';
     document.getElementById('ticketTitle').value = data.title || '';
     document.getElementById('startDate').value = data.startDate ? data.startDate.substring(0, 10) : '';
@@ -84,16 +104,52 @@ export function openEditModal(ticketId) {
     renderAssigneeSelect();
     renderLabelSelect();
     
-    document.getElementById('ticketModal').classList.add('active');
+    const modal = document.getElementById('ticketModal');
+    modal.classList.add('active');
 }
 
 /**
  * モーダルを閉じる
  */
 export function closeModal() {
-    document.getElementById('ticketModal').classList.remove('active');
+    const modal = document.getElementById('ticketModal');
+    modal.classList.remove('active');
+    modal.querySelector('.modal').classList.remove('locked');
     state.editingTicketId = null;
     window.__editingTicketId = null;
+}
+
+/**
+ * ロックボタンを更新（テキストアイコン）
+ */
+function updateLockButton() {
+    const btn = document.getElementById('modalLockBtn');
+    if (btn) {
+        btn.textContent = state.ticketLocked ? '🔒' : '🔓';
+    }
+}
+
+/**
+ * モーダルにロック状態を適用（フィールドをグレーアウト）
+ */
+function applyLockToModal() {
+    const modal = document.getElementById('ticketModal');
+    const modalContent = modal.querySelector('.modal');
+    
+    if (state.ticketLocked) {
+        modalContent.classList.add('locked');
+    } else {
+        modalContent.classList.remove('locked');
+    }
+}
+
+/**
+ * ロック/アンロックをトグル
+ */
+export function toggleLock() {
+    state.ticketLocked = !state.ticketLocked;
+    updateLockButton();
+    applyLockToModal();
 }
 
 /**
@@ -119,7 +175,8 @@ export async function saveTicket() {
         mainAssignee: state.mainAssignee,
         labels: [...state.currentLabels],
         memo: document.getElementById('memo').value.trim(),
-        childTasks: state.currentChildTasks.map(t => ({...t}))
+        childTasks: state.currentChildTasks.map(t => ({...t})),
+        isLocked: state.ticketLocked
     };
     
     try {
@@ -171,6 +228,7 @@ export function initModal() {
     
     document.getElementById('cancelBtn').addEventListener('click', closeModal);
     document.getElementById('saveBtn').addEventListener('click', saveTicket);
+    document.getElementById('modalLockBtn').addEventListener('click', toggleLock);
     
     // モーダル外クリックで保存
     // テキスト選択ドラッグによる誤判定を防ぐため、mousedown/mouseup で判断

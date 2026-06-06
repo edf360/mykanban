@@ -35,6 +35,12 @@ public class TicketsController : ControllerBase
         // 全チケットの最大Idを取得して+1（トランザクション内で排他ロックにより重複防止）
         var maxId = await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0;
 
+        // 名無しの子タスク（Textが空）を除外
+        var validChildTasks = dto.ChildTasks
+            .Where(ct => !string.IsNullOrWhiteSpace(ct.Text))
+            .Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done })
+            .ToList();
+
         var ticket = new Ticket
         {
             TicketId = Guid.NewGuid().ToString("N"),
@@ -50,7 +56,7 @@ public class TicketsController : ControllerBase
             MainAssignee = dto.MainAssignee,
             Labels = dto.Labels,
             Memo = dto.Memo,
-            ChildTasks = dto.ChildTasks.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList()
+            ChildTasks = validChildTasks
         };
 
         // 同じカラム内の最大Positionを取得（double方式）
@@ -97,6 +103,7 @@ public class TicketsController : ControllerBase
         var oldStartDate = ticket.StartDate;
         var oldEndDate = ticket.EndDate;
         var oldEffort = ticket.Effort;
+        var oldIsLocked = ticket.IsLocked;
 
         // フィールド更新
         ticket.Title = dto.Title;
@@ -109,7 +116,12 @@ public class TicketsController : ControllerBase
         ticket.MainAssignee = dto.MainAssignee;
         ticket.Labels = dto.Labels;
         ticket.Memo = dto.Memo;
-        ticket.ChildTasks = dto.ChildTasks.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList();
+        ticket.IsLocked = dto.IsLocked;
+        // 名無しの子タスク（Textが空）を除外
+        ticket.ChildTasks = dto.ChildTasks
+            .Where(ct => !string.IsNullOrWhiteSpace(ct.Text))
+            .Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done })
+            .ToList();
 
         // 変更検出と履歴記録
         if (oldTitle != ticket.Title)
@@ -138,6 +150,9 @@ public class TicketsController : ControllerBase
         
         if (oldEffort != ticket.Effort)
             await RecordHistory(id, "effort", ticket.Effort?.ToString(), oldEffort?.ToString());
+        
+        if (oldIsLocked != ticket.IsLocked)
+            await RecordHistory(id, "lock", ticket.IsLocked ? "locked" : "unlocked", oldIsLocked ? "locked" : "unlocked");
 
         await _context.SaveChangesAsync();
         return Ok(ticket);

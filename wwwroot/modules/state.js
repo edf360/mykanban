@@ -23,6 +23,8 @@ export const state = {
     mainAssigneeOnly: false,
     // グラフパネル表示状態
     graphPanelOpen: false,
+    // チケット編集ロック状態（false=開錠/編集可, true=施錠/編集不可）
+    ticketLocked: false,
 };
 
 // イベントバス（モジュール間通信用）

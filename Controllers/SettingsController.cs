@@ -3,8 +3,10 @@ using KanbanServer.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace KanbanServer.Controllers;
@@ -184,7 +186,7 @@ public class SettingsController : ControllerBase
             }).ToList()
         };
 
-        var json = JsonSerializer.Serialize(exportData, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(exportData, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
         var filename = $"kanban_backup_{timestamp}.json";
 
@@ -318,19 +320,13 @@ public class SettingsController : ControllerBase
         if (file.Length > maxFileSize)
             return BadRequest(new { error = $"ファイルサイズが制限を超えています（最大10MB）" });
 
-        using var reader = new StreamReader(file.OpenReadStream());
-        var lines = new List<string>();
-        string? line;
-        while ((line = await reader.ReadLineAsync()) != null)
-        {
-            lines.Add(line);
-        }
-
-        if (lines.Count < 2)
+        // ストリームベースCSVパーサー（改行を含むクォートセルを正しく処理）
+        var csvRows = await ParseCsvStreamAsync(file.OpenReadStream());
+        if (csvRows.Count < 2)
             return BadRequest(new { error = "CSVデータが空です" });
 
         // ヘッダー行をパース
-        var headers = ParseCsvLine(lines[0]);
+        var headers = csvRows[0];
         var columnIndexes = new Dictionary<string, int>();
         for (int i = 0; i < headers.Length; i++)
         {
@@ -352,9 +348,9 @@ public class SettingsController : ControllerBase
         var discoveredAssignees = new HashSet<string>();
         var discoveredLabels = new HashSet<string>();
 
-        for (int row = 1; row < lines.Count; row++)
+        for (int row = 1; row < csvRows.Count; row++)
         {
-            var values = ParseCsvLine(lines[row]);
+            var values = csvRows[row];
             
             // 空行をスキップ
             if (values.Length < 2 || string.IsNullOrWhiteSpace(values[columnIndexes["タスクID"]]))
@@ -571,6 +567,91 @@ public class SettingsController : ControllerBase
         result.Add(current.ToString());
         
         return result.ToArray();
+    }
+
+    /// <summary>
+    /// ストリームからCSVをパース（改行を含むクォートセルを正しく処理）
+    /// </summary>
+    private static async Task<List<string[]>> ParseCsvStreamAsync(Stream stream)
+    {
+        var allRows = new List<string[]>();
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        
+        var currentRow = new List<string>();
+        var currentCell = new StringBuilder();
+        var inQuotes = false;
+        
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            // CRLF → LF の変換は ReadLineAsync で行われる
+            // 行末に改行コードが付くため、各文字を処理
+            var chars = line.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                char c = chars[i];
+                if (inQuotes)
+                {
+                    if (c == '"')
+                    {
+                        // 次の文字も " ならエスケープされた "
+                        if (i + 1 < chars.Length && chars[i + 1] == '"')
+                        {
+                            currentCell.Append('"');
+                            i++;
+                        }
+                        else
+                        {
+                            inQuotes = false;
+                        }
+                    }
+                    else
+                    {
+                        currentCell.Append(c);
+                    }
+                }
+                else
+                {
+                    if (c == '"')
+                    {
+                        inQuotes = true;
+                    }
+                    else if (c == ',')
+                    {
+                        currentRow.Add(currentCell.ToString());
+                        currentCell.Clear();
+                    }
+                    else
+                    {
+                        currentCell.Append(c);
+                    }
+                }
+            }
+            
+            // 行末処理
+            if (!inQuotes)
+            {
+                // 行が完了
+                currentRow.Add(currentCell.ToString());
+                currentCell.Clear();
+                allRows.Add(currentRow.ToArray());
+                currentRow.Clear();
+            }
+            else
+            {
+                // クォート内での改行なのでセルに改行を追加
+                currentCell.Append('\n');
+            }
+        }
+        
+        // 残りのセル・行を処理（ファイル末尾が改行でない場合）
+        if (currentCell.Length > 0 || currentRow.Count > 0)
+        {
+            currentRow.Add(currentCell.ToString());
+            allRows.Add(currentRow.ToArray());
+        }
+        
+        return allRows;
     }
 
     private static string GetSafeValue(string[] values, Dictionary<string, int> columnIndexes, string columnName)

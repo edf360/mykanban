@@ -76,14 +76,17 @@ public class AuthMiddleware
 
     private static bool IsAdminRequired(string path, string method)
     {
-        // 設定の書き換えは管理者のみ
+        // 設定系
         if (path.StartsWith("/api/settings"))
         {
             // GET は読み取りのみなので管理者不要
             if (method == "GET")
                 return false;
-            // PUT/POST/DELETE は管理者のみ
-            return method is "PUT" or "POST" or "DELETE";
+            // インポート系は管理者のみ
+            if (path.StartsWith("/api/settings/import"))
+                return true;
+            // PUT/POST/DELETE は一般ユーザーも可能（担当者追加・ラベル追加・エクスポートなど）
+            return false;
         }
 
         // チケットの削除は管理者のみ

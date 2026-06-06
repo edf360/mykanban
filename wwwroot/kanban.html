@@ -217,57 +217,66 @@
     <!-- モーダルダイアログ -->
     <div class="modal-overlay" id="ticketModal" role="dialog" aria-modal="true">
         <div class="modal">
-            <div class="modal-title" id="modalTitle">新しいチケット</div>
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">新しいチケット</div>
+                <button type="button" class="modal-lock-btn" id="modalLockBtn" title="編集ロック">🔓</button>
+            </div>
             
-            <div class="form-group">
-                <label for="ticketTitle">タイトル</label>
-                <input type="text" id="ticketTitle" placeholder="タスクのタイトルを入力">
-            </div>
+            <div class="modal-body-two-column">
+                <div class="modal-left-column">
+                    <div class="form-group">
+                        <label for="ticketTitle">タイトル</label>
+                        <input type="text" id="ticketTitle" placeholder="タスクのタイトルを入力">
+                    </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="startDate">開始日</label>
-                    <input type="date" id="startDate">
-                </div>
-                <div class="form-group">
-                    <label for="endDate">終了日</label>
-                    <input type="date" id="endDate">
-                </div>
-            </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="startDate">開始日</label>
+                            <input type="date" id="startDate">
+                        </div>
+                        <div class="form-group">
+                            <label for="endDate">終了日</label>
+                            <input type="date" id="endDate">
+                        </div>
+                    </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="effort">工数（時間）</label>
-                    <input type="number" id="effort" placeholder="例: 8" min="0">
-                </div>
-                <div class="form-group">
-                    <label id="assigneeLabel">担当者</label>
-                    <div class="selection-tags" id="assigneeTags" aria-labelledby="assigneeLabel"></div>
-                    <div class="custom-dropdown" id="assigneeDropdown">
-                        <button type="button" class="dropdown-toggle-btn" id="assigneeToggleBtn">担当者を選択 ▼</button>
-                        <div class="dropdown-list" id="assigneeList"></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="effort">工数（時間）</label>
+                            <input type="number" id="effort" placeholder="例: 8" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label id="assigneeLabel">担当者</label>
+                            <div class="selection-tags" id="assigneeTags" aria-labelledby="assigneeLabel"></div>
+                            <div class="custom-dropdown" id="assigneeDropdown">
+                                <button type="button" class="dropdown-toggle-btn" id="assigneeToggleBtn">担当者を選択 ▼</button>
+                                <div class="dropdown-list" id="assigneeList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label id="labelLabel">ラベル</label>
+                        <div class="selection-tags" id="labelTags" aria-labelledby="labelLabel"></div>
+                        <div class="custom-dropdown" id="labelDropdown">
+                            <button type="button" class="dropdown-toggle-btn" id="labelToggleBtn">ラベルを選択 ▼</button>
+                            <div class="dropdown-list" id="labelList"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label id="childTasksLabel">子タスク</label>
+                        <div class="child-tasks" id="childTasks" aria-labelledby="childTasksLabel"></div>
+                        <button class="add-child-task-btn" id="addChildTaskBtn">＋ 子タスクを追加</button>
                     </div>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label id="labelLabel">ラベル</label>
-                <div class="selection-tags" id="labelTags" aria-labelledby="labelLabel"></div>
-                <div class="custom-dropdown" id="labelDropdown">
-                    <button type="button" class="dropdown-toggle-btn" id="labelToggleBtn">ラベルを選択 ▼</button>
-                    <div class="dropdown-list" id="labelList"></div>
+                
+                <div class="modal-right-column">
+                    <div class="form-group memo-full-height">
+                        <label for="memo">メモ</label>
+                        <textarea id="memo" placeholder="詳細な説明やメモ..."></textarea>
+                    </div>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label for="memo">メモ</label>
-                <textarea id="memo" placeholder="詳細な説明やメモ..."></textarea>
-            </div>
-
-            <div class="form-group">
-                <label id="childTasksLabel">子タスク</label>
-                <div class="child-tasks" id="childTasks" aria-labelledby="childTasksLabel"></div>
-                <button class="add-child-task-btn" id="addChildTaskBtn">＋ 子タスクを追加</button>
             </div>
 
             <div class="modal-actions">

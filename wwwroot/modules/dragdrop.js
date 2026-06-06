@@ -4,7 +4,7 @@
 
 import { API_BASE, state } from './state.js';
 import { apiRequest, loadTickets } from './api.js';
-import { draggedTicket, removeDropIndicators, renderAllTickets } from './renderer.js';
+import { draggedTicket, removeDropIndicators, renderAllTickets, ticketMatchesFilter } from './renderer.js';
 
 /**
  * ドロップゾーンを設定
@@ -90,23 +90,38 @@ export function setupDropZones() {
             const newColumn = list.closest('.column').dataset.column;
             const ticketId = draggedTicket.dataset.id;
             try {
-                // ドロップ先のカラム内のチケット（ドラッグ中のは除く）を取得
-                const otherTickets = tickets.filter(t => t.dataset.id !== ticketId);
+                // state.allTicketsからドロップ先カラムの全チケットを取得（ドラッグ中除外）
+                const allColumnTickets = state.allTickets
+                    .filter(t => t.column === newColumn && t.ticketId !== ticketId)
+                    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
                 
-                // InsertIndexを計算（otherTickets内の挿入位置）
+                // フィルター後のチケットリスト（DOM上に表示されているものと同じ順序）
+                const filteredColumnTickets = allColumnTickets.filter(t => ticketMatchesFilter(t));
+                
+                // insertIndexはDOM上（フィルター後）のインデックス
+                // これをサーバー上の全チケットでの正しいインデックスに変換
                 let insertIdx;
-                if (otherTickets.length === 0) {
+                if (allColumnTickets.length === 0) {
                     // カラムが空の場合
                     insertIdx = 0;
                 } else if (insertIndex === -1 || insertIndex >= tickets.length) {
                     // 末尾に挿入
-                    insertIdx = otherTickets.length;
+                    insertIdx = allColumnTickets.length;
                 } else if (insertIndex === 0) {
                     // 先頭に挿入
                     insertIdx = 0;
                 } else {
-                    // 中間に挿入
-                    insertIdx = insertIndex > otherTickets.length ? otherTickets.length : insertIndex;
+                    // 中間に挿入: フィルター後のinsertIndexに対応するチケットを特定し、
+                    // それが全チケットリストで何番目かを確認
+                    const targetTicket = filteredColumnTickets[insertIndex];
+                    if (targetTicket) {
+                        // 挿入位置の直後のチケット（フィルター後）が全チケットで何番目か
+                        insertIdx = allColumnTickets.findIndex(t => t.ticketId === targetTicket.ticketId);
+                        if (insertIdx === -1) insertIdx = allColumnTickets.length;
+                    } else {
+                        // insertIndexがfilteredColumnTicketsの範囲外の場合
+                        insertIdx = allColumnTickets.length;
+                    }
                 }
                 
                 const idx = state.allTickets.findIndex(t => t.ticketId === ticketId);

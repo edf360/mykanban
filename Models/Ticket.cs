@@ -16,6 +16,7 @@ public class Ticket
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public int? Effort { get; set; }
+    public bool IsLocked { get; set; }
 
     // DB用フィールド（シリアライズ時は非表示）
     [JsonIgnore]

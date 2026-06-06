@@ -1,6 +1,6 @@
 // 設定パネル管理モジュール
 import { apiRequest } from './api.js';
-import { requireAdmin, getToken } from './auth.js';
+import { isAdmin, getToken } from './auth.js';
 import { renderAllTickets } from './renderer.js';
 
 // 設定データ
@@ -56,14 +56,22 @@ export function getSettings() {
  */
 export async function open() {
     console.log('[Settings] open called');
-    // 管理者チェック
-    if (!requireAdmin()) {
-        return;
-    }
     await load();
-    renderUsers();
-    renderLabels();
+    const admin = isAdmin();
+    renderUsers(admin);
+    renderLabels(admin);
     renderHolidays();
+
+    // 管理者のみ機能の表示/非表示
+    const holidaysSection = document.querySelector('#holidaysTextarea')?.closest('.settings-section');
+    if (holidaysSection) {
+        holidaysSection.style.display = admin ? '' : 'none';
+    }
+
+    const importDbBtn = document.getElementById('importDbBtn');
+    const importCsvBtn = document.getElementById('importCsvBtn');
+    if (importDbBtn) importDbBtn.style.display = admin ? '' : 'none';
+    if (importCsvBtn) importCsvBtn.style.display = admin ? '' : 'none';
 
     const panel = document.getElementById('settingsPanel');
     const btn = document.getElementById('settingsBtn');
@@ -88,12 +96,12 @@ export function close() {
 /**
  * ユーザリストをレンダリング
  */
-function renderUsers() {
+function renderUsers(admin) {
     const container = document.getElementById('usersList');
     if (!container) return;
     container.innerHTML = '';
     settings.users.forEach((user, index) => {
-        const item = createUserItem(user, index);
+        const item = createUserItem(user, index, admin);
         container.appendChild(item);
     });
 }
@@ -101,20 +109,21 @@ function renderUsers() {
 /**
  * ラベルリストをレンダリング
  */
-function renderLabels() {
+function renderLabels(admin) {
     const container = document.getElementById('labelsList');
     if (!container) return;
     container.innerHTML = '';
     settings.labels.forEach((label, index) => {
-        const item = createLabelItem(index, label.name, label.color);
+        const item = createLabelItem(index, label.name, label.color, admin);
         container.appendChild(item);
     });
 }
 
 /**
  * ラベルアイテム要素を作成（インライン編集対応）
+ * @param {boolean} admin - 管理者かどうか。非管理者は名前変更・削除不可、色変更のみ可
  */
-function createLabelItem(index, name, color) {
+function createLabelItem(index, name, color, admin) {
     const item = document.createElement('div');
     item.className = 'settings-item';
     item.dataset.type = 'labels';
@@ -180,13 +189,13 @@ function createLabelItem(index, name, color) {
     const actions = document.createElement('div');
     actions.className = 'settings-item-actions';
 
-    // 編集ボタン（表示モード時）
+    // 編集ボタン（表示モード時）- 非管理者は色変更のみ
     const editBtn = document.createElement('button');
     editBtn.className = 'settings-item-btn edit';
     editBtn.textContent = '✎';
     editBtn.title = '編集';
     editBtn.addEventListener('click', () => {
-        startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index);
+        startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index, admin);
     });
     actions.appendChild(editBtn);
 
@@ -197,7 +206,7 @@ function createLabelItem(index, name, color) {
     saveBtn.title = '保存';
     saveBtn.style.display = 'none';
     saveBtn.addEventListener('click', () => {
-        finishInlineEdit(index, nameInput.value, colorInput.value);
+        finishInlineEdit(index, nameInput.value, colorInput.value, admin);
     });
     actions.appendChild(saveBtn);
 
@@ -212,20 +221,22 @@ function createLabelItem(index, name, color) {
     });
     actions.appendChild(cancelBtn);
 
-    // 削除ボタン
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'settings-item-btn delete';
-    deleteBtn.textContent = '✕';
-    deleteBtn.title = '削除';
-    deleteBtn.addEventListener('click', () => {
-        if (confirm(`「${name}」を削除しますか？\n既存の割り当てには影響しません。`)) {
-            settings.labels.splice(index, 1);
-            renderLabels();
-            save();
-            renderAllTickets();
-        }
-    });
-    actions.appendChild(deleteBtn);
+    // 削除ボタン - 管理者のみ表示
+    if (admin) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'settings-item-btn delete';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = '削除';
+        deleteBtn.addEventListener('click', () => {
+            if (confirm(`「${name}」を削除しますか？\n既存の割り当てには影響しません。`)) {
+                settings.labels.splice(index, 1);
+                renderLabels(isAdmin());
+                save();
+                renderAllTickets();
+            }
+        });
+        actions.appendChild(deleteBtn);
+    }
 
     item.appendChild(actions);
 
@@ -266,7 +277,7 @@ function createLabelItem(index, name, color) {
         if (dragType === 'labels' && dragItem !== null && dragItem !== index) {
             const moved = settings.labels.splice(dragItem, 1)[0];
             settings.labels.splice(index, 0, moved);
-            renderLabels();
+            renderLabels(isAdmin());
             save();
             renderAllTickets();
         }
@@ -274,7 +285,7 @@ function createLabelItem(index, name, color) {
 
     nameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            finishInlineEdit(index, nameInput.value, colorInput.value);
+            finishInlineEdit(index, nameInput.value, colorInput.value, admin);
         }
     });
 
@@ -283,8 +294,9 @@ function createLabelItem(index, name, color) {
 
 /**
  * インライン編集を開始
+ * @param {boolean} admin - 管理者かどうか。非管理者は名前入力フィールドを無効化
  */
-function startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index) {
+function startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index, admin) {
     displayEl.style.display = 'none';
     editEl.style.display = 'flex';
     item.draggable = false;
@@ -297,25 +309,35 @@ function startInlineEdit(item, displayEl, editEl, nameInput, colorInput, index) 
     saveBtn.style.display = '';
     cancelBtn.style.display = '';
 
+    // 非管理者は名前変更不可
+    if (!admin) {
+        nameInput.disabled = true;
+        nameInput.style.opacity = '0.5';
+    }
+
     nameInput.focus();
     nameInput.select();
 }
 
 /**
  * インライン編集を確定
+ * @param {boolean} admin - 管理者かどうか。非管理者は色のみ更新
  */
-function finishInlineEdit(index, newName, newColor) {
-    const name = newName.trim();
-    if (!name) return;
+function finishInlineEdit(index, newName, newColor, admin) {
+    if (admin) {
+        const name = newName.trim();
+        if (!name) return;
 
-    if (settings.labels.some((l, i) => i !== index && l.name === name)) {
-        alert('既に存在するラベル名です。');
-        return;
+        if (settings.labels.some((l, i) => i !== index && l.name === name)) {
+            alert('既に存在するラベル名です。');
+            return;
+        }
+
+        settings.labels[index].name = name;
     }
-
-    settings.labels[index].name = name;
+    // 色変更は管理者・非管理者問わず可能
     settings.labels[index].color = newColor;
-    renderLabels();
+    renderLabels(isAdmin());
     save();
     renderAllTickets();
 }
@@ -349,8 +371,9 @@ function renderHolidays() {
 
 /**
  * ユーザーアイテム要素作成（インライン編集対応）
+ * @param {boolean} admin - 管理者かどうか。非管理者は編集・削除不可
  */
-function createUserItem(name, index) {
+function createUserItem(name, index, admin) {
     const item = document.createElement('div');
     item.className = 'settings-item';
     item.draggable = true;
@@ -385,95 +408,100 @@ function createUserItem(name, index) {
     const actions = document.createElement('div');
     actions.className = 'settings-item-actions';
 
-    // 編集ボタン（表示モード時）
-    const editBtn = document.createElement('button');
-    editBtn.className = 'settings-item-btn edit';
-    editBtn.textContent = '✎';
-    editBtn.title = '編集';
-    editBtn.addEventListener('click', () => {
-        startUserInlineEdit(item, displayEl, editEl, nameInput, index);
-    });
-    actions.appendChild(editBtn);
+    // 管理者のみ編集・削除ボタンを表示
+    if (admin) {
+        // 編集ボタン（表示モード時）
+        const editBtn = document.createElement('button');
+        editBtn.className = 'settings-item-btn edit';
+        editBtn.textContent = '✎';
+        editBtn.title = '編集';
+        editBtn.addEventListener('click', () => {
+            startUserInlineEdit(item, displayEl, editEl, nameInput, index);
+        });
+        actions.appendChild(editBtn);
 
-    // 保存ボタン（編集モード時）
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'settings-item-btn save';
-    saveBtn.textContent = '✓';
-    saveBtn.title = '保存';
-    saveBtn.style.display = 'none';
-    saveBtn.addEventListener('click', () => {
-        finishUserInlineEdit(index, nameInput.value);
-    });
-    actions.appendChild(saveBtn);
+        // 保存ボタン（編集モード時）
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'settings-item-btn save';
+        saveBtn.textContent = '✓';
+        saveBtn.title = '保存';
+        saveBtn.style.display = 'none';
+        saveBtn.addEventListener('click', () => {
+            finishUserInlineEdit(index, nameInput.value);
+        });
+        actions.appendChild(saveBtn);
 
-    // キャンセルボタン（編集モード時）
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'settings-item-btn cancel';
-    cancelBtn.textContent = '✕';
-    cancelBtn.title = 'キャンセル';
-    cancelBtn.style.display = 'none';
-    cancelBtn.addEventListener('click', () => {
-        cancelUserInlineEdit(item, displayEl, editEl, displayEl, name);
-    });
-    actions.appendChild(cancelBtn);
+        // キャンセルボタン（編集モード時）
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'settings-item-btn cancel';
+        cancelBtn.textContent = '✕';
+        cancelBtn.title = 'キャンセル';
+        cancelBtn.style.display = 'none';
+        cancelBtn.addEventListener('click', () => {
+            cancelUserInlineEdit(item, displayEl, editEl, displayEl, name);
+        });
+        actions.appendChild(cancelBtn);
 
-    // 削除ボタン
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'settings-item-btn delete';
-    deleteBtn.textContent = '✕';
-    deleteBtn.title = '削除';
-    deleteBtn.addEventListener('click', () => {
-        if (confirm(`「${name}」を削除しますか？\n既存の割り当てには影響しません。`)) {
-            settings.users.splice(index, 1);
-            renderUsers();
-            save();
-            renderAllTickets();
-        }
-    });
-    actions.appendChild(deleteBtn);
+        // 削除ボタン
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'settings-item-btn delete';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = '削除';
+        deleteBtn.addEventListener('click', () => {
+            if (confirm(`「${name}」を削除しますか？\n既存の割り当てには影響しません。`)) {
+                settings.users.splice(index, 1);
+                renderUsers(isAdmin());
+                save();
+                renderAllTickets();
+            }
+        });
+        actions.appendChild(deleteBtn);
+    }
     item.appendChild(actions);
 
-    // ドラッグ＆ドロップイベント
-    item.addEventListener('dragstart', (e) => {
-        if (editEl.style.display !== 'none') {
+    // ドラッグ＆ドロップイベント（管理者のみ）
+    if (admin) {
+        item.addEventListener('dragstart', (e) => {
+            if (editEl.style.display !== 'none') {
+                e.preventDefault();
+                return;
+            }
+            dragItem = index;
+            dragType = 'users';
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            dragItem = null;
+            dragType = null;
+        });
+
+        item.addEventListener('dragover', (e) => {
             e.preventDefault();
-            return;
-        }
-        dragItem = index;
-        dragType = 'users';
-        item.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-    });
+            if (dragType === 'users' && dragItem !== index) {
+                e.dataTransfer.dropEffect = 'move';
+                item.style.borderTop = '2px solid #3b82f6';
+            }
+        });
 
-    item.addEventListener('dragend', () => {
-        item.classList.remove('dragging');
-        dragItem = null;
-        dragType = null;
-    });
+        item.addEventListener('dragleave', () => {
+            item.style.borderTop = '';
+        });
 
-    item.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        if (dragType === 'users' && dragItem !== index) {
-            e.dataTransfer.dropEffect = 'move';
-            item.style.borderTop = '2px solid #3b82f6';
-        }
-    });
-
-    item.addEventListener('dragleave', () => {
-        item.style.borderTop = '';
-    });
-
-    item.addEventListener('drop', (e) => {
-        e.preventDefault();
-        item.style.borderTop = '';
-        if (dragType === 'users' && dragItem !== null && dragItem !== index) {
-            const moved = settings.users.splice(dragItem, 1)[0];
-            settings.users.splice(index, 0, moved);
-            renderUsers();
-            save();
-            renderAllTickets();
-        }
-    });
+        item.addEventListener('drop', (e) => {
+            e.preventDefault();
+            item.style.borderTop = '';
+            if (dragType === 'users' && dragItem !== null && dragItem !== index) {
+                const moved = settings.users.splice(dragItem, 1)[0];
+                settings.users.splice(index, 0, moved);
+                renderUsers(isAdmin());
+                save();
+                renderAllTickets();
+            }
+        });
+    }
 
     nameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -517,7 +545,7 @@ function finishUserInlineEdit(index, newName) {
     }
 
     settings.users[index] = name;
-    renderUsers();
+    renderUsers(isAdmin());
     save();
     renderAllTickets();
 }
@@ -552,7 +580,7 @@ function addUser() {
     }
     settings.users.push(name);
     input.value = '';
-    renderUsers();
+    renderUsers(isAdmin());
     save();
     renderAllTickets();
 }
@@ -574,7 +602,7 @@ function addLabel() {
     settings.labels.push({ name, color: colorInput.value });
     nameInput.value = '';
     colorInput.value = '#808080';
-    renderLabels();
+    renderLabels(isAdmin());
     save();
     renderAllTickets();
 }
