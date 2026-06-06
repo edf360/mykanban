@@ -1,0 +1,852 @@
+using KanbanServer.Data;
+using KanbanServer.Models;
+using KanbanServer.Services;
+using Microsoft.EntityFrameworkCore;
+
+namespace Tests;
+
+/// <summary>
+/// TicketServiceの直接テスト
+/// </summary>
+public class TicketServiceTests : IDisposable
+{
+    private readonly KanbanDbContext _context;
+    private readonly TicketService _service;
+
+    public TicketServiceTests()
+    {
+        _context = TestDbContextFactory.Create();
+        _service = new TicketService(_context);
+    }
+
+    public void Dispose()
+    {
+        _context.Database.CloseConnection();
+        _context.Dispose();
+    }
+
+    // ===== GetAllAsync テスト =====
+
+    [Fact]
+    public async Task GetAllAsync_EmptyList_ReturnsEmptyList()
+    {
+        // Act
+        var result = await _service.GetAllAsync();
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ShouldReturnSortedByColumnThenPosition()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "a", Id = 1, Title = "Doing-1", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "b", Id = 2, Title = "Todo-2", Column = "todo", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "c", Id = 3, Title = "Todo-1", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "d", Id = 4, Title = "Done-1", Column = "done", Position = 0, IsArchived = true });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetAllAsync();
+
+        // Assert: IsArchived=false が先、IsArchived=true が最後
+        // 順序: doing(todo=false) → todo(todo=false) → todo(todo=false) → done(archive=true)
+        Assert.Equal(4, result.Count);
+        Assert.Equal("doing", result[0].Column);
+        Assert.Equal("Todo-1", result[1].Title);
+        Assert.Equal("Todo-2", result[2].Title);
+        Assert.Equal("done", result[3].Column);
+        Assert.True(result[3].IsArchived);
+    }
+
+    // ===== GetAsync テスト =====
+
+    [Fact]
+    public async Task GetAsync_ExistingTicket_ReturnsTicket()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "get-test", Id = 1, Title = "取得テスト", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetAsync("get-test");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("取得テスト", result!.Title);
+    }
+
+    [Fact]
+    public async Task GetAsync_NonExistentTicket_ReturnsNull()
+    {
+        // Act
+        var result = await _service.GetAsync("non-existent");
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    // ===== CreateAsync テスト =====
+
+    [Fact]
+    public async Task CreateAsync_ValidDto_ShouldCreateTicket()
+    {
+        // Arrange
+        var dto = new TicketDto
+        {
+            Title = "新規チケット",
+            Column = "todo",
+            Labels = new List<string> { "テスト" },
+            ChildTasks = new List<ChildTaskDto> { new() { Text = "子タスク1", Done = false } }
+        };
+
+        // Act
+        var result = await _service.CreateAsync(dto);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("新規チケット", result.Title);
+        Assert.Equal("todo", result.Column);
+        Assert.Equal(32, result.TicketId.Length);
+        Assert.Single(result.Labels);
+        Assert.Single(result.ChildTasks);
+    }
+
+    [Fact]
+    public async Task CreateAsync_EmptyTitle_ThrowsArgumentException()
+    {
+        // Arrange
+        var dto = new TicketDto { Title = "" };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.CreateAsync(dto));
+    }
+
+    [Fact]
+    public async Task CreateAsync_NullTitle_ThrowsArgumentException()
+    {
+        // Arrange
+        var dto = new TicketDto { Title = null! };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.CreateAsync(dto));
+    }
+
+    [Fact]
+    public async Task CreateAsync_ShouldFilterEmptyChildTasks()
+    {
+        // Arrange
+        var dto = new TicketDto
+        {
+            Title = "テスト",
+            ChildTasks = new List<ChildTaskDto>
+            {
+                new() { Text = "有効", Done = false },
+                new() { Text = "", Done = false },
+                new() { Text = "  ", Done = true }
+            }
+        };
+
+        // Act
+        var result = await _service.CreateAsync(dto);
+
+        // Assert
+        Assert.Single(result.ChildTasks);
+        Assert.Equal("有効", result.ChildTasks[0].Text);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ShouldRecordCreatedHistory()
+    {
+        // Arrange
+        var dto = new TicketDto { Title = "履歴テスト" };
+
+        // Act
+        var result = await _service.CreateAsync(dto);
+
+        // Assert
+        var histories = await _context.TicketHistories.Where(h => h.TicketId == result.TicketId).ToListAsync();
+        Assert.Single(histories);
+        Assert.Equal("created", histories[0].Type);
+    }
+
+    [Fact]
+    public async Task CreateAsync_DefaultColumnIsTodo()
+    {
+        // Arrange
+        var dto = new TicketDto { Title = "デフォルトカラム" };
+
+        // Act
+        var result = await _service.CreateAsync(dto);
+
+        // Assert
+        Assert.Equal("todo", result.Column);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MultipleTickets_IncrementPositions()
+    {
+        // Act: 同じカラムに3つ作成
+        var dto1 = new TicketDto { Title = "First", Column = "todo" };
+        var t1 = await _service.CreateAsync(dto1);
+
+        var dto2 = new TicketDto { Title = "Second", Column = "todo" };
+        var t2 = await _service.CreateAsync(dto2);
+
+        var dto3 = new TicketDto { Title = "Third", Column = "todo" };
+        var t3 = await _service.CreateAsync(dto3);
+
+        // Assert: Positionが 0, 1000, 2000
+        Assert.Equal(0, t1.Position);
+        Assert.Equal(1000, t2.Position);
+        Assert.Equal(2000, t3.Position);
+    }
+
+    // ===== UpdateAsync テスト =====
+
+    [Fact]
+    public async Task UpdateAsync_ExistingTicket_ShouldUpdateFields()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "update-test", Id = 1, Title = "元タイトル", Column = "todo", Position = 0,
+            StartDate = new DateTime(2025, 1, 1), EndDate = new DateTime(2025, 1, 31)
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto
+        {
+            Title = "新タイトル",
+            Column = "doing",
+            StartDate = new DateTime(2025, 2, 1),
+            EndDate = new DateTime(2025, 2, 28),
+            Labels = new List<string> { "新ラベル" }
+        };
+
+        // Act
+        var result = await _service.UpdateAsync("update-test", dto);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("新タイトル", result!.Title);
+        Assert.Equal("doing", result.Column);
+        Assert.Equal(new DateTime(2025, 2, 1), result.StartDate);
+        Assert.Single(result.Labels);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NonExistentTicket_ReturnsNull()
+    {
+        // Arrange
+        var dto = new TicketDto { Title = "更新" };
+
+        // Act
+        var result = await _service.UpdateAsync("non-existent", dto);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_EmptyTitle_ThrowsArgumentException()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "update-empty", Id = 1, Title = "元", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto { Title = "" };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.UpdateAsync("update-empty", dto));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NullDates_ShouldKeepExistingDates()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "date-keep", Id = 1, Title = "日付保持", Column = "todo", Position = 0,
+            StartDate = new DateTime(2025, 6, 1), EndDate = new DateTime(2025, 6, 30)
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto
+        {
+            Title = "日付保持",
+            StartDate = null,
+            EndDate = null
+        };
+
+        // Act
+        var result = await _service.UpdateAsync("date-keep", dto);
+
+        // Assert: nullは既存データを上書きしない
+        Assert.Equal(new DateTime(2025, 6, 1), result!.StartDate);
+        Assert.Equal(new DateTime(2025, 6, 30), result.EndDate);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ShouldRecordHistoryForChangedFields()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "history-update", Id = 1, Title = "元タイトル", Column = "todo", Position = 0,
+            Labels = new List<string> { "旧" }
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto
+        {
+            Title = "新タイトル",
+            Column = "doing",
+            Labels = new List<string> { "新" }
+        };
+
+        // Act
+        await _service.UpdateAsync("history-update", dto);
+
+        // Assert
+        var histories = await _context.TicketHistories.Where(h => h.TicketId == "history-update").ToListAsync();
+        Assert.Contains(histories, h => h.Type == "title");
+        Assert.Contains(histories, h => h.Type == "column");
+        Assert.Contains(histories, h => h.Type == "label");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_UnchangedFields_ShouldNotRecordHistory()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "no-change", Id = 1, Title = "同じタイトル", Column = "todo", Position = 0
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto { Title = "同じタイトル", Column = "todo" };
+
+        // Act
+        await _service.UpdateAsync("no-change", dto);
+
+        // Assert: 変更なしなので履歴なし
+        var histories = await _context.TicketHistories.Where(h => h.TicketId == "no-change").ToListAsync();
+        Assert.Empty(histories);
+    }
+
+    // ===== ArchiveAsync テスト =====
+
+    [Fact]
+    public async Task ArchiveAsync_ShouldSetIsArchivedAndColumn()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "archive-test", Id = 1, Title = "アーカイブテスト", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ArchiveAsync("archive-test");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.True(result!.IsArchived);
+        Assert.Equal("archive", result.Column);
+    }
+
+    [Fact]
+    public async Task ArchiveAsync_AlreadyArchived_DoNothing()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "already-archived", Id = 1, Title = "既アーカイブ", Column = "archive", Position = 0, IsArchived = true });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ArchiveAsync("already-archived");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.True(result!.IsArchived);
+    }
+
+    [Fact]
+    public async Task ArchiveAsync_NonExistentTicket_ReturnsNull()
+    {
+        // Act
+        var result = await _service.ArchiveAsync("non-existent");
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    // ===== DeleteAsync テスト =====
+
+    [Fact]
+    public async Task DeleteAsync_ShouldRemoveTicketFromDatabase()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "delete-test", Id = 1, Title = "削除テスト", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.DeleteAsync("delete-test");
+
+        // Assert
+        Assert.True(result);
+        var found = await _context.Tickets.FindAsync("delete-test");
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_NonExistentTicket_ReturnsFalse()
+    {
+        // Act
+        var result = await _service.DeleteAsync("non-existent");
+
+        // Assert
+        Assert.False(result);
+    }
+
+    // ===== RestoreAsync テスト =====
+
+    [Fact]
+    public async Task RestoreAsync_ShouldUnarchiveTicket()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "restore-test", Id = 1, Title = "復帰テスト", Column = "archive", Position = 0, IsArchived = true });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.RestoreAsync("restore-test");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.False(result!.IsArchived);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_NonExistentTicket_ReturnsNull()
+    {
+        // Act
+        var result = await _service.RestoreAsync("non-existent");
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    // ===== UpdateColumnAsync テスト =====
+
+    [Fact]
+    public async Task UpdateColumnAsync_ShouldChangeColumn()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "col-move", Id = 1, Title = "移動テスト", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
+
+        // Act
+        var result = await _service.UpdateColumnAsync("col-move", dto);
+
+        // Assert
+        Assert.True(result);
+        var ticket = await _context.Tickets.FindAsync("col-move");
+        Assert.Equal("doing", ticket!.Column);
+    }
+
+    [Fact]
+    public async Task UpdateColumnAsync_NonExistentTicket_ReturnsFalse()
+    {
+        // Arrange
+        var dto = new ColumnUpdateDto { Column = "doing" };
+
+        // Act
+        var result = await _service.UpdateColumnAsync("non-existent", dto);
+
+        // Assert
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task UpdateColumnAsync_InsertIndex_ShouldPositionCorrectly()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "pos-a", Id = 1, Title = "A", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "pos-b", Id = 2, Title = "B", Column = "doing", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "pos-move", Id = 3, Title = "移動", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        // Act: インデックス1に挿入（AとBの間）
+        var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 1 };
+        await _service.UpdateColumnAsync("pos-move", dto);
+
+        // Assert
+        var sorted = await _context.Tickets.Where(t => t.Column == "doing").OrderBy(t => t.Position).ToListAsync();
+        Assert.Equal(3, sorted.Count);
+        Assert.Equal("pos-a", sorted[0].TicketId);
+        Assert.Equal("pos-move", sorted[1].TicketId);
+        Assert.Equal("pos-b", sorted[2].TicketId);
+    }
+
+    [Fact]
+    public async Task UpdateColumnAsync_NoInsertIndex_AppendsToEnd()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "append-a", Id = 1, Title = "A", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "append-b", Id = 2, Title = "B", Column = "doing", Position = 1 });
+        await _context.SaveChangesAsync();
+
+        // Act: InsertIndex未指定
+        var dto = new ColumnUpdateDto { Column = "doing" };
+        await _service.UpdateColumnAsync("append-a", dto);
+
+        // Assert: append-aは末尾に移動
+        var sorted = await _context.Tickets.Where(t => t.Column == "doing").OrderBy(t => t.Position).ToListAsync();
+        Assert.Equal("append-a", sorted[1].TicketId);
+    }
+
+    // ===== UpdateProgressAsync テスト =====
+
+    [Fact]
+    public async Task UpdateProgressAsync_ShouldUpdateProgress()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "progress-test", Id = 1, Title = "進捗テスト", Column = "todo", Position = 0, Progress = 0 });
+        await _context.SaveChangesAsync();
+
+        var dto = new ProgressUpdateDto { Progress = 75 };
+
+        // Act
+        var result = await _service.UpdateProgressAsync("progress-test", dto);
+
+        // Assert
+        Assert.True(result);
+        var ticket = await _context.Tickets.FindAsync("progress-test");
+        Assert.Equal(75, ticket!.Progress);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_ClampsOver100()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "clamp-over", Id = 1, Title = "クランプ上", Column = "todo", Position = 0, Progress = 0 });
+        await _context.SaveChangesAsync();
+
+        var dto = new ProgressUpdateDto { Progress = 150 };
+
+        // Act
+        await _service.UpdateProgressAsync("clamp-over", dto);
+
+        // Assert
+        var ticket = await _context.Tickets.FindAsync("clamp-over");
+        Assert.Equal(100, ticket!.Progress);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_ClampsUnder0()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "clamp-under", Id = 1, Title = "クランプ下", Column = "todo", Position = 0, Progress = 50 });
+        await _context.SaveChangesAsync();
+
+        var dto = new ProgressUpdateDto { Progress = -20 };
+
+        // Act
+        await _service.UpdateProgressAsync("clamp-under", dto);
+
+        // Assert
+        var ticket = await _context.Tickets.FindAsync("clamp-under");
+        Assert.Equal(0, ticket!.Progress);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_NonExistentTicket_ReturnsFalse()
+    {
+        // Arrange
+        var dto = new ProgressUpdateDto { Progress = 50 };
+
+        // Act
+        var result = await _service.UpdateProgressAsync("non-existent", dto);
+
+        // Assert
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_ShouldRecordHistory()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "progress-history", Id = 1, Title = "進捗履歴", Column = "todo", Position = 0, Progress = 0 });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.UpdateProgressAsync("progress-history", new ProgressUpdateDto { Progress = 50 });
+
+        // Assert
+        var histories = await _context.TicketHistories.Where(h => h.TicketId == "progress-history").ToListAsync();
+        Assert.Contains(histories, h => h.Type == "progress" && h.Value == "50" && h.PreviousValue == "0");
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_SameValue_NoHistory()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket { TicketId = "same-progress", Id = 1, Title = "同じ進捗", Column = "todo", Position = 0, Progress = 50 });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.UpdateProgressAsync("same-progress", new ProgressUpdateDto { Progress = 50 });
+
+        // Assert
+        var histories = await _context.TicketHistories.Where(h => h.TicketId == "same-progress").ToListAsync();
+        Assert.DoesNotContain(histories, h => h.Type == "progress");
+    }
+
+    // ===== UpdateChildTaskAsync テスト =====
+
+    [Fact]
+    public async Task UpdateChildTaskAsync_ShouldUpdateChildDone()
+    {
+        // Arrange
+        var childId = Guid.NewGuid().ToString("N");
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "child-update", Id = 1, Title = "子タスク更新", Column = "todo", Position = 0,
+            ChildTasks = new List<ChildTask> { new() { Id = childId, Text = "タスク1", Done = false } }
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new ChildTaskUpdateDto { Done = true };
+
+        // Act
+        var result = await _service.UpdateChildTaskAsync("child-update", childId, dto);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.True(result!.ChildTasks[0].Done);
+    }
+
+    [Fact]
+    public async Task UpdateChildTaskAsync_NonExistentTicket_ReturnsNull()
+    {
+        // Arrange
+        var dto = new ChildTaskUpdateDto { Done = true };
+
+        // Act
+        var result = await _service.UpdateChildTaskAsync("non-existent", "child-1", dto);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task UpdateChildTaskAsync_NonExistentChild_ReturnsNull()
+    {
+        // Arrange
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "child-missing", Id = 1, Title = "子なし", Column = "todo", Position = 0,
+            ChildTasks = new List<ChildTask> { new() { Id = "valid-id", Text = "タスク", Done = false } }
+        });
+        await _context.SaveChangesAsync();
+
+        var dto = new ChildTaskUpdateDto { Done = true };
+
+        // Act
+        var result = await _service.UpdateChildTaskAsync("child-missing", "non-existent-child", dto);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    // ===== GetHistoryAsync テスト =====
+
+    [Fact]
+    public async Task GetHistoryAsync_ShouldReturnHistoriesDescending()
+    {
+        // Arrange: チケット作成で履歴を記録
+        var dto = new TicketDto { Title = "履歴取得テスト", Column = "todo" };
+        var ticket = await _service.CreateAsync(dto);
+
+        // カラム移動で履歴追加
+        await _service.UpdateColumnAsync(ticket.TicketId, new ColumnUpdateDto { Column = "doing", InsertIndex = 0 });
+
+        // Act
+        var result = await _service.GetHistoryAsync(ticket.TicketId);
+
+        // Assert
+        Assert.True(result.Count >= 2);
+        Assert.Contains(result, h => h.Type == "created");
+        Assert.Contains(result, h => h.Type == "column");
+        // 降順で返ることを確認（新しいものが先）
+        for (int i = 0; i < result.Count - 1; i++)
+        {
+            Assert.True(result[i].Date >= result[i + 1].Date);
+        }
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_NonExistentTicket_ReturnsEmptyList()
+    {
+        // Act
+        var result = await _service.GetHistoryAsync("non-existent");
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_NoHistories_ReturnsEmptyList()
+    {
+        // Arrange: 直接DB追加（履歴なし）
+        _context.Tickets.Add(new Ticket { TicketId = "no-hist", Id = 1, Title = "履歴なし", Column = "todo", Position = 0 });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetHistoryAsync("no-hist");
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    // ===== GetLabelsSuggestAsync テスト =====
+
+    [Fact]
+    public async Task GetLabelsSuggestAsync_ShouldReturnLabelsFromSettings()
+    {
+        // Arrange
+        var setting = new Setting
+        {
+            Id = 1,
+            Labels = new List<LabelConfig>
+            {
+                new() { Name = "重要", Color = "#ef4444" },
+                new() { Name = "緊急", Color = "#f59e0b" }
+            }
+        };
+        _context.Settings.Add(setting);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetLabelsSuggestAsync();
+
+        // Assert
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, l => l.Name == "重要" && l.Color == "#ef4444");
+        Assert.Contains(result, l => l.Name == "緊急" && l.Color == "#f59e0b");
+    }
+
+    [Fact]
+    public async Task GetLabelsSuggestAsync_ShouldIncludeLabelsFromTickets()
+    {
+        // Arrange: 設定なし、チケットにラベルあり
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "label-ticket", Id = 1, Title = "ラベルテスト", Column = "todo", Position = 0,
+            Labels = new List<string> { "チケットラベル" }
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetLabelsSuggestAsync();
+
+        // Assert
+        Assert.Single(result);
+        Assert.Equal("チケットラベル", result[0].Name);
+    }
+
+    [Fact]
+    public async Task GetLabelsSuggestAsync_EmptySettings_ReturnsEmptyList()
+    {
+        // Act
+        var result = await _service.GetLabelsSuggestAsync();
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetLabelsSuggestAsync_InvalidJson_ShouldNotThrow()
+    {
+        // Arrange: 無効なJSON
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "bad-json", Id = 1, Title = "無効JSON", Column = "todo", Position = 0,
+            LabelsJson = "invalid-json"
+        });
+        await _context.SaveChangesAsync();
+
+        // Act & Assert: 例外なし
+        var result = await _service.GetLabelsSuggestAsync();
+        Assert.Empty(result);
+    }
+
+    // ===== GetAssigneesSuggestAsync テスト =====
+
+    [Fact]
+    public async Task GetAssigneesSuggestAsync_ShouldReturnUsersFromSettings()
+    {
+        // Arrange
+        var setting = new Setting
+        {
+            Id = 1,
+            Users = new List<string> { "田中", "鈴木", "高橋" }
+        };
+        _context.Settings.Add(setting);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetAssigneesSuggestAsync();
+
+        // Assert
+        Assert.Equal(3, result.Count);
+        Assert.Contains("田中", result);
+        Assert.Contains("鈴木", result);
+        Assert.Contains("高橋", result);
+    }
+
+    [Fact]
+    public async Task GetAssigneesSuggestAsync_ShouldIncludeAssigneesFromTickets()
+    {
+        // Arrange: 設定なし、チケットに担当者あり
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "assignee-ticket", Id = 1, Title = "担当者テスト", Column = "todo", Position = 0,
+            Assignees = new List<string> { "山田" }
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetAssigneesSuggestAsync();
+
+        // Assert
+        Assert.Single(result);
+        Assert.Equal("山田", result[0]);
+    }
+
+    [Fact]
+    public async Task GetAssigneesSuggestAsync_EmptySettings_ReturnsEmptyList()
+    {
+        // Act
+        var result = await _service.GetAssigneesSuggestAsync();
+
+        // Assert
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetAssigneesSuggestAsync_InvalidJson_ShouldNotThrow()
+    {
+        // Arrange: 無効なJSON
+        _context.Tickets.Add(new Ticket
+        {
+            TicketId = "bad-assignee-json", Id = 1, Title = "無効JSON", Column = "todo", Position = 0,
+            AssigneesJson = "{invalid"
+        });
+        await _context.SaveChangesAsync();
+
+        // Act & Assert: 例外なし
+        var result = await _service.GetAssigneesSuggestAsync();
+        Assert.Empty(result);
+    }
+}

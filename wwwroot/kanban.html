@@ -31,6 +31,8 @@
     <div id="appContent" class="hidden">
     <!-- 画面左上のフィルターエリア -->
     <div class="filter-area" id="filterArea">
+        <!-- 閉じるボタン -->
+        <button class="filter-close-btn" id="filterCloseBtn" title="閉じる">×</button>
         <!-- チケット検索ボックス -->
         <div class="search-box" id="searchBox">
             <span class="filter-icon">🔍</span>
@@ -219,7 +221,10 @@
         <div class="modal">
             <div class="modal-header">
                 <div class="modal-title" id="modalTitle">新しいチケット</div>
-                <button type="button" class="modal-lock-btn" id="modalLockBtn" title="編集ロック">🔓</button>
+                <div class="modal-header-buttons">
+                    <button type="button" class="modal-lock-btn" id="modalLockBtn" title="編集ロック">🔓</button>
+                    <button type="button" class="modal-lock-btn" id="modalEmergencyBtn" title="緊急チケットとして目立つ色にします">🚶</button>
+                </div>
             </div>
             
             <div class="modal-body-two-column">

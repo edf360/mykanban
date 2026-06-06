@@ -2,7 +2,7 @@
  * モーダル操作モジュール
  */
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks } from './childtasks.js';
@@ -23,6 +23,7 @@ const el = {
     cancelBtn: null,
     saveBtn: null,
     lockBtn: null,
+    emergencyBtn: null,
 };
 
 /**
@@ -42,6 +43,7 @@ function cacheElements() {
     el.cancelBtn = document.getElementById('cancelBtn');
     el.saveBtn = document.getElementById('saveBtn');
     el.lockBtn = document.getElementById('modalLockBtn');
+    el.emergencyBtn = document.getElementById('modalEmergencyBtn');
 }
 
 /**
@@ -55,6 +57,7 @@ function _openModal(options) {
         resetModalState();
         setModalState({ newTicketColumn: options.column || 'todo' });
         setTicketLocked(false);
+        setTicketEmergency(false);
         
         // フィルターで選択された担当者をデフォルトに設定
         const selectedAssignee = getFilterAssignee();
@@ -88,6 +91,7 @@ function _openModal(options) {
             currentChildTasks: data.childTasks ? data.childTasks.map(t => ({...t})) : []
         });
         setTicketLocked(data.isLocked || false);
+        setTicketEmergency(data.isEmergency || false);
         
         // DOM更新
         if (el.modalTitle) el.modalTitle.textContent = 'チケットを編集';
@@ -100,6 +104,8 @@ function _openModal(options) {
     
     // ロックUI更新
     updateLockButton();
+    updateEmergencyButton();
+    applyEmergencyToModal();
     applyLockToModal();
     
     // レンダリング
@@ -185,6 +191,33 @@ export function toggleLock() {
 }
 
 /**
+ * 緊急ボタンを更新
+ */
+function updateEmergencyButton() {
+    if (el.emergencyBtn) {
+        el.emergencyBtn.textContent = isTicketEmergency() ? '🏃' : '🚶';
+        el.emergencyBtn.classList.toggle('active', isTicketEmergency());
+    }
+}
+
+/**
+ * 緊急フラグをトグル
+ */
+export function toggleEmergency() {
+    setTicketEmergency(!isTicketEmergency());
+    updateEmergencyButton();
+    applyEmergencyToModal();
+}
+
+/**
+ * モーダルに緊急状態を適用（背景色変更）
+ */
+function applyEmergencyToModal() {
+    if (!el.modalContent) return;
+    el.modalContent.classList.toggle('emergency', isTicketEmergency());
+}
+
+/**
  * フォームからチケットデータを収集
  */
 function collectFormData() {
@@ -210,7 +243,8 @@ function collectFormData() {
         labels: getCurrentLabels(),
         memo: memoVal,
         childTasks: getChildTasks().map(t => ({...t})),
-        isLocked: isTicketLocked()
+        isLocked: isTicketLocked(),
+        isEmergency: isTicketEmergency()
     };
 }
 
@@ -254,6 +288,9 @@ export function initModal() {
     }
     if (el.lockBtn) {
         el.lockBtn.addEventListener('click', toggleLock);
+    }
+    if (el.emergencyBtn) {
+        el.emergencyBtn.addEventListener('click', toggleEmergency);
     }
     
     // モーダル外クリックで保存

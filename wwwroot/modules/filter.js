@@ -14,6 +14,7 @@ const elements = {
     searchInput: null,
     filterToggleBtn: null,
     filterArea: null,
+    filterCloseBtn: null,
 };
 
 /**
@@ -25,6 +26,7 @@ function cacheElements() {
     elements.searchInput = document.getElementById('titleSearchInput');
     elements.filterToggleBtn = document.getElementById('filterToggleBtn');
     elements.filterArea = document.getElementById('filterArea');
+    elements.filterCloseBtn = document.getElementById('filterCloseBtn');
 }
 
 // ===== debounceユーティリティ =====
@@ -83,20 +85,29 @@ function onFilterToggle() {
     elements.filterToggleBtn.classList.toggle('active');
 }
 
+// ===== フィルター閉じるハンドラー =====
+function onFilterClose() {
+    if (!elements.filterArea || !elements.filterToggleBtn) return;
+    elements.filterArea.classList.add('hidden');
+    elements.filterToggleBtn.classList.remove('active');
+}
+
 /**
  * 担当者フィルターをpopulate
  */
 export function populateAssigneeFilter() {
-    if (!elements.assigneeSelect) {
+    const selectEl = document.getElementById('assigneeFilterSelect');
+    if (!selectEl) {
         console.warn('[populateAssigneeFilter] assigneeFilterSelect element not found');
         return;
     }
-    elements.assigneeSelect.innerHTML = '<option value="">すべて</option>';
-    getAssigneeSuggestions().forEach(assignee => {
+    const suggestions = getAssigneeSuggestions();
+    selectEl.innerHTML = '<option value="">すべて</option>';
+    suggestions.forEach(assignee => {
         const option = document.createElement('option');
         option.value = assignee;
         option.textContent = assignee;
-        elements.assigneeSelect.appendChild(option);
+        selectEl.appendChild(option);
     });
 }
 
@@ -127,6 +138,11 @@ export function initFilter() {
     if (elements.filterToggleBtn && elements.filterArea) {
         elements.filterToggleBtn.classList.add('active');
         elements.filterToggleBtn.addEventListener('click', onFilterToggle);
+    }
+
+    // フィルター閉じるボタン
+    if (elements.filterCloseBtn) {
+        elements.filterCloseBtn.addEventListener('click', onFilterClose);
     }
 }
 

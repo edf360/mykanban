@@ -61,7 +61,8 @@ public class TicketService
             MainAssignee = dto.MainAssignee,
             Labels = dto.Labels,
             Memo = dto.Memo,
-            ChildTasks = validChildTasks
+            ChildTasks = validChildTasks,
+            IsEmergency = dto.IsEmergency
         };
 
         // Id は DB AUTOINCREMENT だが、既存制約のため一時的に設定
@@ -129,6 +130,7 @@ public class TicketService
             ticket.Labels = dto.Labels;
         ticket.Memo = dto.Memo;
         ticket.IsLocked = dto.IsLocked;
+        ticket.IsEmergency = dto.IsEmergency;
         if (dto.ChildTasks != null)
         {
             ticket.ChildTasks = dto.ChildTasks

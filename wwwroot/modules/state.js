@@ -19,7 +19,8 @@ const internal = {
     },
     ui: {
         graphPanelOpen: false,
-        ticketLocked: false
+        ticketLocked: false,
+        ticketEmergency: false
     },
     modal: {
         editingTicketId: null,
@@ -367,6 +368,21 @@ export function isTicketLocked() {
  */
 export function setTicketLocked(locked) {
     internal.ui.ticketLocked = locked;
+    emit('ui-changed', internal.ui);
+}
+
+/**
+ * 緊急フラグを取得
+ */
+export function isTicketEmergency() {
+    return internal.ui.ticketEmergency;
+}
+
+/**
+ * 緊急フラグを設定
+ */
+export function setTicketEmergency(emergency) {
+    internal.ui.ticketEmergency = emergency;
     emit('ui-changed', internal.ui);
 }
 

@@ -249,6 +249,9 @@ export function createTicketElement(data) {
         chartHtml = `<div class="ticket-chart" data-start="${safeStartDate}" data-end="${safeEndDate}"></div>`;
     }
 
+    if (data.isEmergency) {
+        ticket.classList.add('emergency');
+    }
     ticket.innerHTML = `
         ${topInfoHtml}
         <div class="ticket-title-row">

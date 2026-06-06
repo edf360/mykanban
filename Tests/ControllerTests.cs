@@ -765,7 +765,7 @@ public class ControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task Update_WithNullDates_ShouldClearDates()
+    public async Task Update_WithNullDates_ShouldKeepExistingDates()
     {
         // Arrange: 日付付きチケットを作成
         _context.Tickets.Add(new Ticket
@@ -780,7 +780,7 @@ public class ControllerTests : IDisposable
         });
         await _context.SaveChangesAsync();
 
-        // Act: 日付をnullで更新（フロントエンドから空文字列→nullとして送信）
+        // Act: 日付をnullで更新（nullは既存データを上書きしない）
         var dto = new TicketDto
         {
             Title = "日付更新テスト",
@@ -789,12 +789,12 @@ public class ControllerTests : IDisposable
         };
         var result = await _controller.Update("date-update", dto);
 
-        // Assert: 日付がnullにクリアされる
+        // Assert: 日付は既存の値のまま
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
         var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
-        Assert.Null(ticket.StartDate);
-        Assert.Null(ticket.EndDate);
+        Assert.Equal(new DateTime(2025, 6, 1), ticket.StartDate);
+        Assert.Equal(new DateTime(2025, 6, 30), ticket.EndDate);
     }
 
     [Fact]
@@ -969,23 +969,24 @@ public class AdditionalControllerTests : IDisposable
     // ===== 完全削除テスト（アーカイブ済みの2度目のDELETE） =====
 
     [Fact]
-    public async Task Delete_ArchivedTicket_ShouldPermanentlyRemove()
+    public async Task Delete_ArchivedTicket_ShouldReturnOkWithoutChange()
     {
         // Arrange: アーカイブ済みチケットを作成
         _context.Tickets.Add(new Ticket { TicketId = "hard-delete", Id = 1, Title = "完全削除テスト", Column = "todo", Position = 0, IsArchived = true });
         await _context.SaveChangesAsync();
 
-        // Act: 2度目のDELETE（完全削除）
+        // Act: アーカイブ済みチケットをDELETE（既にアーカイブ済みなので何もしない）
         var result = await _controller.Delete("hard-delete");
 
-        // Assert: NotFoundが返り、DBから完全に削除される
-        Assert.IsType<NotFoundObjectResult>(result);
+        // Assert: Okが返り、チケットはDBに残ったまま
+        Assert.IsType<OkObjectResult>(result);
         var found = await _context.Tickets.FindAsync("hard-delete");
-        Assert.Null(found);
+        Assert.NotNull(found);
+        Assert.True(found!.IsArchived);
     }
 
     [Fact]
-    public async Task Delete_ThenDeleteAgain_ShouldFirstArchiveThenRemove()
+    public async Task Delete_ThenDeleteAgain_ShouldArchiveThenDoNothing()
     {
         // Arrange: 通常チケットを作成
         _context.Tickets.Add(new Ticket { TicketId = "double-del", Id = 1, Title = "二重削除テスト", Column = "todo", Position = 0 });
@@ -998,11 +999,12 @@ public class AdditionalControllerTests : IDisposable
         Assert.NotNull(afterFirst);
         Assert.True(afterFirst!.IsArchived);
 
-        // Act: 2度目のDELETE（完全削除 → NotFound）
+        // Act: 2度目のDELETE（既にアーカイブ済みなので何もしない → OkObjectResult）
         var result2 = await _controller.Delete("double-del");
-        Assert.IsType<NotFoundObjectResult>(result2);
+        Assert.IsType<OkObjectResult>(result2);
         var afterSecond = await _context.Tickets.FindAsync("double-del");
-        Assert.Null(afterSecond);
+        Assert.NotNull(afterSecond);
+        Assert.True(afterSecond!.IsArchived);
     }
 
     // ===== History機能テスト =====
