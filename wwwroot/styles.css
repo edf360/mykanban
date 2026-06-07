@@ -834,6 +834,12 @@ body {
     flex: 1;
     padding: 4px 8px;
     font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.child-task-item.done input[type="text"] {
+    text-decoration: line-through;
+    color: #9ca3af;
 }
 
 .remove-child-task {
@@ -938,6 +944,89 @@ body {
 .ticket-child-task-text { flex: 1; transition: all 0.2s ease; }
 
 .ticket-child-task-item.done .ticket-child-task-text { text-decoration: line-through; color: #9ca3af; }
+
+.ticket-child-task-progress {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.ticket-child-task-progress:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: #374151;
+}
+
+.child-progress-slider-popup {
+    position: fixed;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.child-progress-slider-input {
+    width: 150px;
+    cursor: pointer;
+}
+
+.child-progress-slider-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.progress-text.disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.progress-text.disabled:hover {
+    text-decoration: none;
+}
+
+.child-task-progress {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+    user-select: none;
+    margin-left: 8px;
+}
+
+.child-task-progress:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: #374151;
+}
+
+.child-task-progress-slider-popup {
+    position: absolute;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
 
 .ticket-chart {
     margin-top: 8px;
@@ -1814,6 +1903,38 @@ body {
     min-width: 36px;
     text-align: right;
     color: #374151;
+}
+
+/* 子タスクトグルアイコン */
+.child-toggle-icon {
+    display: inline-block;
+    margin-right: 4px;
+    font-size: 10px;
+    color: #6b7280;
+    user-select: none;
+    cursor: pointer;
+}
+
+.main-task-header.clickable {
+    cursor: pointer;
+}
+
+.main-task-header.clickable:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* 子タスクヘッダー・セルのインデント */
+.child-task-header {
+    padding-left: 12px !important;
+    font-weight: 500 !important;
+    color: #6b7280 !important;
+    background: rgba(0, 0, 0, 0.02) !important;
+    border-left: 3px solid #e5e7eb !important;
+}
+
+.child-task-cell {
+    padding-left: 12px !important;
+    border-left: 3px solid #e5e7eb !important;
 }
 
 .graph-panel-resize-handle {

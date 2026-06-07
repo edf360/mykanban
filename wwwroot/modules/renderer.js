@@ -220,17 +220,18 @@ export function createTicketElement(data) {
         topInfoHtml += '</div>';
     }
 
-    // 子タスクをチケットに表示
+    // 子タスクをチケットに表示（done=true のタスクは非表示）
     let childTasksHtml = '';
-    if (data.childTasks && data.childTasks.length > 0) {
+    const visibleChildTasks = (data.childTasks || []).filter(task => !task.done);
+    if (visibleChildTasks.length > 0) {
         childTasksHtml = '<div class="ticket-child-tasks">';
-        data.childTasks.forEach((task) => {
-            const doneClass = task.done ? ' done' : '';
+        visibleChildTasks.forEach((task) => {
             const childId = task.id || '';
+            const progress = task.progress || 0;
             childTasksHtml += `
-                <div class="ticket-child-task-item${doneClass}" data-child-id="${childId}">
-                    <input type="checkbox" ${task.done ? 'checked' : ''} data-child-check="${childId}">
+                <div class="ticket-child-task-item" data-child-id="${childId}">
                     <span class="ticket-child-task-text">${escapeHtml(task.text)}</span>
+                    <span class="ticket-child-task-progress" data-child-progress="${childId}" title="クリックして進捗率を変更">${progress}%</span>
                 </div>`;
         });
         childTasksHtml += '</div>';
@@ -263,7 +264,7 @@ export function createTicketElement(data) {
         ${chartHtml}
         <div class="progress-container">
             <span class="progress-label">進捗:</span>
-            <span class="progress-text" title="クリックして進捗率を変更">${data.progress || 0}%</span>
+            <span class="progress-text" title="${(data.childTasks && data.childTasks.length > 0) ? '子タスクがあるため直接編集できません' : 'クリックして進捗率を変更'}">${data.progress || 0}%</span>
         </div>
         <button class="delete-btn">&times;</button>
     `;
@@ -274,47 +275,9 @@ export function createTicketElement(data) {
     
     // チケットクリックでモーダルを開く
     ticket.addEventListener('click', (e) => {
-        if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-slider-popup') || e.target.closest('[data-child-check]')) return;
+        if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-slider-popup')) return;
         if (data.isArchived) return;
         openEditModal(ticket.dataset.id);
-    });
-
-    // 子タスクのチェックボックスイベント
-    const childCheckboxes = ticket.querySelectorAll('[data-child-check]');
-    childCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', async (e) => {
-            e.stopPropagation();
-            const childId = checkbox.dataset.childCheck;
-            try {
-                const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/child-task/${encodeURIComponent(childId)}`, { done: checkbox.checked });
-                setTicket(ticket.dataset.id, updated);
-                
-                // 進捗テキストを更新
-                const progressText = ticket.querySelector('.progress-text');
-                if (progressText) progressText.textContent = `${updated.progress || 0}%`;
-                
-                // 進捗グラフを更新
-                const chartEl = ticket.querySelector('.ticket-chart');
-                if (chartEl && updated.startDate && updated.endDate) {
-                    renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0);
-                }
-                
-                // メモカラムの累積進捗グラフを更新
-                updateMemoColumn();
-            } catch (error) {
-                console.error('Failed to update child task:', error);
-                checkbox.checked = !checkbox.checked;
-            }
-            
-            const item = checkbox.closest('.ticket-child-task-item');
-            if (item) {
-                if (checkbox.checked) {
-                    item.classList.add('done');
-                } else {
-                    item.classList.remove('done');
-                }
-            }
-        });
     });
 
     // グラフを描画
@@ -323,93 +286,172 @@ export function createTicketElement(data) {
         renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0);
     }
     
-    // 進捗テキストクリックでスライダーポップアップを表示
+    // 進捗テキストクリックでスライダーポップアップを表示（子タスクがある場合は無効）
     const progressText = ticket.querySelector('.progress-text');
     const progressContainer = ticket.querySelector('.progress-container');
+    const hasChildTasks = data.childTasks && data.childTasks.length > 0;
     
-    const showProgressSlider = (e) => {
-        e.stopPropagation();
-        // 既存のスライダーを削除
-        document.querySelectorAll('.progress-slider-popup').forEach(el => el.remove());
-        
-        // チケットのドラッグを一時的に無効化
-        const originalDraggable = ticket.draggable;
-        ticket.draggable = false;
-        
-        const popup = document.createElement('div');
-        popup.className = 'progress-slider-popup';
-        popup.innerHTML = `
-            <input type="range" min="0" max="100" step="10" value="${data.progress || 0}" class="progress-slider-input">
-            <div class="progress-slider-label">${data.progress || 0}%</div>
-        `;
-        progressContainer.appendChild(popup);
-        
-        const slider = popup.querySelector('.progress-slider-input');
-        const label = popup.querySelector('.progress-slider-label');
-        
-        // スライダー上の全てのポインターイベントを阻止（チケットドラッグと干渉しないように）
-        ['mousedown', 'pointerdown', 'touchstart', 'click'].forEach(eventType => {
-            slider.addEventListener(eventType, (e) => e.stopPropagation());
-            popup.addEventListener(eventType, (e) => e.stopPropagation());
+    // 子タスクがある場合は進捗テキストをクリック不可（クリック時に警告表示）
+    if (hasChildTasks) {
+        progressText.classList.add('disabled');
+        progressText.addEventListener('click', (e) => {
+            e.stopPropagation();
+            alert('子タスクが存在するため、メインの進捗率は変更できません。');
         });
-        
-        const updateSliderLabel = () => {
-            label.textContent = `${slider.value}%`;
-        };
-        slider.addEventListener('input', updateSliderLabel);
-        
-        const saveProgress = async () => {
-            const newProgress = parseInt(slider.value);
-            const oldProgress = data.progress || 0;
+    } else {
+        const showProgressSlider = (e) => {
+            e.stopPropagation();
+            // 既存のスライダーを削除
+            document.querySelectorAll('.progress-slider-popup').forEach(el => el.remove());
             
-            if (newProgress !== oldProgress) {
+            // チケットのドラッグを一時的に無効化
+            const originalDraggable = ticket.draggable;
+            ticket.draggable = false;
+            
+            const popup = document.createElement('div');
+            popup.className = 'progress-slider-popup';
+            popup.innerHTML = `
+                <input type="range" min="0" max="100" step="10" value="${data.progress || 0}" class="progress-slider-input">
+                <div class="progress-slider-label">${data.progress || 0}%</div>
+            `;
+            progressContainer.appendChild(popup);
+            
+            const slider = popup.querySelector('.progress-slider-input');
+            const label = popup.querySelector('.progress-slider-label');
+            
+            // スライダー上の全てのポインターイベントを阻止（チケットドラッグと干渉しないように）
+            ['mousedown', 'pointerdown', 'touchstart', 'click'].forEach(eventType => {
+                slider.addEventListener(eventType, (e) => e.stopPropagation());
+                popup.addEventListener(eventType, (e) => e.stopPropagation());
+            });
+            
+            const updateSliderLabel = () => {
+                label.textContent = `${slider.value}%`;
+            };
+            slider.addEventListener('input', updateSliderLabel);
+            
+            const saveProgress = async () => {
+                const newProgress = parseInt(slider.value);
+                const oldProgress = data.progress || 0;
+                
+                if (newProgress !== oldProgress) {
+                    try {
+                        await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/progress`, { progress: newProgress });
+                        updateTicketField(ticket.dataset.id, 'progress', newProgress);
+                        
+                        // 進捗テキストを更新
+                        if (progressText) progressText.textContent = `${newProgress}%`;
+                        
+                        // 進捗グラフを更新
+                        const chartEl = ticket.querySelector('.ticket-chart');
+                        if (chartEl) {
+                            const ticketData = getTicket(ticket.dataset.id);
+                            if (ticketData && ticketData.startDate && ticketData.endDate) {
+                                renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0);
+                            }
+                        }
+                        
+                        // 累積進捗グラフを更新
+                        updateMemoColumn();
+                    } catch (error) {
+                        console.error('Failed to update progress:', error);
+                    }
+                }
+            };
+            
+            const hideSlider = () => {
+                // チケットのドラッグを復元
+                ticket.draggable = originalDraggable;
+                saveProgress();
+                popup.remove();
+                document.removeEventListener('click', onClickOutside);
+                progressSliderListeners.delete(ticket.dataset.id);
+            };
+            
+            const onClickOutside = (e) => {
+                if (!popup.contains(e.target)) {
+                    hideSlider();
+                }
+            };
+            
+            setTimeout(() => {
+                document.addEventListener('click', onClickOutside);
+            }, 0);
+            
+            progressSliderListeners.set(ticket.dataset.id, { onClick: onClickOutside });
+        };
+        
+        progressText.addEventListener('click', showProgressSlider);
+    }
+
+    // 子タスクの進捗スライダー
+    const childProgressSpans = ticket.querySelectorAll('[data-child-progress]');
+    childProgressSpans.forEach(span => {
+        span.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const childId = span.dataset.childProgress;
+            const currentProgress = parseInt(span.textContent) || 0;
+            
+            // 既存のスライダーを削除
+            document.querySelectorAll('.child-progress-slider-popup').forEach(el => el.remove());
+            
+            const popup = document.createElement('div');
+            popup.className = 'child-progress-slider-popup';
+            popup.innerHTML = `
+                <input type="range" min="0" max="100" step="10" value="${currentProgress}" class="child-progress-slider-input">
+                <div class="child-progress-slider-label">${currentProgress}%</div>
+            `;
+            
+            const rect = span.getBoundingClientRect();
+            popup.style.position = 'fixed';
+            popup.style.top = `${rect.top - 60}px`;
+            popup.style.left = `${rect.left}px`;
+            document.body.appendChild(popup);
+            
+            const slider = popup.querySelector('.child-progress-slider-input');
+            const label = popup.querySelector('.child-progress-slider-label');
+            
+            slider.addEventListener('input', () => {
+                label.textContent = `${slider.value}%`;
+            });
+            
+            slider.addEventListener('change', async () => {
+                const newProgress = parseInt(slider.value);
                 try {
-                    await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/progress`, { progress: newProgress });
-                    updateTicketField(ticket.dataset.id, 'progress', newProgress);
+                    const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/child-task/${encodeURIComponent(childId)}`, { done: false, progress: newProgress });
+                    setTicket(ticket.dataset.id, updated);
                     
                     // 進捗テキストを更新
-                    if (progressText) progressText.textContent = `${newProgress}%`;
+                    const progressText = ticket.querySelector('.progress-text');
+                    if (progressText) progressText.textContent = `${updated.progress || 0}%`;
+                    
+                    // 子タスク進捗テキストを更新
+                    span.textContent = `${newProgress}%`;
                     
                     // 進捗グラフを更新
                     const chartEl = ticket.querySelector('.ticket-chart');
-                    if (chartEl) {
-                        const ticketData = getTicket(ticket.dataset.id);
-                        if (ticketData && ticketData.startDate && ticketData.endDate) {
-                            renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0);
-                        }
+                    if (chartEl && updated.startDate && updated.endDate) {
+                        renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0);
                     }
                     
                     // 累積進捗グラフを更新
                     updateMemoColumn();
                 } catch (error) {
-                    console.error('Failed to update progress:', error);
+                    console.error('Failed to update child task progress:', error);
                 }
-            }
-        };
-        
-        const hideSlider = () => {
-            // チケットのドラッグを復元
-            ticket.draggable = originalDraggable;
-            saveProgress();
-            popup.remove();
-            document.removeEventListener('click', onClickOutside);
-            progressSliderListeners.delete(ticket.dataset.id);
-        };
-        
-        const onClickOutside = (e) => {
-            if (!popup.contains(e.target)) {
-                hideSlider();
-            }
-        };
-        
-        setTimeout(() => {
-            document.addEventListener('click', onClickOutside);
-        }, 0);
-        
-        progressSliderListeners.set(ticket.dataset.id, { onClick: onClickOutside });
-    };
-    
-    progressText.addEventListener('click', showProgressSlider);
+                popup.remove();
+            });
+            
+            // クリックで閉じる
+            const closeHandler = (e) => {
+                if (!popup.contains(e.target)) {
+                    popup.remove();
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeHandler), 0);
+        });
+    });
 
     // 削除ボタン
     const deleteBtn = ticket.querySelector('.delete-btn');

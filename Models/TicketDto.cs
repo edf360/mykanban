@@ -24,6 +24,7 @@ public class ChildTaskDto
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Text { get; set; } = string.Empty;
     public bool Done { get; set; }
+    public int Progress { get; set; }
 }
 
 /// <summary>
@@ -53,6 +54,7 @@ public class ProgressUpdateDto
 public class ChildTaskUpdateDto
 {
     public bool Done { get; set; }
+    public int? Progress { get; set; }
 }
 
 /// <summary>

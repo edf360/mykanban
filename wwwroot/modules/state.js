@@ -20,7 +20,8 @@ const internal = {
     ui: {
         graphPanelOpen: false,
         ticketLocked: false,
-        ticketEmergency: false
+        ticketEmergency: false,
+        hiddenChildTasks: new Set()  // "ticketId:childId"形式で非表示の子タスクを管理
     },
     modal: {
         editingTicketId: null,
@@ -603,5 +604,27 @@ export function formatDateWithDay(date) {
         });
     } catch {
         return '';
+    }
+}
+
+// ===== 子タスク表示/非表示管理 =====
+
+/**
+ * 子タスクの表示/非表示状態を取得
+ */
+export function isChildTaskHidden(ticketId, childId) {
+    const key = `${ticketId}:${childId}`;
+    return internal.ui.hiddenChildTasks.has(key);
+}
+
+/**
+ * 子タスクの表示/非表示状態を設定
+ */
+export function setChildTaskHidden(ticketId, childId, hidden) {
+    const key = `${ticketId}:${childId}`;
+    if (hidden) {
+        internal.ui.hiddenChildTasks.add(key);
+    } else {
+        internal.ui.hiddenChildTasks.delete(key);
     }
 }

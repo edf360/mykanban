@@ -102,4 +102,7 @@ public class ChildTask
 
     [JsonPropertyName("done")]
     public bool Done { get; set; }
+
+    [JsonPropertyName("progress")]
+    public int Progress { get; set; }
 }

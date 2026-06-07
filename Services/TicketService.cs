@@ -41,7 +41,8 @@ public class TicketService
             {
                 Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                 Text = ct.Text,
-                Done = ct.Done
+                Done = ct.Done,
+                Progress = ct.Progress
             })
             .ToList();
 
@@ -154,7 +155,8 @@ public class TicketService
                 {
                     Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                     Text = ct.Text,
-                    Done = ct.Done
+                    Done = ct.Done,
+                    Progress = ct.Progress
                 })
                 .ToList();
         }
@@ -314,6 +316,12 @@ public class TicketService
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return false;
 
+        // 子タスクがある場合は進捗を直接更新できない
+        if (ticket.ChildTasks != null && ticket.ChildTasks.Count > 0)
+        {
+            return false;
+        }
+
         var oldProgress = ticket.Progress;
         ticket.Progress = Math.Max(0, Math.Min(100, dto.Progress));
 
@@ -336,7 +344,18 @@ public class TicketService
         if (childTask == null) return null;
 
         childTask.Done = dto.Done;
+        if (dto.Progress.HasValue)
+        {
+            childTask.Progress = Math.Max(0, Math.Min(100, dto.Progress.Value));
+        }
         ticket.ChildTasks = childTasks!;
+
+        // 子タスクの進捗からメインタスクの進捗を平均値で計算
+        if (childTasks != null && childTasks.Count > 0)
+        {
+            ticket.Progress = (int)Math.Round(childTasks.Average(ct => ct.Progress));
+        }
+
         await _context.SaveChangesAsync();
 
         return ticket;

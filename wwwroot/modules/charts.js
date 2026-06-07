@@ -356,15 +356,23 @@ function getAssigneeOrder() {
  */
 const COLUMN_ORDER = ['archive', 'done', 'doing', 'todo'];
 
+// 子タスク表示のトグル状態管理 (title -> boolean)
+const childTaskVisibility = new Map();
+
 /**
  * 進捗マトリックス表を描画
- * 列: チケット名（カラム順 archive → done → doing → todo でソート）
+ * 列: チケット名 + 子タスク（カラム順 archive → done → doing → todo でソート）
  * 行: 担当者（設定画面の順番）
+ * メインタスクヘッダークリックで子タスク列の表示/非表示をトグル
  */
 export function renderProgressMatrix(container, labelName, excludedTicketIds = []) {
-    if (!container) return;
+    if (!container) {
+        console.warn('renderProgressMatrix: container is null');
+        return;
+    }
     
     let tickets = getTicketsByLabel(labelName);
+    console.log(`renderProgressMatrix: label="${labelName}", tickets=${tickets.length}`);
     // 除外チケットをフィルタ（IDを数値で比較）
     if (excludedTicketIds.length > 0) {
         const excludedNumIds = excludedTicketIds.map(id => Number(id));
@@ -372,6 +380,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     }
     if (tickets.length === 0) {
         container.innerHTML = '<p class="graph-placeholder">該当するチケットがありません</p>';
+        console.log('renderProgressMatrix: no tickets for label');
         return;
     }
     
@@ -398,6 +407,23 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         return aMinCol - bMinCol;
     });
     
+    // 各タイトルの子タスクを収集（重複除去、done=false のみ）
+    const titleChildTasks = new Map();
+    titles.forEach(title => {
+        const titleTickets = titleMap.get(title);
+        const childSet = new Map(); // id -> childTask
+        titleTickets.forEach(t => {
+            if (t.childTasks && Array.isArray(t.childTasks)) {
+                t.childTasks.forEach(ct => {
+                    if (!ct.done && !childSet.has(ct.id)) {
+                        childSet.set(ct.id, ct);
+                    }
+                });
+            }
+        });
+        titleChildTasks.set(title, Array.from(childSet.values()));
+    });
+    
     // 担当者を収集
     const assigneeSet = new Set();
     tickets.forEach(t => {
@@ -413,8 +439,10 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         return (ia >= 0 ? ia : Infinity) - (ib >= 0 ? ib : Infinity);
     });
     
+    console.log(`renderProgressMatrix: titles=${titles.length}, assignees=${assignees.length}`);
     if (assignees.length === 0 || titles.length === 0) {
         container.innerHTML = '<p class="graph-placeholder">データがありません</p>';
+        console.log('renderProgressMatrix: no assignees or titles');
         return;
     }
     
@@ -429,10 +457,36 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     headerRow.appendChild(thName);
     
     titles.forEach(title => {
+        const childTasks = titleChildTasks.get(title) || [];
+        const hasChildren = childTasks.length > 0;
+        
+        // メインタスクヘッダー
         const th = document.createElement('th');
+        th.className = hasChildren ? 'main-task-header clickable' : 'main-task-header';
         th.textContent = title;
         th.title = title;
+        if (hasChildren) {
+            const prefixSpan = document.createElement('span');
+            prefixSpan.className = 'child-toggle-icon';
+            const visible = childTaskVisibility.get(title) || false;
+            prefixSpan.textContent = visible ? '▾' : '▸';
+            prefixSpan.title = visible ? '子タスクを非表示' : '子タスクを表示';
+            th.prepend(prefixSpan);
+        }
         headerRow.appendChild(th);
+        
+        // 子タスクヘッダー（デフォルト非表示）
+        childTasks.forEach(ct => {
+            const childTh = document.createElement('th');
+            childTh.className = 'child-task-header';
+            childTh.dataset.parentTitle = title;
+            childTh.textContent = ct.text || '無題';
+            childTh.title = ct.text || '無題';
+            if (!childTaskVisibility.get(title)) {
+                childTh.style.display = 'none';
+            }
+            headerRow.appendChild(childTh);
+        });
     });
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -447,6 +501,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         tr.appendChild(tdName);
         
         titles.forEach(title => {
+            // メインタスクセル
             const td = document.createElement('td');
             const titleTickets = titleMap.get(title).filter(t =>
                 t.assignees && t.assignees.includes(assignee)
@@ -484,13 +539,89 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
             }
             
             tr.appendChild(td);
+            
+            // 子タスクセル
+            const childTasks = titleChildTasks.get(title) || [];
+            childTasks.forEach(ct => {
+                const childTd = document.createElement('td');
+                childTd.className = 'child-task-cell';
+                childTd.dataset.parentTitle = title;
+                
+                // 子タスクの進捗率を表示
+                // 該当チケットから子タスクを探す
+                let childProgress = null;
+                for (const t of titleTickets) {
+                    if (t.childTasks) {
+                        const found = t.childTasks.find(c => c.id === ct.id);
+                        if (found) {
+                            childProgress = found.progress;
+                            break;
+                        }
+                    }
+                }
+                
+                if (childProgress === null) {
+                    const span = document.createElement('span');
+                    span.style.color = '#d1d5db';
+                    span.textContent = '—';
+                    childTd.appendChild(span);
+                } else {
+                    const color = getProgressColor(childProgress);
+                    const cellDiv = document.createElement('div');
+                    cellDiv.className = 'progress-bar-cell';
+                    
+                    const barDiv = document.createElement('div');
+                    barDiv.className = 'progress-bar-mini';
+                    const fillDiv = document.createElement('div');
+                    fillDiv.className = 'progress-bar-mini-fill';
+                    fillDiv.style.width = childProgress + '%';
+                    fillDiv.style.background = color;
+                    barDiv.appendChild(fillDiv);
+                    
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'progress-bar-text';
+                    textSpan.textContent = childProgress + '%';
+                    
+                    cellDiv.appendChild(barDiv);
+                    cellDiv.appendChild(textSpan);
+                    childTd.appendChild(cellDiv);
+                }
+                
+                if (!childTaskVisibility.get(title)) {
+                    childTd.style.display = 'none';
+                }
+                
+                tr.appendChild(childTd);
+            });
         });
         
         tbody.appendChild(tr);
     });
     table.appendChild(tbody);
     
+    // メインタスクヘッダーのクリックイベント（子タスクトグル）
+    table.querySelectorAll('.main-task-header.clickable').forEach(th => {
+        th.addEventListener('click', () => {
+            const title = th.title;
+            const isVisible = childTaskVisibility.get(title) || false;
+            childTaskVisibility.set(title, !isVisible);
+            
+            // トグルアイコンを更新
+            const icon = th.querySelector('.child-toggle-icon');
+            if (icon) {
+                icon.textContent = !isVisible ? '▾' : '▸';
+                icon.title = !isVisible ? '子タスクを非表示' : '子タスクを表示';
+            }
+            
+            // 子タスク列の表示/非表示をトグル
+            table.querySelectorAll(`[data-parent-title="${title}"]`).forEach(cell => {
+                cell.style.display = !isVisible ? '' : 'none';
+            });
+        });
+    });
+    
     container.innerHTML = '';
     container.appendChild(table);
+    console.log('renderProgressMatrix: table appended successfully');
 }
 
