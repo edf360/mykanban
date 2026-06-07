@@ -47,6 +47,13 @@ public class TicketService
 
         var column = dto.Column ?? "todo";
 
+        // 担当者がいるがメイン担当が未設定の場合は最初の担当者をメインに設定
+        string? mainAssignee = dto.MainAssignee;
+        if (string.IsNullOrEmpty(mainAssignee) && dto.Assignees != null && dto.Assignees.Count > 0)
+        {
+            mainAssignee = dto.Assignees[0];
+        }
+        
         var ticket = new Ticket
         {
             TicketId = Guid.NewGuid().ToString("N"),
@@ -58,7 +65,7 @@ public class TicketService
             EndDate = dto.EndDate,
             Effort = dto.Effort,
             Assignees = dto.Assignees,
-            MainAssignee = dto.MainAssignee,
+            MainAssignee = mainAssignee,
             Labels = dto.Labels,
             Memo = dto.Memo,
             ChildTasks = validChildTasks,
@@ -125,7 +132,15 @@ public class TicketService
             ticket.Effort = dto.Effort;
         if (dto.Assignees != null)
             ticket.Assignees = dto.Assignees;
-        ticket.MainAssignee = dto.MainAssignee;
+        // 担当者がいるがメイン担当が未設定の場合は最初の担当者をメインに設定
+        if (string.IsNullOrEmpty(dto.MainAssignee) && dto.Assignees != null && dto.Assignees.Count > 0)
+        {
+            ticket.MainAssignee = dto.Assignees[0];
+        }
+        else if (dto.MainAssignee != null)
+        {
+            ticket.MainAssignee = dto.MainAssignee;
+        }
         if (dto.Labels != null)
             ticket.Labels = dto.Labels;
         ticket.Memo = dto.Memo;

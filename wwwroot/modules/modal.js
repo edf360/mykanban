@@ -59,10 +59,10 @@ function _openModal(options) {
         setTicketLocked(false);
         setTicketEmergency(false);
         
-        // フィルターで選択された担当者をデフォルトに設定
+        // フィルターで選択された担当者をデフォルトに設定（メイン担当も自動設定）
         const selectedAssignee = getFilterAssignee();
         if (selectedAssignee) {
-            setModalState({ currentAssignees: [selectedAssignee] });
+            setModalState({ currentAssignees: [selectedAssignee], mainAssignee: selectedAssignee });
         }
         
         // DOM初期化
@@ -83,11 +83,13 @@ function _openModal(options) {
             return;
         }
         
+        // メイン担当が未設定の場合は有効担当者の最初をメインに設定
+        const mainAssignee = data.mainAssignee || (data.assignees && data.assignees.length > 0 ? data.assignees[0] : null);
         setModalState({
             editingTicketId: options.ticketId,
             currentLabels: data.labels ? [...data.labels] : [],
             currentAssignees: data.assignees ? [...data.assignees] : [],
-            mainAssignee: data.mainAssignee || null,
+            mainAssignee,
             currentChildTasks: data.childTasks ? data.childTasks.map(t => ({...t})) : []
         });
         setTicketLocked(data.isLocked || false);
@@ -233,13 +235,20 @@ function collectFormData() {
     const effortVal = el.effort ? el.effort.value : '';
     const memoVal = el.memo ? el.memo.value.trim() : '';
     
+    const assignees = getCurrentAssignees();
+    let mainAssignee = getMainAssignee();
+    // 担当者がいるがメイン担当が未設定の場合は最初の担当者をメインに設定
+    if (!mainAssignee && assignees.length > 0) {
+        mainAssignee = assignees[0];
+    }
+    
     return {
         title,
         startDate: startDateVal || null,
         endDate: endDateVal || null,
         effort: parseInt(effortVal) || null,
-        assignees: getCurrentAssignees(),
-        mainAssignee: getMainAssignee(),
+        assignees,
+        mainAssignee,
         labels: getCurrentLabels(),
         memo: memoVal,
         childTasks: getChildTasks().map(t => ({...t})),

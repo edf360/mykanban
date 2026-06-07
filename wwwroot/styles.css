@@ -363,49 +363,17 @@ body {
     position: relative;
 }
 
-.progress-bar {
-    flex: 1;
-    height: 8px;
-    background: rgba(0, 0, 0, 0.06);
-    border-radius: 4px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: height 0.2s ease;
-}
-
-.progress-bar:hover { height: 12px; }
-
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #6b7280, #9ca3af);
-    transition: width 0.1s ease;
-    border-radius: 4px;
-    position: relative;
-}
-
-.progress-fill::after {
-    content: '';
-    position: absolute;
-    right: -4px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 12px;
-    height: 12px;
-    background: #fff;
-    border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.progress-bar:hover .progress-fill::after { opacity: 1; }
-
 .progress-text {
     color: rgba(0, 0, 0, 0.6);
     font-size: 12px;
     min-width: 40px;
     text-align: right;
     font-weight: 600;
+    cursor: pointer;
+}
+
+.progress-text:hover {
+    color: #2563eb;
 }
 
 .progress-label {
@@ -414,6 +382,34 @@ body {
     font-weight: 500;
     transition: color 0.2s ease;
     pointer-events: none;
+}
+
+.progress-slider-popup {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.progress-slider-input {
+    width: 150px;
+    cursor: pointer;
+}
+
+.progress-slider-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.8);
 }
 
 .delete-btn {
@@ -1835,8 +1831,101 @@ body {
 .graph-panel-resize-handle.dragging { background: rgba(59, 130, 246, 0.2); }
 
 /* ============================================
-   モバイル対応 (max-width: 768px)
-   ============================================ */
+ 担当者ドロップダウンのカスタムスタイル
+ ============================================ */
+
+/* 担当者ドロップダウンのリストアイテム */
+.assignee-list-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.assignee-list-item:last-child {
+    border-bottom: none;
+}
+
+.assignee-list-item:hover {
+    background-color: #f9f9f9;
+}
+
+/* 担当者名 */
+.assignee-item-name {
+    flex-grow: 1;
+    margin-right: 10px;
+    font-size: 13px;
+}
+
+/* コントロールエリア（有効/無効 + メイン） */
+.assignee-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* トグルスイッチ（有効/無効） */
+.assignee-switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.assignee-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.assignee-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 20px;
+}
+
+.assignee-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+.assignee-switch input:checked + .assignee-slider {
+    background-color: #2196F3;
+}
+
+.assignee-switch input:checked + .assignee-slider:before {
+    transform: translateX(14px);
+}
+
+/* メインチェックボックスラベル */
+.assignee-main-check-label {
+    font-size: 12px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ============================================
+ モバイル対応 (max-width: 768px)
+ ============================================ */
 @media (max-width: 768px) {
     .kanban-board { overflow-x: auto; }
 
@@ -1878,4 +1967,55 @@ body {
     .filter-area { flex-wrap: wrap; }
 
     .header-area { flex-wrap: wrap; gap: 8px; }
+}
+
+/* 担当者選択ボタンのスタイル（ドロップダウンヘッダー） */
+#assigneeToggleBtn {
+    width: 100%;
+    padding: 8px 12px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+#assigneeToggleBtn:hover {
+    background-color: #e0e0e0;
+}
+
+/* 担当者ドロップダウンリスト */
+#assigneeList {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+#assigneeList.active {
+    display: block;
+}
+
+/* ドロップダウンコンテナ */
+#assigneeDropdown {
+    position: relative;
+    width: 100%;
+    user-select: none;
+}
+
+/* 編集ウィンドウ内の担当者タグは非表示（ドロップダウン内で選択状態がわかるため） */
+#assigneeTags {
+    display: none;
 }

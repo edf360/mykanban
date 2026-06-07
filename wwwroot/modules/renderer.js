@@ -12,8 +12,8 @@ import { updateMemoColumn } from './memo.js';
 /**
  * ラベル名から色情報を取得するマップ（設定データから構築）
  */
-// グローバルイベントリスナーのクリーンアップ用配列
-const progressEventListeners = new Map();
+// 進捗スライダーのグローバルイベントリスナー用マップ
+const progressSliderListeners = new Map();
 
 // ラベルカラーキャッシュ
 let cachedLabelColors = null;
@@ -113,14 +113,15 @@ export function ticketMatchesFilter(ticket) {
 }
 
 /**
- * 進捗ドラッグ用のグローバルリスナーを全クリーンアップ
+ * 進捗スライダー用のグローバルリスナーを全クリーンアップ
  */
 function cleanupProgressListeners() {
-    progressEventListeners.forEach(({ onMouseMove, onMouseUp }, id) => {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+    progressSliderListeners.forEach(({ onClick }, id) => {
+        document.removeEventListener('click', onClick);
     });
-    progressEventListeners.clear();
+    progressSliderListeners.clear();
+    // 表示中のスライダーを削除
+    document.querySelectorAll('.progress-slider-popup').forEach(el => el.remove());
 }
 
 /**
@@ -262,10 +263,7 @@ export function createTicketElement(data) {
         ${chartHtml}
         <div class="progress-container">
             <span class="progress-label">進捗:</span>
-            <div class="progress-bar">
-                <div class="progress-fill" style="width: ${data.progress || 0}%"></div>
-            </div>
-            <span class="progress-text">${data.progress || 0}%</span>
+            <span class="progress-text" title="クリックして進捗率を変更">${data.progress || 0}%</span>
         </div>
         <button class="delete-btn">&times;</button>
     `;
@@ -276,8 +274,7 @@ export function createTicketElement(data) {
     
     // チケットクリックでモーダルを開く
     ticket.addEventListener('click', (e) => {
-        if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-bar') || e.target.closest('[data-child-check]')) return;
-        if (ticket.dataset.progressDragging === 'true') return;
+        if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-slider-popup') || e.target.closest('[data-child-check]')) return;
         if (data.isArchived) return;
         openEditModal(ticket.dataset.id);
     });
@@ -292,10 +289,8 @@ export function createTicketElement(data) {
                 const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/child-task/${encodeURIComponent(childId)}`, { done: checkbox.checked });
                 setTicket(ticket.dataset.id, updated);
                 
-                // 進捗バー/テキストを更新
-                const progressFill = ticket.querySelector('.progress-fill');
+                // 進捗テキストを更新
                 const progressText = ticket.querySelector('.progress-text');
-                if (progressFill) progressFill.style.width = `${updated.progress || 0}%`;
                 if (progressText) progressText.textContent = `${updated.progress || 0}%`;
                 
                 // 進捗グラフを更新
@@ -328,82 +323,100 @@ export function createTicketElement(data) {
         renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0);
     }
     
-    // 進捗バーのドラッグ処理（メモリリーク修正: 名前付き関数でremoveEventListener可能に）
-    const progressBar = ticket.querySelector('.progress-bar');
-    const progressFill = ticket.querySelector('.progress-fill');
+    // 進捗テキストクリックでスライダーポップアップを表示
     const progressText = ticket.querySelector('.progress-text');
+    const progressContainer = ticket.querySelector('.progress-container');
     
-    let isDragging = false;
-    
-    const updateProgress = (clientX) => {
-        const rect = progressBar.getBoundingClientRect();
-        let percentage = ((clientX - rect.left) / rect.width) * 100;
-        percentage = Math.max(0, Math.min(100, Math.round(percentage / 10) * 10));
-        progressFill.style.width = `${percentage}%`;
-        progressText.textContent = `${percentage}%`;
-    };
-    
-    progressBar.addEventListener('mousedown', (e) => {
+    const showProgressSlider = (e) => {
         e.stopPropagation();
-        e.preventDefault();
-        isDragging = true;
-        ticket.dataset.progressDragging = 'true';
-        updateProgress(e.clientX);
+        // 既存のスライダーを削除
+        document.querySelectorAll('.progress-slider-popup').forEach(el => el.remove());
         
+        // チケットのドラッグを一時的に無効化
+        const originalDraggable = ticket.draggable;
         ticket.draggable = false;
-    });
-    
-    // 名前付き関数として定義（removeEventListener用）
-    const onMouseMove = (e) => {
-        if (isDragging) {
-            e.preventDefault();
-            updateProgress(e.clientX);
-        }
-    };
-    
-    const onMouseUp = async (e) => {
-        if (isDragging) {
-            isDragging = false;
-            ticket.draggable = true;
+        
+        const popup = document.createElement('div');
+        popup.className = 'progress-slider-popup';
+        popup.innerHTML = `
+            <input type="range" min="0" max="100" step="10" value="${data.progress || 0}" class="progress-slider-input">
+            <div class="progress-slider-label">${data.progress || 0}%</div>
+        `;
+        progressContainer.appendChild(popup);
+        
+        const slider = popup.querySelector('.progress-slider-input');
+        const label = popup.querySelector('.progress-slider-label');
+        
+        // スライダー上の全てのポインターイベントを阻止（チケットドラッグと干渉しないように）
+        ['mousedown', 'pointerdown', 'touchstart', 'click'].forEach(eventType => {
+            slider.addEventListener(eventType, (e) => e.stopPropagation());
+            popup.addEventListener(eventType, (e) => e.stopPropagation());
+        });
+        
+        const updateSliderLabel = () => {
+            label.textContent = `${slider.value}%`;
+        };
+        slider.addEventListener('input', updateSliderLabel);
+        
+        const saveProgress = async () => {
+            const newProgress = parseInt(slider.value);
+            const oldProgress = data.progress || 0;
             
-            const percentage = parseInt(progressText.textContent);
-            
-            try {
-                await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/progress`, { progress: percentage });
-
-                // 進捗値をローカル状態に反映（カラム移動は行わない）
-                updateTicketField(ticket.dataset.id, 'progress', percentage);
-            } catch (error) {
-                console.error('Failed to update progress:', error);
-            }
-            
-            // 対象チケットの進捗グラフを更新
-            const chartEl = ticket.querySelector('.ticket-chart');
-            if (chartEl) {
-                const ticketData = getTicket(ticket.dataset.id);
-                if (ticketData && ticketData.startDate && ticketData.endDate) {
-                    renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0);
+            if (newProgress !== oldProgress) {
+                try {
+                    await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/progress`, { progress: newProgress });
+                    updateTicketField(ticket.dataset.id, 'progress', newProgress);
+                    
+                    // 進捗テキストを更新
+                    if (progressText) progressText.textContent = `${newProgress}%`;
+                    
+                    // 進捗グラフを更新
+                    const chartEl = ticket.querySelector('.ticket-chart');
+                    if (chartEl) {
+                        const ticketData = getTicket(ticket.dataset.id);
+                        if (ticketData && ticketData.startDate && ticketData.endDate) {
+                            renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0);
+                        }
+                    }
+                    
+                    // 累積進捗グラフを更新
+                    updateMemoColumn();
+                } catch (error) {
+                    console.error('Failed to update progress:', error);
                 }
             }
-            
-            // 個人の累積進捗グラフを更新（メモカラムに表示されている場合）
-            updateMemoColumn();
-            
-            ticket.dataset.progressDragging = 'false';
-        }
+        };
+        
+        const hideSlider = () => {
+            // チケットのドラッグを復元
+            ticket.draggable = originalDraggable;
+            saveProgress();
+            popup.remove();
+            document.removeEventListener('click', onClickOutside);
+            progressSliderListeners.delete(ticket.dataset.id);
+        };
+        
+        const onClickOutside = (e) => {
+            if (!popup.contains(e.target)) {
+                hideSlider();
+            }
+        };
+        
+        setTimeout(() => {
+            document.addEventListener('click', onClickOutside);
+        }, 0);
+        
+        progressSliderListeners.set(ticket.dataset.id, { onClick: onClickOutside });
     };
     
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-    // クリーンアップ用マップに登録（チケット削除時に一括削除用）
-    progressEventListeners.set(ticket.dataset.id, { onMouseMove, onMouseUp });
+    progressText.addEventListener('click', showProgressSlider);
 
     // 削除ボタン
     const deleteBtn = ticket.querySelector('.delete-btn');
     deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         // リスナーを即座に削除（リーク防止）
-        progressEventListeners.delete(ticket.dataset.id);
+        progressSliderListeners.delete(ticket.dataset.id);
         const ticketData = getTicket(ticket.dataset.id);
         const isArchived = ticketData && ticketData.isArchived;
         
@@ -438,12 +451,11 @@ export function createTicketElement(data) {
 export function recreateTicket(ticketEl, data, column) {
     const oldId = ticketEl.dataset.id;
     
-    // 古いチケットの進捗ドラッグリスナーをクリーンアップ
-    const oldListeners = progressEventListeners.get(oldId);
+    // 古いチケットのスライダーリスナーをクリーンアップ
+    const oldListeners = progressSliderListeners.get(oldId);
     if (oldListeners) {
-        document.removeEventListener('mousemove', oldListeners.onMouseMove);
-        document.removeEventListener('mouseup', oldListeners.onMouseUp);
-        progressEventListeners.delete(oldId);
+        document.removeEventListener('click', oldListeners.onClick);
+        progressSliderListeners.delete(oldId);
     }
     
     // oldIdをdataに設定してcreateTicketElement内で処理させる
@@ -452,9 +464,7 @@ export function recreateTicket(ticketEl, data, column) {
     
     // 新しいデータの進捗値を使用（古いDOMの値を無視）
     const percentage = data.progress || 0;
-    const progressFill = newTicket.querySelector('.progress-fill');
     const progressText = newTicket.querySelector('.progress-text');
-    if (progressFill) progressFill.style.width = `${percentage}%`;
     if (progressText) progressText.textContent = `${percentage}%`;
     
     // グラフを更新
