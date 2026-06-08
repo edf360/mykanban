@@ -94,6 +94,12 @@ export function ticketMatchesFilter(ticket) {
         }
     }
 
+    // ラベルフィルター
+    const selectedLabel = state.filterLabel;
+    if (selectedLabel && !(ticket.labels?.includes(selectedLabel))) {
+        return false;
+    }
+
     // チケット検索フィルター（タイトル・メモ・子タスク名）
     const keyword = state.searchKeyword?.trim().toLowerCase();
     if (keyword) {

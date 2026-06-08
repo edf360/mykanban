@@ -27,40 +27,11 @@ export function removeLabel(labelName) {
 let removeLabelDelegateAttached = false;
 
 function renderLabelTags() {
+    // ドロップダウンで選択状態が確認できるため、ラベルタグボタンは非表示
     const labelTagsEl = document.getElementById('labelTags');
-    if (!labelTagsEl) return;
-
-    // イベント委任（1回だけ設定）
-    if (!removeLabelDelegateAttached) {
-        labelTagsEl.addEventListener('click', (e) => {
-            const removeBtn = e.target.closest('.remove-label');
-            if (removeBtn) {
-                removeLabel(removeBtn.dataset.label);
-            }
-        });
-        removeLabelDelegateAttached = true;
+    if (labelTagsEl) {
+        labelTagsEl.innerHTML = '';
     }
-
-    labelTagsEl.innerHTML = '';
-    const labelColors = getLabelColorMap();
-    const frag = document.createDocumentFragment();
-    getCurrentLabels().forEach((label) => {
-        const color = labelColors[label] || '#808080';
-        const contrast = getContrastColor(color);
-        const tag = document.createElement('span');
-        tag.className = 'label-tag';
-        tag.style.backgroundColor = color;
-        tag.style.color = contrast;
-        const textNode = document.createTextNode(escapeHtml(label) + ' ');
-        tag.appendChild(textNode);
-        const removeSpan = document.createElement('span');
-        removeSpan.className = 'remove-label';
-        removeSpan.dataset.label = label;
-        removeSpan.textContent = '\u00d7';
-        tag.appendChild(removeSpan);
-        frag.appendChild(tag);
-    });
-    labelTagsEl.appendChild(frag);
 }
 
 /**

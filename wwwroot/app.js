@@ -12,7 +12,7 @@ import { renderLabelSelect } from './modules/labels.js';
 import { renderAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
-import { populateAssigneeFilter, initFilter } from './modules/filter.js';
+import { populateAssigneeFilter, populateLabelFilter, initFilter } from './modules/filter.js';
 import { initArchive } from './modules/archive.js';
 import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
@@ -136,6 +136,7 @@ async function initApp() {
 
     // フィルターをpopulate
     populateAssigneeFilter();
+    populateLabelFilter();
 
     // ログインユーザーのチケットをデフォルトで表示
     const username = getUsername();

@@ -5,6 +5,18 @@
 
 const MAX_LOG_ENTRIES = 500;
 
+let logIdCounter = 0;
+
+/**
+ * ログIDを生成（HTTP環境対応）
+ */
+function generateLogId() {
+    logIdCounter++;
+    const now = Date.now();
+    const random = Math.floor(Math.random() * 10000);
+    return `log-${now}-${random}-${logIdCounter}`;
+}
+
 /**
  * デバイス情報を取得
  */
@@ -44,7 +56,7 @@ const deviceInfoCache = getDeviceInfo();
  */
 function createEntry(level, message, data = null) {
     return {
-        id: crypto.randomUUID(),
+        id: generateLogId(),
         timestamp: new Date().toISOString(),
         level,
         message,

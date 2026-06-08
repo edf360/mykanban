@@ -67,7 +67,7 @@ body {
     border-radius: 12px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     border: 1px solid rgba(0, 0, 0, 0.06);
-    min-width: 600px;
+    min-width: 720px;
 }
 
 .filter-close-btn {
@@ -166,6 +166,28 @@ body {
     cursor: pointer;
     accent-color: #3b82f6;
 }
+
+.label-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.label-filter select {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    background: white;
+    color: #374151;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.label-filter select:hover { border-color: #6b7280; }
+
+.label-filter select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
 
 .kanban-board {
     display: flex;
@@ -782,6 +804,7 @@ body {
 
 .dropdown-item:hover { background: #f3f4f6; }
 
+
 .dropdown-item.selected { background: #eff6ff; }
 
 .dropdown-checkmark {
@@ -789,7 +812,6 @@ body {
     color: #3b82f6;
     font-weight: bold;
 }
-
 .dropdown-item.selected .dropdown-checkmark { display: inline; }
 
 .dropdown-item .label-color-dot {
@@ -890,6 +912,16 @@ body {
 .modal-btn.save { background: #4b5563; color: #fff; }
 
 .modal-btn.save:hover { background: #374151; }
+
+.modal-btn.save-multi { background: #6366f1; color: #fff; }
+
+.modal-btn.save-multi:hover { background: #4f46e5; }
+
+.modal-btn.save-multi:disabled {
+    background: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
 
 .ticket-details {
     margin-top: 10px;
@@ -1156,20 +1188,13 @@ body {
     font-weight: 600;
 }
 
-.history-section {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    text-align: center;
-}
-
-.history-section .modal-btn.history {
+.modal-btn.history {
     background: rgba(107, 114, 128, 0.1);
     color: #4b5563;
     border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.history-section .modal-btn.history:hover { background: rgba(107, 114, 128, 0.2); }
+.modal-btn.history:hover { background: rgba(107, 114, 128, 0.2); }
 
 .history-modal { max-width: 600px; }
 

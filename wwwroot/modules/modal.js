@@ -2,11 +2,11 @@
  * モーダル操作モジュール
  */
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, on } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks } from './childtasks.js';
-import { createTicket, updateTicket } from './ticketService.js';
+import { createTicket, updateTicket, createTicketsPerAssignee } from './ticketService.js';
 
 // ===== DOM要素キャッシュ =====
 const el = {
@@ -24,6 +24,7 @@ const el = {
     saveBtn: null,
     lockBtn: null,
     emergencyBtn: null,
+    savePerAssigneeBtn: null,
 };
 
 /**
@@ -44,6 +45,7 @@ function cacheElements() {
     el.saveBtn = document.getElementById('saveBtn');
     el.lockBtn = document.getElementById('modalLockBtn');
     el.emergencyBtn = document.getElementById('modalEmergencyBtn');
+    el.savePerAssigneeBtn = document.getElementById('savePerAssigneeBtn');
 }
 
 /**
@@ -109,6 +111,9 @@ function _openModal(options) {
     updateEmergencyButton();
     applyEmergencyToModal();
     applyLockToModal();
+    
+    // 担当者ごとに生成ボタンの表示/非表示（新規作成時のみ表示）
+    updateSavePerAssigneeButton();
     
     // レンダリング
     renderAssigneeTags();
@@ -282,6 +287,53 @@ export async function saveTicket() {
 }
 
 /**
+ * 担当者ごとに生成ボタンを更新
+ * 新規作成時 + 担当者が2人以上の場合のみ有効
+ */
+function updateSavePerAssigneeButton() {
+    if (!el.savePerAssigneeBtn) return;
+    const isEdit = !!getEditingTicketId();
+    const assignees = getCurrentAssignees();
+    const canCreate = !isEdit && assignees.length >= 2;
+    el.savePerAssigneeBtn.disabled = !canCreate;
+}
+
+/**
+ * 担当者ごとにチケットを生成
+ */
+export async function saveTicketsPerAssignee() {
+    const isEdit = !!getEditingTicketId();
+    const assignees = getCurrentAssignees();
+    if (isEdit || assignees.length < 2) return;
+    
+    const data = collectFormData();
+    if (!data) return;
+    
+    try {
+        const column = getNewTicketColumn() || 'todo';
+        const baseData = {
+            title: data.title,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            effort: data.effort,
+            labels: data.labels,
+            memo: data.memo,
+            childTasks: data.childTasks,
+            isLocked: data.isLocked,
+            isEmergency: data.isEmergency,
+            column,
+        };
+        await createTicketsPerAssignee(baseData, assignees);
+    } catch (error) {
+        console.error('Failed to create tickets per assignee:', error);
+        alert('保存に失敗しました: ' + error.message);
+        return;
+    }
+    
+    closeModal();
+}
+
+/**
  * モーダル関連のイベントを初期化
  */
 export function initModal() {
@@ -301,6 +353,14 @@ export function initModal() {
     if (el.emergencyBtn) {
         el.emergencyBtn.addEventListener('click', toggleEmergency);
     }
+    if (el.savePerAssigneeBtn) {
+        el.savePerAssigneeBtn.addEventListener('click', saveTicketsPerAssignee);
+    }
+    
+    // 担当者変更時にボタンの状態を更新
+    on('modal-changed', () => {
+        updateSavePerAssigneeButton();
+    });
     
     // モーダル外クリックで保存
     // テキスト選択ドラッグによる誤判定を防ぐため、mousedown/mouseup で判断

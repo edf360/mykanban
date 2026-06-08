@@ -70,6 +70,7 @@ public class TicketService
             Labels = dto.Labels,
             Memo = dto.Memo,
             ChildTasks = validChildTasks,
+            IsLocked = dto.IsLocked,
             IsEmergency = dto.IsEmergency
         };
 

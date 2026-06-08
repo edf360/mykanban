@@ -15,7 +15,8 @@ const internal = {
     filter: {
         assignee: '',
         mainOnly: false,
-        keyword: ''
+        keyword: '',
+        label: ''
     },
     ui: {
         graphPanelOpen: false,
@@ -535,6 +536,12 @@ const backwardCompatState = {
     set assigneeSuggestions(v) { internal.suggestions.assignees = [...v]; },
     get searchKeyword() { return internal.filter.keyword; },
     set searchKeyword(v) { internal.filter.keyword = v; },
+    get filterAssignee() { return internal.filter.assignee; },
+    set filterAssignee(v) { internal.filter.assignee = v; },
+    get filterMainOnly() { return internal.filter.mainOnly; },
+    set filterMainOnly(v) { internal.filter.mainOnly = v; },
+    get filterLabel() { return internal.filter.label; },
+    set filterLabel(v) { internal.filter.label = v; },
     get mainAssigneeOnly() { return internal.filter.mainOnly; },
     set mainAssigneeOnly(v) { internal.filter.mainOnly = v; },
     get graphPanelOpen() { return internal.ui.graphPanelOpen; },
@@ -552,7 +559,9 @@ export const filterState = {
     get mainOnly() { return internal.filter.mainOnly; },
     set mainOnly(v) { internal.filter.mainOnly = v; },
     get keyword() { return internal.filter.keyword; },
-    set keyword(v) { internal.filter.keyword = v; }
+    set keyword(v) { internal.filter.keyword = v; },
+    get label() { return internal.filter.label; },
+    set label(v) { internal.filter.label = v; }
 };
 
 // ===== 後方互換用エイリアス =====

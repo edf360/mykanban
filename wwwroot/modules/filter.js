@@ -3,7 +3,7 @@
  * DOM取得・state更新・render呼び出しを一元管理
  */
 
-import { setFilter, getFilterAssignee, getAssigneeSuggestions } from './state.js';
+import { setFilter, getFilterAssignee, getAssigneeSuggestions, getLabelSuggestions } from './state.js';
 import { renderAllTickets } from './renderer.js';
 import { updateMemoColumn } from './memo.js';
 
@@ -12,6 +12,7 @@ const elements = {
     assigneeSelect: null,
     mainAssigneeCheckbox: null,
     searchInput: null,
+    labelSelect: null,
     filterToggleBtn: null,
     filterArea: null,
     filterCloseBtn: null,
@@ -24,6 +25,7 @@ function cacheElements() {
     elements.assigneeSelect = document.getElementById('assigneeFilterSelect');
     elements.mainAssigneeCheckbox = document.getElementById('mainAssigneeOnlyCheckbox');
     elements.searchInput = document.getElementById('titleSearchInput');
+    elements.labelSelect = document.getElementById('labelFilterSelect');
     elements.filterToggleBtn = document.getElementById('filterToggleBtn');
     elements.filterArea = document.getElementById('filterArea');
     elements.filterCloseBtn = document.getElementById('filterCloseBtn');
@@ -78,6 +80,12 @@ function onMainAssigneeChange() {
     triggerRender();
 }
 
+// ===== ラベルフィルター変更ハンドラー =====
+function onLabelChange() {
+    setFilter({ label: elements.labelSelect?.value || '' });
+    triggerRender();
+}
+
 // ===== フィルター表示トグルハンドラー =====
 function onFilterToggle() {
     if (!elements.filterArea || !elements.filterToggleBtn) return;
@@ -90,6 +98,25 @@ function onFilterClose() {
     if (!elements.filterArea || !elements.filterToggleBtn) return;
     elements.filterArea.classList.add('hidden');
     elements.filterToggleBtn.classList.remove('active');
+}
+
+/**
+ * ラベルフィルターをpopulate
+ */
+export function populateLabelFilter() {
+    const selectEl = document.getElementById('labelFilterSelect');
+    if (!selectEl) {
+        console.warn('[populateLabelFilter] labelFilterSelect element not found');
+        return;
+    }
+    const suggestions = getLabelSuggestions();
+    selectEl.innerHTML = '<option value="">すべて</option>';
+    suggestions.forEach(label => {
+        const option = document.createElement('option');
+        option.value = label;
+        option.textContent = label;
+        selectEl.appendChild(option);
+    });
 }
 
 /**
@@ -138,6 +165,11 @@ export function initFilter() {
     if (elements.filterToggleBtn && elements.filterArea) {
         elements.filterToggleBtn.classList.add('active');
         elements.filterToggleBtn.addEventListener('click', onFilterToggle);
+    }
+
+    // ラベルフィルター
+    if (elements.labelSelect) {
+        elements.labelSelect.addEventListener('change', onLabelChange);
     }
 
     // フィルター閉じるボタン

@@ -357,6 +357,9 @@ public class SettingsController : ControllerBase
             .GroupBy(t => t.Column)
             .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1);
 
+        // 次Idを事前計算（自動採番されないスキーマでも登録可能に）
+        var nextTicketInternalId = (await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0) + 1;
+
         while (csv.Read())
         {
             // 空行をスキップ
@@ -419,6 +422,10 @@ public class SettingsController : ControllerBase
 
             if (existingTicket == null)
             {
+                // 新規チケットのId設定（自動採番されないスキーマでも登録可能に）
+                ticket.Id = nextTicketInternalId;
+                nextTicketInternalId++;
+
                 // 新規チケットのPosition設定（事前計算値を使用）
                 if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
                     maxPos = -1;
