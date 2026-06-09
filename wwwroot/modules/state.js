@@ -232,6 +232,32 @@ export function getChildTasks() {
     return [...internal.modal.currentChildTasks];
 }
 
+/**
+ * 子タスク順序入れ替え（ドラッグ＆ドロップ用）
+ * targetIndex は「splice後の配列における最終的な挿入位置」
+ */
+export function reorderChildTasks(fromId, targetIndex) {
+    const tasks = internal.modal.currentChildTasks;
+    const fromIndex = tasks.findIndex(t => t.id === fromId);
+    if (fromIndex < 0) return;
+    if (fromIndex === targetIndex) return;
+    
+    const [task] = tasks.splice(fromIndex, 1);
+    // targetIndex は「元の配列（splice前）での挿入位置」
+    // splice で fromIndex の要素を削除した後、挿入位置を補正する
+    // - fromIndex < targetIndex: 削除でtarget以降の要素が1つ左にシフトしたため -1
+    // - fromIndex > targetIndex: 削除がtargetより前なので影響なし
+    let insertIndex = targetIndex;
+    if (targetIndex > fromIndex) {
+        insertIndex = targetIndex - 1;
+    }
+    // 境界チェック
+    if (insertIndex < 0) insertIndex = 0;
+    if (insertIndex > tasks.length) insertIndex = tasks.length;
+    tasks.splice(insertIndex, 0, targetIndex <= fromIndex ? task : task);
+    emit('modal-changed', internal.modal);
+}
+
 // ===== 担当者関連のmutation関数 =====
 
 /**

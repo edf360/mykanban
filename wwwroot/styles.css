@@ -890,9 +890,22 @@ body {
 
 .modal-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 10px;
     margin-top: 24px;
+}
+
+.modal-actions-left {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-start;
+}
+
+.modal-actions-right {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
 }
 
 .modal-btn {

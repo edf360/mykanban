@@ -183,8 +183,13 @@ export function createTicketElement(data) {
     setTicket(data.ticketId, data);
 
     // 色分けクラスの付与（ローカルタイムゾーン使用）
+    // done/archiveのチケットは逾期・当日完了の色分けを表示しない
     const today = new Date().toLocaleDateString('sv-SE');
-    if (data.endDate) {
+    const isDoneOrArchived = data.column === 'done' || data.isArchived;
+    if (isDoneOrArchived) {
+        ticket.classList.add('done-or-archived');
+    }
+    if (data.endDate && !isDoneOrArchived) {
         if (data.endDate < today) {
             ticket.classList.add('overdue');
         } else if (data.endDate === today) {

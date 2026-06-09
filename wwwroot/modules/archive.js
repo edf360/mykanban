@@ -8,6 +8,7 @@
 export function initArchive() {
     const toggleBtn = document.getElementById('archiveToggleBtn');
     const archiveColumn = document.getElementById('archiveColumn');
+    const closeBtn = document.getElementById('archiveCloseBtn');
 
     if (!toggleBtn || !archiveColumn) {
         console.warn('[Archive] Required elements not found');
@@ -23,4 +24,11 @@ export function initArchive() {
     toggleBtn.addEventListener('click', () => {
         archiveColumn.classList.toggle('hidden');
     });
+
+    // ×ボタンでarchiveを隠す（toggleオフと同じ動作）
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            archiveColumn.classList.add('hidden');
+        });
+    }
 }

@@ -403,10 +403,9 @@ public class SettingsController : ControllerBase
             ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
             ticket.EndDate = ParseDate(csv.GetField(columnIndexes["完了日"]) ?? "");
 
-            // チェックリストの処理
+            // チェックリストの処理（完了状況はCSV元データに問題があるため取り込まない）
             var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
-            var completedChecklist = csv.GetField(columnIndexes["完成したチェックリスト項目"]) ?? "";
-            ticket.ChildTasks = ParseChecklist(checklistItems, completedChecklist);
+            ticket.ChildTasks = ParseChecklist(checklistItems);
 
             // ラベルの処理
             var labelsStr = csv.GetField(columnIndexes["ラベル"]) ?? "";
@@ -525,7 +524,7 @@ public class SettingsController : ControllerBase
         return null;
     }
 
-    private static List<ChildTask> ParseChecklist(string itemsStr, string completedStr)
+    private static List<ChildTask> ParseChecklist(string itemsStr)
     {
         var result = new List<ChildTask>();
         if (string.IsNullOrWhiteSpace(itemsStr))
@@ -536,21 +535,13 @@ public class SettingsController : ControllerBase
             .Where(s => !string.IsNullOrEmpty(s))
             .ToList();
 
-        // 完了数のパース (例: "1/3")
-        int completedCount = 0;
-        if (!string.IsNullOrWhiteSpace(completedStr))
-        {
-            var parts = completedStr.Split('/');
-            if (parts.Length >= 1 && int.TryParse(parts[0], out var count))
-                completedCount = count;
-        }
-
-        for (int i = 0; i < items.Count; i++)
+        // CSVの元データの完了状況チェックには問題があるため、完了状態は取り込まない
+        foreach (var item in items)
         {
             result.Add(new ChildTask
             {
-                Text = items[i],
-                Done = i < completedCount
+                Text = item,
+                Done = false
             });
         }
 
