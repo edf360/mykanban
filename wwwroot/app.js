@@ -12,7 +12,7 @@ import { renderLabelSelect } from './modules/labels.js';
 import { renderAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
-import { populateAssigneeFilter, populateLabelFilter, initFilter } from './modules/filter.js';
+import { populateAssigneeFilter, populateLabelFilter, initFilter, adjustBoardForFilterOnInit } from './modules/filter.js';
 import { initArchive } from './modules/archive.js';
 import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
@@ -165,6 +165,10 @@ async function initApp() {
 
     // アプリ画面を表示
     showAppScreen();
+    
+    // アプリ表示後にフィルター調整（フィルター高さが正しく取得できるように）
+    adjustBoardForFilterOnInit();
+    
     logInfo('[app] Initialization complete');
   } catch (error) {
     logError('Failed to initialize application: ' + error.message);
@@ -521,6 +525,7 @@ function initGraphPanelInternal() {
     graphToggleBtn.addEventListener('click', () => {
       const isOpen = !isGraphPanelOpen();
       setGraphPanelOpen(isOpen);
+      
       if (isOpen) {
         // パネル表示
         graphPanel.classList.remove('hidden');

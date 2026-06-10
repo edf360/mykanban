@@ -47,16 +47,16 @@ public class ControllerTests : IDisposable
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
         var tickets = Assert.IsAssignableFrom<List<Ticket>>(okResult.Value!);
 
-        // カラム順（アルファベット順：doing→done→todo）→Position順にソートされている
+        // カラム順（明示的順序：todo→doing→done→archive）→Position昇順にソートされている
         Assert.Equal(4, tickets.Count);
-        Assert.Equal("doing", tickets[0].Column);
-        Assert.Equal("Doing-1", tickets[0].Title);
-        Assert.Equal("done", tickets[1].Column);
-        Assert.Equal("Done-1", tickets[1].Title);
-        Assert.Equal("todo", tickets[2].Column);
-        Assert.Equal("Todo-1", tickets[2].Title); // todo Position 0
-        Assert.Equal("todo", tickets[3].Column);
-        Assert.Equal("Todo-2", tickets[3].Title); // todo Position 1
+        Assert.Equal("todo", tickets[0].Column);
+        Assert.Equal("Todo-1", tickets[0].Title); // todo Position 0 (昇順で先頭)
+        Assert.Equal("todo", tickets[1].Column);
+        Assert.Equal("Todo-2", tickets[1].Title); // todo Position 1
+        Assert.Equal("doing", tickets[2].Column);
+        Assert.Equal("Doing-1", tickets[2].Title);
+        Assert.Equal("done", tickets[3].Column);
+        Assert.Equal("Done-1", tickets[3].Title);
     }
 
     [Fact]
@@ -581,12 +581,12 @@ public class ControllerTests : IDisposable
     {
         // Arrange: 空のボード
 
-        // Step 1: チケット作成
+        // Step 1: チケット作成（子タスクなしで進捗更新をテスト）
         var createDto = new TicketDto
         {
             Title = "ワークフローテスト",
             Column = "todo",
-            ChildTasks = new List<ChildTaskDto> { new() { Text = "初期タスク", Done = false } }
+            ChildTasks = new List<ChildTaskDto>()
         };
         var createResult = await _controller.Create(createDto);
         var createActionResult = Assert.IsType<ActionResult<Ticket>>(createResult);
@@ -599,7 +599,7 @@ public class ControllerTests : IDisposable
         {
             Title = "更新済みタイトル",
             Column = "todo",
-            ChildTasks = new List<ChildTaskDto> { new() { Text = "初期タスク", Done = true } }
+            ChildTasks = new List<ChildTaskDto>()
         };
         var updateResult = await _controller.Update(ticketId, updateDto);
         var updateActionResult = Assert.IsType<ActionResult<Ticket>>(updateResult);
@@ -687,10 +687,10 @@ public class ControllerTests : IDisposable
         var ok2 = Assert.IsType<OkObjectResult>(((ActionResult<List<Ticket>>)getAll2).Result!);
         var all2 = (List<Ticket>)ok2.Value!;
 
-        // doing < done < todo のアルファベット順でソートされる
-        Assert.Equal("doing", all2[0].Column);
-        Assert.Equal("done", all2[1].Column);
-        Assert.Equal("todo", all2[2].Column);
+        // 明示的なカラム順序：todo → doing → done → archive
+        Assert.Equal("todo", all2[0].Column);
+        Assert.Equal("doing", all2[1].Column);
+        Assert.Equal("done", all2[2].Column);
 
         // Step 4: doingのTicket-0をdoneに移動（doneには既にTicket-1がある）
         var toDoneDto = new ColumnUpdateDto { Column = "done", InsertIndex = 1 };
@@ -969,24 +969,23 @@ public class AdditionalControllerTests : IDisposable
     // ===== 完全削除テスト（アーカイブ済みの2度目のDELETE） =====
 
     [Fact]
-    public async Task Delete_ArchivedTicket_ShouldReturnOkWithoutChange()
+    public async Task Delete_ArchivedTicket_ShouldHardDelete()
     {
         // Arrange: アーカイブ済みチケットを作成
         _context.Tickets.Add(new Ticket { TicketId = "hard-delete", Id = 1, Title = "完全削除テスト", Column = "todo", Position = 0, IsArchived = true });
         await _context.SaveChangesAsync();
 
-        // Act: アーカイブ済みチケットをDELETE（既にアーカイブ済みなので何もしない）
+        // Act: アーカイブ済みチケットをDELETE（完全削除）
         var result = await _controller.Delete("hard-delete");
 
-        // Assert: Okが返り、チケットはDBに残ったまま
-        Assert.IsType<OkObjectResult>(result);
+        // Assert: NoContentが返り、チケットはDBから削除される
+        Assert.IsType<NoContentResult>(result);
         var found = await _context.Tickets.FindAsync("hard-delete");
-        Assert.NotNull(found);
-        Assert.True(found!.IsArchived);
+        Assert.Null(found);
     }
 
     [Fact]
-    public async Task Delete_ThenDeleteAgain_ShouldArchiveThenDoNothing()
+    public async Task Delete_ThenDeleteAgain_ShouldArchiveThenHardDelete()
     {
         // Arrange: 通常チケットを作成
         _context.Tickets.Add(new Ticket { TicketId = "double-del", Id = 1, Title = "二重削除テスト", Column = "todo", Position = 0 });
@@ -999,12 +998,11 @@ public class AdditionalControllerTests : IDisposable
         Assert.NotNull(afterFirst);
         Assert.True(afterFirst!.IsArchived);
 
-        // Act: 2度目のDELETE（既にアーカイブ済みなので何もしない → OkObjectResult）
+        // Act: 2度目のDELETE（アーカイブ済み → 完全削除 → NoContentResult）
         var result2 = await _controller.Delete("double-del");
-        Assert.IsType<OkObjectResult>(result2);
+        Assert.IsType<NoContentResult>(result2);
         var afterSecond = await _context.Tickets.FindAsync("double-del");
-        Assert.NotNull(afterSecond);
-        Assert.True(afterSecond!.IsArchived);
+        Assert.Null(afterSecond);
     }
 
     // ===== History機能テスト =====

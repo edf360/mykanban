@@ -111,9 +111,9 @@ public class SettingsControllerTests : IDisposable
         }
         Assert.Equal(2, returned.Users.Count);
         Assert.Equal("田中", returned.Users[0]);
-        Assert.Equal(1, returned.Labels.Count);
+        Assert.Single(returned.Labels);
         Assert.Equal("重要", returned.Labels[0].Name);
-        Assert.Equal(1, returned.Holidays.Count);
+        Assert.Single(returned.Holidays);
     }
 
     // ===== Update 設定更新 =====

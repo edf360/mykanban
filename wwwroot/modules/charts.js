@@ -396,12 +396,18 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         titleMap.get(title).push(t);
     });
     
-    // カラム順 archive → done → doing → todo でソート
-    // 同一タイトルで複数カラムに跨る場合は最初の出現カラムの順でソート
+    // 対象者全員の平均進捗率の高い順でソート（子タスクはタスク内だけでソート）
     const titles = Array.from(titleMap.keys()).sort((a, b) => {
         const aTickets = titleMap.get(a);
         const bTickets = titleMap.get(b);
-        // 各タイトルの最小カラムインデックスを取得
+        // 各タイトルの全チケットの平均進捗率を計算
+        const aAvgProgress = aTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / aTickets.length;
+        const bAvgProgress = bTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / bTickets.length;
+        // 進捗率の高い順（降順）。同率の場合はカラム順でソート
+        if (Math.abs(aAvgProgress - bAvgProgress) > 0.01) {
+            return bAvgProgress - aAvgProgress;
+        }
+        // 同率の場合はカラム順 archive → done → doing → todo でソート
         const aMinCol = Math.min(...aTickets.map(t => COLUMN_ORDER.indexOf(t.column || 'todo')));
         const bMinCol = Math.min(...bTickets.map(t => COLUMN_ORDER.indexOf(t.column || 'todo')));
         return aMinCol - bMinCol;

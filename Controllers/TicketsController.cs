@@ -79,15 +79,33 @@ public class TicketsController : ControllerBase
     }
 
     /// <summary>
-    /// チケットをアーカイブに移動（ソフトデリート）
+    /// チケットを削除
+    /// アーカイブ済みの場合は完全削除（ハードデリート）
+    /// それ以外はアーカイブ移動（ソフトデリート）
     /// </summary>
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
-        var result = await _ticketService.ArchiveAsync(id);
-        if (result == null)
+        var ticket = await _ticketService.GetAsync(id);
+        if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
-        return Ok(result);
+
+        if (ticket.IsArchived)
+        {
+            // アーカイブ済み → 完全削除
+            var result = await _ticketService.DeleteAsync(id);
+            if (!result)
+                return NotFound(new { error = "Ticket not found" });
+            return NoContent();
+        }
+        else
+        {
+            // 未アーカイブ → アーカイブ移動
+            var result = await _ticketService.ArchiveAsync(id);
+            if (result == null)
+                return NotFound(new { error = "Ticket not found" });
+            return Ok(result);
+        }
     }
 
     /// <summary>

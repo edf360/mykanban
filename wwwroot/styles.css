@@ -68,6 +68,7 @@ body {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     border: 1px solid rgba(0, 0, 0, 0.06);
     min-width: 720px;
+    padding-right: 44px;
 }
 
 .filter-close-btn {
@@ -197,6 +198,7 @@ body {
     margin: 0 auto;
     height: calc(100dvh - 20px);
     padding: 4px;
+    transition: height 0.3s ease, padding-top 0.3s ease;
 }
 
 .main-container.settings-open .kanban-board { margin: 0; max-width: none; }
@@ -258,6 +260,33 @@ body {
 }
 
 .column-add-btn:active { transform: scale(1.0); }
+
+.column-close-btn {
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: #9ca3af;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.column-close-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #6b7280;
+    transform: scale(1.1);
+}
+
+.column-close-btn:active { transform: scale(1.0); }
 
 .ticket-list {
     flex: 1;
@@ -343,6 +372,11 @@ body {
 }
 
 .ticket-id { display: none; }
+
+.ticket-completed .ticket-content {
+    text-decoration: line-through;
+    color: var(--gray-400);
+}
 
 .ticket-title-row {
     display: flex;

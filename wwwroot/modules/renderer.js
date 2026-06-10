@@ -10,6 +10,23 @@ import { openEditModal } from './modal.js';
 import { updateMemoColumn } from './memo.js';
 
 /**
+ * カラムの表示順位（HTMLのdata-column属性順と整合）
+ */
+const COLUMN_ORDER = {
+    todo: 0,
+    doing: 1,
+    done: 2,
+    archive: 3
+};
+
+/**
+ * カラム名から順位を取得（未知のカラムは末尾に配置）
+ */
+function getColumnOrder(column) {
+    return COLUMN_ORDER[column] ?? 999;
+}
+
+/**
  * ラベル名から色情報を取得するマップ（設定データから構築）
  */
 // 進捗スライダーのグローバルイベントリスナー用マップ
@@ -143,11 +160,13 @@ export function renderAllTickets() {
     });
     
     // Positionでソートして描画（ドラッグ＆ドロップ後の順番を反映）
-    const sortedTickets = getAllTickets().sort((a, b) => {
+    // カラム順はフロントで定義された COLUMN_ORDER に従ってソート
+    // バックエンドの並び順（string順）はUI表示には依存しない
+    const sortedTickets = [...getAllTickets()].sort((a, b) => {
         if (a.column !== b.column) {
-            return a.column.localeCompare(b.column);
+            return getColumnOrder(a.column) - getColumnOrder(b.column);
         }
-        return (a.position ?? 0) - (b.position ?? 0);
+        return (a.position ?? 0) - (b.position ?? 0) || a.ticketId.localeCompare(b.ticketId);
     });
     
     sortedTickets.forEach(ticket => {
@@ -188,6 +207,7 @@ export function createTicketElement(data) {
     const isDoneOrArchived = data.column === 'done' || data.isArchived;
     if (isDoneOrArchived) {
         ticket.classList.add('done-or-archived');
+        ticket.classList.add('ticket-completed');
     }
     if (data.endDate && !isDoneOrArchived) {
         if (data.endDate < today) {

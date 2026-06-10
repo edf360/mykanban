@@ -91,6 +91,7 @@ function onFilterToggle() {
     if (!elements.filterArea || !elements.filterToggleBtn) return;
     elements.filterArea.classList.toggle('hidden');
     elements.filterToggleBtn.classList.toggle('active');
+    adjustBoardForFilter();
 }
 
 // ===== フィルター閉じるハンドラー =====
@@ -98,6 +99,30 @@ function onFilterClose() {
     if (!elements.filterArea || !elements.filterToggleBtn) return;
     elements.filterArea.classList.add('hidden');
     elements.filterToggleBtn.classList.remove('active');
+    adjustBoardForFilter();
+}
+
+// ===== カンバンボードのフィルター調整 =====
+function adjustBoardForFilter() {
+    const filterArea = document.getElementById('filterArea');
+    const kanbanBoard = document.querySelector('.kanban-board');
+    if (!filterArea || !kanbanBoard) return;
+    
+    const isFilterVisible = !filterArea.classList.contains('hidden');
+    const filterHeight = filterArea.offsetHeight;
+    const filterTop = 20; // CSSのtop値
+    const topOffset = filterTop + filterHeight + 10; // 10pxの余白
+    
+    if (isFilterVisible) {
+        kanbanBoard.style.paddingTop = `${topOffset}px`;
+    } else {
+        kanbanBoard.style.paddingTop = '';
+    }
+}
+
+// ===== 初期調整（ページ読み込み時） =====
+export function adjustBoardForFilterOnInit() {
+    adjustBoardForFilter();
 }
 
 /**
@@ -143,6 +168,9 @@ export function populateAssigneeFilter() {
  */
 export function initFilter() {
     cacheElements();
+
+    // 初期調整（ページ読み込み時にフィルターが表示されている場合の対応）
+    adjustBoardForFilter();
 
     // 担当者フィルター
     if (elements.assigneeSelect) {

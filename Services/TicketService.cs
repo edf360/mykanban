@@ -15,11 +15,16 @@ public class TicketService
 
     public async Task<List<Ticket>> GetAllAsync()
     {
-        return await _context.Tickets
-            .OrderBy(t => t.IsArchived)
-            .ThenBy(t => t.Column)
+        var tickets = await _context.Tickets.ToListAsync();
+        // クライアントサイドでカラム順序を明示的にソート（EF CoreがDictionary.GetValueOrDefaultをSQL変換できないため）
+        var columnOrderMap = new Dictionary<string, int> {
+            { "todo", 0 }, { "doing", 1 }, { "done", 2 }, { "archive", 3 }
+        };
+        return tickets
+            .OrderBy(t => columnOrderMap.GetValueOrDefault(t.Column.ToLowerInvariant(), 999))
             .ThenBy(t => t.Position)
-            .ToListAsync();
+            .ThenBy(t => t.Id)
+            .ToList();
     }
 
     public async Task<Ticket?> GetAsync(string ticketId)
@@ -65,7 +70,7 @@ public class TicketService
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Effort = dto.Effort,
-            Assignees = dto.Assignees,
+            Assignees = dto.Assignees ?? new List<string>(),
             MainAssignee = mainAssignee,
             Labels = dto.Labels,
             Memo = dto.Memo,
@@ -193,6 +198,7 @@ public class TicketService
             return ticket;
         }
 
+        ticket.PreviousColumn = ticket.Column;
         ticket.IsArchived = true;
         ticket.Column = "archive";
         ticket.Position = 0;
@@ -219,7 +225,21 @@ public class TicketService
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return null;
 
+        // アーカイブ前のカラムを復元（未設定の場合はtodo）
+        var restoreColumn = !string.IsNullOrEmpty(ticket.PreviousColumn)
+            ? ticket.PreviousColumn
+            : "todo";
+
         ticket.IsArchived = false;
+        ticket.Column = restoreColumn;
+
+        // 復元先カラムの末尾に配置
+        var maxPos = await _context.Tickets
+            .Where(t => t.Column == restoreColumn && t.TicketId != ticket.TicketId)
+            .MaxAsync(t => (double?)t.Position) ?? -1000.0;
+        ticket.Position = maxPos + 1000.0;
+
+        ticket.PreviousColumn = null;
         await _context.SaveChangesAsync();
         return ticket;
     }
@@ -245,6 +265,7 @@ public class TicketService
             var ordered = await _context.Tickets
                 .Where(t => t.Column == newColumn && t.TicketId != ticketId)
                 .OrderBy(t => t.Position)
+                .ThenBy(t => t.Id)
                 .ToListAsync();
 
             double newPos;
@@ -272,6 +293,7 @@ public class TicketService
                 ordered = await _context.Tickets
                     .Where(t => t.Column == newColumn && t.TicketId != ticketId)
                     .OrderBy(t => t.Position)
+                    .ThenBy(t => t.Id)
                     .ToListAsync();
 
                 if (insertIdx <= 0)
@@ -419,17 +441,19 @@ public class TicketService
 
     public async Task<List<string>> GetAssigneesSuggestAsync()
     {
-        var assigneeSet = new HashSet<string>();
-
+        // 設定ウィンドウのユーザー順序を保持
         var setting = await _context.Settings.FirstOrDefaultAsync();
+        List<string> orderedAssignees;
         if (setting?.Users != null)
         {
-            foreach (var user in setting.Users)
-            {
-                assigneeSet.Add(user);
-            }
+            orderedAssignees = setting.Users.ToList();
+        }
+        else
+        {
+            orderedAssignees = new List<string>();
         }
 
+        // チケットから追加の担当者を収集
         var tickets = await _context.Tickets
             .Where(t => t.AssigneesJson != null && t.AssigneesJson.Length > 2)
             .ToListAsync();
@@ -442,7 +466,10 @@ public class TicketService
                 {
                     foreach (var assignee in assignees)
                     {
-                        assigneeSet.Add(assignee);
+                        if (!orderedAssignees.Contains(assignee))
+                        {
+                            orderedAssignees.Add(assignee);
+                        }
                     }
                 }
             }
@@ -452,7 +479,7 @@ public class TicketService
             }
         }
 
-        return assigneeSet.OrderBy(a => a).ToList();
+        return orderedAssignees;
     }
 
     /// <summary>
@@ -465,6 +492,7 @@ public class TicketService
         var tickets = await _context.Tickets
             .Where(t => t.Column == column && (excludeTicketId == null || t.TicketId != excludeTicketId))
             .OrderBy(t => t.Position)
+            .ThenBy(t => t.Id)
             .ToListAsync();
 
         for (int i = 0; i < tickets.Count; i++)

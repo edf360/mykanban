@@ -485,6 +485,90 @@ public class TicketTests : IDisposable
             Assert.Equal(i * 1000, dbTickets[i].Position);
         }
     }
+
+    [Fact]
+    public async Task ArchiveAndRestore_ShouldPreserveOriginalColumn()
+    {
+        // Arrange
+        var ticket = new Ticket
+        {
+            TicketId = "archive-restore-test",
+            Id = 1,
+            Title = "アーカイブテスト",
+            Column = "doing",
+            Position = 500,
+            IsArchived = false
+        };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        // Act - アーカイブ
+        var found = await _context.Tickets.FindAsync("archive-restore-test");
+        found!.PreviousColumn = found.Column;
+        found.IsArchived = true;
+        found.Column = "archive";
+        found.Position = 0;
+        await _context.SaveChangesAsync();
+
+        // Assert - アーカイブ状態
+        var archived = await _context.Tickets.FindAsync("archive-restore-test");
+        Assert.True(archived!.IsArchived);
+        Assert.Equal("archive", archived.Column);
+        Assert.Equal("doing", archived.PreviousColumn);
+        Assert.Equal(0, archived.Position);
+
+        // Act - リストア
+        var restoreColumn = !string.IsNullOrEmpty(archived.PreviousColumn)
+            ? archived.PreviousColumn
+            : "todo";
+        archived.IsArchived = false;
+        archived.Column = restoreColumn;
+        archived.Position = 1500;
+        archived.PreviousColumn = null;
+        await _context.SaveChangesAsync();
+
+        // Assert - リストア状態
+        var restored = await _context.Tickets.FindAsync("archive-restore-test");
+        Assert.False(restored!.IsArchived);
+        Assert.Equal("doing", restored.Column);
+        Assert.Null(restored.PreviousColumn);
+        Assert.Equal(1500, restored.Position);
+    }
+
+    [Fact]
+    public async Task RestoreWithoutPreviousColumn_ShouldUseTodo()
+    {
+        // Arrange - PreviousColumnが設定されていないアーカイブチケット
+        var ticket = new Ticket
+        {
+            TicketId = "no-prev-column-test",
+            Id = 1,
+            Title = "PreviousColumnなしテスト",
+            Column = "archive",
+            Position = 0,
+            IsArchived = true,
+            PreviousColumn = null
+        };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        // Act - リストア
+        var found = await _context.Tickets.FindAsync("no-prev-column-test");
+        var restoreColumn = !string.IsNullOrEmpty(found!.PreviousColumn)
+            ? found.PreviousColumn
+            : "todo";
+        found.IsArchived = false;
+        found.Column = restoreColumn;
+        found.Position = 1000;
+        found.PreviousColumn = null;
+        await _context.SaveChangesAsync();
+
+        // Assert - デフォルトでtodoに復元
+        var restored = await _context.Tickets.FindAsync("no-prev-column-test");
+        Assert.False(restored!.IsArchived);
+        Assert.Equal("todo", restored.Column);
+        Assert.Null(restored.PreviousColumn);
+    }
 }
 
 public class TicketDtoTests
