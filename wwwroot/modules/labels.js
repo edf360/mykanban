@@ -94,12 +94,21 @@ export function showSuggestions(suggestEl, suggestions, filter, excludeList, onS
 let toggleListenerAttached = false;
 
 export function renderLabelSelect() {
+    _renderLabelSelect(true);  // ドロップダウンを閉じる
+}
+
+/**
+ * ラベル選択ドロップダウンを再描画（ドロップダウン状態を保持）
+ * @param {boolean} closeDropdown - ドロップダウンを閉じるか（デフォルト: false）
+ */
+function _renderLabelSelect(closeDropdown = false) {
     const listEl = document.getElementById('labelList');
     const toggleBtn = document.getElementById('labelToggleBtn');
     if (!listEl || !toggleBtn) return;
     
-    // ドロップダウンを閉じる
-    listEl.classList.remove('active');
+    if (closeDropdown) {
+        listEl.classList.remove('active');
+    }
     
     listEl.innerHTML = '';
     
@@ -117,7 +126,7 @@ export function renderLabelSelect() {
         item.innerHTML = `<span class="label-color-dot" style="background-color:${color}"></span><span class="dropdown-checkmark">✓</span>${escapeHtml(label)}`;
         item.addEventListener('click', () => {
             toggleLabel(label);
-            item.classList.toggle('selected');
+            _renderLabelSelect(false);  // ドロップダウンを開いたまま再描画
             renderLabelTags();
         });
         listEl.appendChild(item);

@@ -385,6 +385,37 @@ body {
     gap: 8px;
 }
 
+.ticket-collapse-btn {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    line-height: 1;
+    user-select: none;
+}
+
+.ticket-collapse-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #6b7280;
+}
+
+.ticket.collapsed .ticket-collapse-btn {
+    transform: rotate(-90deg);
+}
+
+.ticket.collapsed .ticket-child-tasks {
+    display: none;
+}
+
+.ticket.collapsed .ticket-chart {
+    display: none;
+}
+
 .ticket-effort {
     display: inline-block;
     padding: 2px 8px;
@@ -411,14 +442,6 @@ body {
     margin-bottom: 8px;
 }
 
-.progress-container {
-    margin-top: 12px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    position: relative;
-}
-
 .progress-text {
     color: rgba(0, 0, 0, 0.6);
     font-size: 12px;
@@ -426,6 +449,8 @@ body {
     text-align: right;
     font-weight: 600;
     cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
 }
 
 .progress-text:hover {
@@ -658,6 +683,8 @@ body {
 .form-row { display: flex; gap: 12px; }
 
 .form-row .form-group { flex: 1; }
+
+.form-row.two-fields .form-group { min-width: 0; }
 
 .label-tags {
     display: flex;

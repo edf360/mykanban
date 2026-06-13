@@ -64,8 +64,7 @@ export function renderAssigneeTags() {
         tag.dataset.assignee = assignee;
         tag.title = 'クリックでメイン担当者に設定';
 
-        const crownIcon = isMain ? '👑 ' : '';
-        tag.innerHTML = `${crownIcon}${escapeHtml(assignee)} <span class="remove-assignee" data-index="${i}">&times;</span>`;
+        tag.innerHTML = `${escapeHtml(assignee)} <span class="remove-assignee" data-index="${i}">&times;</span>`;
 
         assigneeTagsEl.appendChild(tag);
     });
@@ -172,8 +171,20 @@ function handleAssigneeToggle(assignee, isEnabled) {
         }
     }
     renderAssigneeTags();
+    // 担当者トグルのチェックボックス状態を更新（再描画なしで無限ループ防止）
+    updateAssigneeToggleStates();
     // メインチェックの状態を更新（再描画なしで無限ループ防止）
     updateMainCheckStates();
+}
+
+/**
+ * 担当者トグルのチェックボックス状態を更新（再描画なし）
+ */
+function updateAssigneeToggleStates() {
+    const currentAssignees = getCurrentAssignees();
+    document.querySelectorAll('.assignee-enabled-toggle').forEach(toggle => {
+        toggle.checked = currentAssignees.includes(toggle.dataset.assignee);
+    });
 }
 
 /**

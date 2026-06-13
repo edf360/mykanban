@@ -200,6 +200,11 @@ export function createTicketElement(data) {
     ticket.draggable = true;
     ticket.dataset.id = data.ticketId;
     setTicket(data.ticketId, data);
+    
+    // 折り畳み状態の復元
+    if (data.isCollapsed) {
+        ticket.classList.add('collapsed');
+    }
 
     // 色分けクラスの付与（ローカルタイムゾーン使用）
     // done/archiveのチケットは逾期・当日完了の色分けを表示しない
@@ -243,8 +248,7 @@ export function createTicketElement(data) {
             data.assignees.forEach((assignee) => {
                 const isMain = assignee === data.mainAssignee;
                 const mainClass = isMain ? ' main' : '';
-                const crownIcon = isMain ? '👑 ' : '';
-                topInfoHtml += `<span class="ticket-assignee${mainClass}">${crownIcon}${escapeHtml(assignee)}</span>`;
+                topInfoHtml += `<span class="ticket-assignee${mainClass}">${escapeHtml(assignee)}</span>`;
             });
             topInfoHtml += '</div>';
         }
@@ -285,18 +289,19 @@ export function createTicketElement(data) {
     if (data.isEmergency) {
         ticket.classList.add('emergency');
     }
+    // 折り畳みボタンを表示するかどうか（子タスクまたは期限日・終了日が設定されている場合のみ）
+    const showCollapseBtn = (data.childTasks && data.childTasks.length > 0) || (data.startDate && data.endDate);
+
     ticket.innerHTML = `
         ${topInfoHtml}
         <div class="ticket-title-row">
+            ${showCollapseBtn ? '<button class="ticket-collapse-btn" title="折り畳む/展開">▼</button>' : ''}
             <div class="ticket-content">${titleHtml}</div>
+            <span class="progress-text" title="${(data.childTasks && data.childTasks.length > 0) ? '子タスクがあるため直接編集できません' : 'クリックして進捗率を変更'}">${data.progress || 0}%</span>
             ${effortBadge}
         </div>
         ${childTasksHtml}
         ${chartHtml}
-        <div class="progress-container">
-            <span class="progress-label">進捗:</span>
-            <span class="progress-text" title="${(data.childTasks && data.childTasks.length > 0) ? '子タスクがあるため直接編集できません' : 'クリックして進捗率を変更'}">${data.progress || 0}%</span>
-        </div>
         <button class="delete-btn">&times;</button>
     `;
 
@@ -304,9 +309,20 @@ export function createTicketElement(data) {
     ticket.addEventListener('dragstart', handleDragStart);
     ticket.addEventListener('dragend', handleDragEnd);
     
+    // 折り畳みトグルボタン（存在する場合のみ）
+    const collapseBtn = ticket.querySelector('.ticket-collapse-btn');
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            ticket.classList.toggle('collapsed');
+            // 折り畳み状態を保存
+            updateTicketField(ticket.dataset.id, 'isCollapsed', ticket.classList.contains('collapsed'));
+        });
+    }
+    
     // チケットクリックでモーダルを開く
     ticket.addEventListener('click', (e) => {
-        if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-slider-popup')) return;
+        if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-slider-popup') || e.target.classList.contains('ticket-collapse-btn')) return;
         if (data.isArchived) return;
         openEditModal(ticket.dataset.id);
     });
@@ -319,7 +335,6 @@ export function createTicketElement(data) {
     
     // 進捗テキストクリックでスライダーポップアップを表示（子タスクがある場合は無効）
     const progressText = ticket.querySelector('.progress-text');
-    const progressContainer = ticket.querySelector('.progress-container');
     const hasChildTasks = data.childTasks && data.childTasks.length > 0;
     
     // 子タスクがある場合は進捗テキストをクリック不可（クリック時に警告表示）
@@ -345,7 +360,7 @@ export function createTicketElement(data) {
                 <input type="range" min="0" max="100" step="10" value="${data.progress || 0}" class="progress-slider-input">
                 <div class="progress-slider-label">${data.progress || 0}%</div>
             `;
-            progressContainer.appendChild(popup);
+            progressText.appendChild(popup);
             
             const slider = popup.querySelector('.progress-slider-input');
             const label = popup.querySelector('.progress-slider-label');

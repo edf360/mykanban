@@ -1,5 +1,5 @@
 // 設定パネル管理モジュール
-import { apiRequest } from './api.js';
+import { apiRequest, loadSuggestions } from './api.js';
 import { isAdmin, getToken } from './auth.js';
 import { renderAllTickets } from './renderer.js';
 import { invalidateLabelColorCache } from './state.js';
@@ -73,6 +73,8 @@ export async function save() {
             holidays: settings.holidays
         };
         await apiRequest('PUT', '/api/settings', payload);
+        // サジェストを再ロードして最新の状態に更新
+        await loadSuggestions();
     } catch (e) {
         console.error('設定の保存に失敗', e);
         alert('設定の保存に失敗しました。');

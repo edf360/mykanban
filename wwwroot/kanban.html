@@ -241,7 +241,7 @@
                         <input type="text" id="ticketTitle" placeholder="タスクのタイトルを入力">
                     </div>
 
-                    <div class="form-row">
+                    <div class="form-row three-fields">
                         <div class="form-group">
                             <label for="startDate">開始日</label>
                             <input type="date" id="startDate">
@@ -250,13 +250,13 @@
                             <label for="endDate">終了日</label>
                             <input type="date" id="endDate">
                         </div>
-                    </div>
-
-                    <div class="form-row">
                         <div class="form-group">
                             <label for="effort">工数（時間）</label>
                             <input type="number" id="effort" placeholder="例: 8" min="0">
                         </div>
+                    </div>
+
+                    <div class="form-row two-fields">
                         <div class="form-group">
                             <label id="assigneeLabel">担当者</label>
                             <div class="selection-tags" id="assigneeTags" aria-labelledby="assigneeLabel"></div>
@@ -265,14 +265,13 @@
                                 <div class="dropdown-list" id="assigneeList"></div>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label id="labelLabel">ラベル</label>
-                        <div class="selection-tags" id="labelTags" aria-labelledby="labelLabel"></div>
-                        <div class="custom-dropdown" id="labelDropdown">
-                            <button type="button" class="dropdown-toggle-btn" id="labelToggleBtn">ラベルを選択 ▼</button>
-                            <div class="dropdown-list" id="labelList"></div>
+                        <div class="form-group">
+                            <label id="labelLabel">ラベル</label>
+                            <div class="selection-tags" id="labelTags" aria-labelledby="labelLabel"></div>
+                            <div class="custom-dropdown" id="labelDropdown">
+                                <button type="button" class="dropdown-toggle-btn" id="labelToggleBtn">ラベルを選択 ▼</button>
+                                <div class="dropdown-list" id="labelList"></div>
+                            </div>
                         </div>
                     </div>
 
