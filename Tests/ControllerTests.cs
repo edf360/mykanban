@@ -20,7 +20,7 @@ public class ControllerTests : IDisposable
     {
         _context = TestDbContextFactory.Create();
         _ticketService = new TicketService(_context);
-        _controller = new TicketsController(_ticketService);
+        _controller = new TicketsController(_ticketService, _context);
     }
 
     public void Dispose()
@@ -901,7 +901,7 @@ public class AdditionalControllerTests : IDisposable
     {
         _context = TestDbContextFactory.Create();
         _ticketService = new TicketService(_context);
-        _controller = new TicketsController(_ticketService);
+        _controller = new TicketsController(_ticketService, _context);
     }
 
     public void Dispose()

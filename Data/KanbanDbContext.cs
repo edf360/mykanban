@@ -7,6 +7,7 @@ public class KanbanDbContext : DbContext
 {
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketHistory> TicketHistories => Set<TicketHistory>();
+    public DbSet<TicketActual> TicketActuals => Set<TicketActual>();
     public DbSet<Setting> Settings => Set<Setting>();
 
     public KanbanDbContext(DbContextOptions<KanbanDbContext> options) : base(options)
@@ -40,6 +41,20 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.TicketId).IsRequired();
             entity.Property(e => e.Type).IsRequired();
             // 外部キー制約を追加
+            entity.HasOne<Ticket>()
+                .WithMany()
+                .HasForeignKey(e => e.TicketId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TicketActual>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TicketId).IsRequired();
+            entity.Property(e => e.Date).IsRequired();
+            // TicketId + Date の複合ユニーク制約
+            entity.HasIndex(e => new { e.TicketId, e.Date }).IsUnique();
+            // 外部キー制約 - チケット削除時に連動削除
             entity.HasOne<Ticket>()
                 .WithMany()
                 .HasForeignKey(e => e.TicketId)

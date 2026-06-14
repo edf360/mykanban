@@ -7,6 +7,7 @@ import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks } from './childtasks.js';
 import { createTicket, updateTicket, createTicketsPerAssignee } from './ticketService.js';
+import { openActualModal } from './actual.js';
 
 // ===== DOM要素キャッシュ =====
 const el = {
@@ -25,6 +26,7 @@ const el = {
     lockBtn: null,
     emergencyBtn: null,
     savePerAssigneeBtn: null,
+    viewActualBtn: null,
 };
 
 /**
@@ -46,6 +48,7 @@ function cacheElements() {
     el.lockBtn = document.getElementById('modalLockBtn');
     el.emergencyBtn = document.getElementById('modalEmergencyBtn');
     el.savePerAssigneeBtn = document.getElementById('savePerAssigneeBtn');
+    el.viewActualBtn = document.getElementById('viewActualBtn');
 }
 
 /**
@@ -114,6 +117,9 @@ function _openModal(options) {
     
     // 担当者ごとに生成ボタンの表示/非表示（新規作成時のみ表示）
     updateSavePerAssigneeButton();
+    
+    // 実績登録ボタンの有効/無効（新規チケット時は無効）
+    updateActualButton();
     
     // レンダリング
     renderAssigneeTags();
@@ -299,6 +305,16 @@ function updateSavePerAssigneeButton() {
 }
 
 /**
+ * 実績登録ボタンの有効/無効を更新
+ * 新規チケット時は無効、既存チケット編集時は有効
+ */
+function updateActualButton() {
+    if (!el.viewActualBtn) return;
+    const isEdit = !!getEditingTicketId();
+    el.viewActualBtn.disabled = !isEdit;
+}
+
+/**
  * 担当者ごとにチケットを生成
  */
 export async function saveTicketsPerAssignee() {
@@ -355,6 +371,14 @@ export function initModal() {
     }
     if (el.savePerAssigneeBtn) {
         el.savePerAssigneeBtn.addEventListener('click', saveTicketsPerAssignee);
+    }
+    if (el.viewActualBtn) {
+        el.viewActualBtn.addEventListener('click', () => {
+            const ticketId = getEditingTicketId();
+            if (ticketId) {
+                openActualModal(ticketId);
+            }
+        });
     }
     
     // 担当者変更時にボタンの状態を更新

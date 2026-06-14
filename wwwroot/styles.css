@@ -2022,6 +2022,29 @@ body {
     background: rgba(59, 130, 246, 0.1);
 }
 
+/* 列ヘッダードラッグ＆ドロップ用スタイル */
+.draggable-column-header {
+    cursor: grab;
+    user-select: none;
+}
+
+.draggable-column-header:active {
+    cursor: grabbing;
+}
+
+.draggable-column-header.dragging {
+    opacity: 0.4;
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+
+.draggable-column-header.drag-over-left {
+    border-left: 3px solid #3b82f6;
+}
+
+.draggable-column-header.drag-over-right {
+    border-right: 3px solid #3b82f6;
+}
+
 /* 子タスクヘッダー・セルのインデント */
 .child-task-header {
     padding-left: 12px !important;
@@ -2050,9 +2073,102 @@ body {
 
 .graph-panel-resize-handle.dragging { background: rgba(59, 130, 246, 0.2); }
 
+/* タイムラインビュー（HTML Grid方式） */
+.timeline-container {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    position: relative;
+}
+
+.timeline-grid {
+    display: grid;
+    min-width: max-content;
+    position: relative;
+}
+
+.timeline-header-row {
+    grid-column: 1 / -1;
+}
+
+.timeline-date-cell {
+    font-size: 9px;
+    color: #6b7280;
+    text-align: center;
+    padding: 2px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.timeline-date-cell.empty {
+    visibility: hidden;
+}
+
+.timeline-row {
+    display: contents;
+}
+
+.timeline-assignee-cell {
+    font-size: 11px;
+    color: #374151;
+    text-align: right;
+    padding: 0 10px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    border-bottom: 0.5px solid #e5e7eb;
+    background: #fff;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+}
+
+.timeline-cells {
+    /* grid cellは直接管理しない */
+}
+
+.timeline-cell {
+    position: relative;
+    border-bottom: 0.5px solid #e5e7eb;
+    box-sizing: border-box;
+}
+
+.timeline-cell.holiday {
+    background: #f3f4f6;
+}
+
+.timeline-bar {
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: #fff;
+    font-weight: 600;
+    cursor: default;
+    box-sizing: border-box;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+    z-index: 3;
+}
+
+.timeline-today-line {
+    position: absolute;
+    top: 25px;
+    bottom: 0;
+    width: 2px;
+    background: #f59e0b;
+    border-radius: 1px;
+    z-index: 2;
+    pointer-events: none;
+}
+
 /* ============================================
- 担当者ドロップダウンのカスタムスタイル
- ============================================ */
+  担当者ドロップダウンのカスタムスタイル
+  ============================================ */
 
 /* 担当者ドロップダウンのリストアイテム */
 .assignee-list-item {
@@ -2239,3 +2355,171 @@ body {
 #assigneeTags {
     display: none;
 }
+
+/* ===== 実績モーダル ===== */
+
+.actual-modal {
+    max-width: 500px;
+    width: 90%;
+}
+
+.actual-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.actual-form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.actual-form-row label {
+    flex: 0 0 80px;
+    font-weight: 500;
+    color: var(--gray-700);
+}
+
+.actual-form-row input[type="date"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+}
+
+#actualTicketSelect {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+}
+
+.actual-hours-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.actual-hours-input input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 14px;
+    max-width: 120px;
+}
+
+.actual-hours-input span {
+    color: var(--gray-600);
+    font-size: 14px;
+}
+
+.actual-list-header {
+    padding: 12px 20px 8px;
+    font-weight: 600;
+    color: var(--gray-700);
+    font-size: 14px;
+}
+
+.actual-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 0 20px 16px;
+}
+
+.actual-empty {
+    text-align: center;
+    color: var(--gray-400);
+    padding: 20px;
+    font-size: 14px;
+}
+
+.actual-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.actual-row:last-child {
+    border-bottom: none;
+}
+
+.actual-date {
+    flex: 1;
+    font-size: 14px;
+    color: var(--gray-700);
+}
+
+.actual-hours {
+    flex: 0 0 60px;
+    text-align: right;
+    font-weight: 500;
+    color: var(--primary);
+}
+
+.actual-delete-btn {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s ease;
+}
+
+.actual-delete-btn:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* 実績ボタン - 他のアクションボタンと同じスタイル */
+.modal-btn.actual {
+    background: rgba(107, 114, 128, 0.1);
+    color: #4b5563;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-btn.actual:hover {
+    background: rgba(107, 114, 128, 0.2);
+}
+.modal-btn.actual:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 日付なしチケットセクション */
+.timeline-no-date-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f9fafb;
+    border-radius: 8px;
+}
+
+.timeline-no-date-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.progress-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+}
+

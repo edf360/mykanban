@@ -1,6 +1,8 @@
 using KanbanServer.Models;
 using KanbanServer.Services;
+using KanbanServer.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace KanbanServer.Controllers;
 
@@ -9,10 +11,12 @@ namespace KanbanServer.Controllers;
 public class TicketsController : ControllerBase
 {
     private readonly TicketService _ticketService;
+    private readonly KanbanDbContext _dbContext;
 
-    public TicketsController(TicketService ticketService)
+    public TicketsController(TicketService ticketService, KanbanDbContext dbContext)
     {
         _ticketService = ticketService;
+        _dbContext = dbContext;
     }
 
     /// <summary>
@@ -181,4 +185,127 @@ public class TicketsController : ControllerBase
         var result = await _ticketService.GetAssigneesSuggestAsync();
         return Ok(result);
     }
+
+    // ===== 実績（TicketActual）CRUD =====
+
+    /// <summary>
+    /// チケットの実績一覧を取得（日付降順）
+    /// </summary>
+    [HttpGet("{id}/actuals")]
+    public async Task<ActionResult<List<TicketActual>>> GetActuals(string id)
+    {
+        var ticket = await _ticketService.GetAsync(id);
+        if (ticket == null)
+            return NotFound(new { error = "Ticket not found" });
+        var actuals = await _dbContext.TicketActuals
+            .Where(a => a.TicketId == id)
+            .OrderByDescending(a => a.Date)
+            .ToListAsync();
+        return Ok(actuals);
+    }
+
+    /// <summary>
+    /// 実績を登録または更新（日付ベース）
+    /// </summary>
+    [HttpPost("{id}/actuals")]
+    public async Task<ActionResult<TicketActual>> CreateOrUpdateActual(string id, [FromBody] ActualDto? dto)
+    {
+        if (dto == null)
+            return BadRequest(new { error = "Request body is required" });
+        if (dto.Hours < 0)
+            return BadRequest(new { error = "Hours must be non-negative" });
+
+        var ticket = await _ticketService.GetAsync(id);
+        if (ticket == null)
+            return NotFound(new { error = "Ticket not found" });
+
+        // 既存の実績を確認
+        var existing = await _dbContext.TicketActuals
+            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date);
+
+        if (existing != null)
+        {
+            // 更新
+            existing.Hours = dto.Hours;
+            await _dbContext.SaveChangesAsync();
+            return Ok(existing);
+        }
+
+        // 新規作成
+        var actual = new TicketActual
+        {
+            TicketId = id,
+            Date = dto.Date.Date,
+            Hours = dto.Hours
+        };
+        _dbContext.TicketActuals.Add(actual);
+        await _dbContext.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetActuals), new { id }, actual);
+    }
+
+    /// <summary>
+    /// 実績を更新
+    /// </summary>
+    [HttpPut("{id}/actuals/{date}")]
+    public async Task<ActionResult<TicketActual>> UpdateActual(string id, string date, [FromBody] ActualDto? dto)
+    {
+        if (dto == null)
+            return BadRequest(new { error = "Request body is required" });
+        if (dto.Hours < 0)
+            return BadRequest(new { error = "Hours must be non-negative" });
+
+        var ticket = await _ticketService.GetAsync(id);
+        if (ticket == null)
+            return NotFound(new { error = "Ticket not found" });
+
+        DateTime targetDate;
+        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out targetDate))
+        {
+            return BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd" });
+        }
+
+        var actual = await _dbContext.TicketActuals
+            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date);
+        if (actual == null)
+            return NotFound(new { error = "Actual not found" });
+
+        actual.Hours = dto.Hours;
+        await _dbContext.SaveChangesAsync();
+        return Ok(actual);
+    }
+
+    /// <summary>
+    /// 実績を削除
+    /// </summary>
+    [HttpDelete("{id}/actuals/{date}")]
+    public async Task<IActionResult> DeleteActual(string id, string date)
+    {
+        var ticket = await _ticketService.GetAsync(id);
+        if (ticket == null)
+            return NotFound(new { error = "Ticket not found" });
+
+        DateTime targetDate;
+        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out targetDate))
+        {
+            return BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd" });
+        }
+
+        var actual = await _dbContext.TicketActuals
+            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date);
+        if (actual == null)
+            return NotFound(new { error = "Actual not found" });
+
+        _dbContext.TicketActuals.Remove(actual);
+        await _dbContext.SaveChangesAsync();
+        return NoContent();
+    }
+}
+
+/// <summary>
+/// 実績登録用のDTO
+/// </summary>
+public class ActualDto
+{
+    public DateTime Date { get; set; }
+    public double Hours { get; set; }
 }

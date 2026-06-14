@@ -181,6 +181,11 @@
         <div class="graph-panel-resize-handle" id="graphPanelResizeHandle"></div>
         <div class="graph-panel-body hidden" id="graphPanelBody">
             <div class="graph-panel-controls">
+                <label for="graphViewSelect">表示:</label>
+                <select id="graphViewSelect">
+                    <option value="matrix">進捗表</option>
+                    <option value="timeline">タイムライン</option>
+                </select>
                 <label for="graphLabelFilter">ラベル選択:</label>
                 <select id="graphLabelFilter">
                     <option value="">ラベルを選択してください</option>
@@ -293,6 +298,7 @@
             <div class="modal-actions">
                 <div class="modal-actions-left">
                     <button class="modal-btn history" id="viewHistoryBtn">📋 履歴を確認</button>
+                    <button class="modal-btn actual" id="viewActualBtn">実績登録</button>
                     <button class="modal-btn save-multi" id="savePerAssigneeBtn" title="担当者の数だけロック済みのチケットを生成">👥 担当者ごとに生成</button>
                 </div>
                 <div class="modal-actions-right">
@@ -311,6 +317,35 @@
             <div class="modal-actions">
                 <button class="modal-btn cancel" id="closeHistoryBtn">閉じる</button>
             </div>
+        </div>
+    </div>
+
+    <!-- 実績登録ダイアログ -->
+    <div class="modal-overlay" id="actualModal" role="dialog" aria-modal="true">
+        <div class="modal actual-modal">
+            <div class="modal-header">
+                <div class="modal-title">実績登録</div>
+            </div>
+            <div class="actual-form">
+                <div class="actual-form-row">
+                    <label for="actualTicketSelect">チケット</label>
+                    <select id="actualTicketSelect"></select>
+                </div>
+                <div class="actual-form-row">
+                    <label for="actualDateInput">日付</label>
+                    <input type="date" id="actualDateInput">
+                </div>
+                <div class="actual-form-row">
+                    <label for="actualHoursInput">作業時間</label>
+                    <div class="actual-hours-input">
+                        <input type="number" id="actualHoursInput" placeholder="例: 4" min="0" step="1">
+                        <span>時間</span>
+                    </div>
+                </div>
+                <button class="modal-btn save" id="actualSaveBtn">保存</button>
+            </div>
+            <div class="actual-list-header">過去の実績</div>
+            <div class="actual-list" id="actualList"></div>
         </div>
     </div>
 

@@ -12,13 +12,14 @@ import { renderLabelSelect } from './modules/labels.js';
 import { renderAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
+import { initActual } from './modules/actual.js';
 import { populateAssigneeFilter, populateLabelFilter, initFilter, adjustBoardForFilterOnInit } from './modules/filter.js';
 import { initArchive } from './modules/archive.js';
 import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
 import { getToken, login, logout, showLoginScreen, showAppScreen, getUsername } from './modules/auth.js';
 import { logInfo, logError, copyToClipboard, exportAsText, getLogBuffer, onUIUpdate } from './modules/logger.js';
-import { renderProgressMatrix, getTicketsByLabel } from './modules/charts.js';
+import { renderProgressMatrix, renderTimelineView, getTicketsByLabel } from './modules/charts.js';
 
 // ===== 初期化ガード =====
 let appInitialized = false;
@@ -52,6 +53,9 @@ async function initApp() {
 
     // 2. 履歴ダイアログ
     initHistory();
+
+    // 2.5 実績ダイアログ
+    initActual();
 
     // 3. ドラッグ＆ドロップ
     setupDropZones();
@@ -114,7 +118,7 @@ async function initApp() {
         if (!confirm('ログアウトしますか？')) return;
         try {
           await logout();
-          showLoginScreen();
+          location.reload();
         } catch (err) {
           logError('ログアウト失敗: ' + err.message);
         }
@@ -401,6 +405,7 @@ function initGraphPanelInternal() {
   const graphPanelBody = document.getElementById('graphPanelBody');
   const graphPanelResizeHandle = document.getElementById('graphPanelResizeHandle');
   const graphLabelSelect = document.getElementById('graphLabelFilter');
+  const graphViewSelect = document.getElementById('graphViewSelect');
   const excludeToggleBtn = document.getElementById('graphExcludeToggleBtn');
   const excludeTicketsList = document.getElementById('excludeTicketsList');
   const excludeDropdown = document.getElementById('excludeTicketsDropdown');
@@ -473,6 +478,7 @@ function initGraphPanelInternal() {
   function updateGraphPanel() {
     if (!graphLabelSelect) return;
     const labelName = graphLabelSelect.value;
+    const viewType = graphViewSelect?.value || 'matrix';
     if (!labelName) {
       if (matrixContainer) matrixContainer.innerHTML = '';
       if (excludeTicketsList) excludeTicketsList.innerHTML = '';
@@ -480,7 +486,11 @@ function initGraphPanelInternal() {
     }
     populateExcludeTicketsSelect(labelName);
     const excludedIds = getExcludedTicketIds();
-    renderProgressMatrix(matrixContainer, labelName, excludedIds);
+    if (viewType === 'timeline') {
+      renderTimelineView(matrixContainer, labelName, excludedIds);
+    } else {
+      renderProgressMatrix(matrixContainer, labelName, excludedIds);
+    }
   }
 
   // bottomLeftButtons の bottom とカンバンボードの高さをグラフパネルの高さに合わせて更新
@@ -506,7 +516,12 @@ function initGraphPanelInternal() {
     updatePanelLayout(panelHeight);
     if (graphLabelSelect && graphLabelSelect.value) {
       const excludedIds = getExcludedTicketIds();
-      renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds);
+      // 現在のビュータイプに応じて適切な関数を呼び出す
+      if (graphViewSelect && graphViewSelect.value === 'timeline') {
+        renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds);
+      } else {
+        renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds);
+      }
     }
   };
 
@@ -586,6 +601,13 @@ function initGraphPanelInternal() {
   // ラベル変更イベント
   if (graphLabelSelect) {
     graphLabelSelect.addEventListener('change', () => {
+      updateGraphPanel();
+    });
+  }
+
+  // ビュー切替イベント
+  if (graphViewSelect) {
+    graphViewSelect.addEventListener('change', () => {
       updateGraphPanel();
     });
   }
