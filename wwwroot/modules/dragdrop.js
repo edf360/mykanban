@@ -16,7 +16,7 @@ export function setupDropZones() {
         list.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            
+
             removeDropIndicators();
             
             const tickets = Array.from(list.querySelectorAll('.ticket:not(.dragging)'));

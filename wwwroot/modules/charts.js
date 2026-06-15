@@ -5,6 +5,9 @@
 
 import { state, formatDateWithDay, getAllTickets } from './state.js';
 
+// タイムライン行のカスタム順序（ドラッグで並び替え）
+let timelineRowOrder = null;
+
 // ===== 日付ユーティリティ =====
 
 /**
@@ -487,15 +490,17 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     }
     
     // 各タイトルの子タスクを収集（重複除去、done=false のみ）
+    // 同じ名前の子タスクは1列に統合（text で重複除去）
     const titleChildTasks = new Map();
     titles.forEach(title => {
         const titleTickets = titleMap.get(title);
-        const childSet = new Map(); // id -> childTask
+        const childSet = new Map(); // text -> childTask（最初に見つかったものを保持）
         titleTickets.forEach(t => {
             if (t.childTasks && Array.isArray(t.childTasks)) {
                 t.childTasks.forEach(ct => {
-                    if (!ct.done && !childSet.has(ct.id)) {
-                        childSet.set(ct.id, ct);
+                    const key = ct.text || '無題';
+                    if (!ct.done && !childSet.has(key)) {
+                        childSet.set(key, ct);
                     }
                 });
             }
@@ -633,11 +638,12 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
                 childTd.dataset.parentTitle = title;
                 
                 // 子タスクの進捗率を表示
-                // 該当チケットから子タスクを探す
+                // 該当チケットから同じ名前の子タスクを探す（text でマッチ）
                 let childProgress = null;
+                const ctKey = ct.text || '無題';
                 for (const t of titleTickets) {
                     if (t.childTasks) {
-                        const found = t.childTasks.find(c => c.id === ct.id);
+                        const found = t.childTasks.find(c => (c.text || '無題') === ctKey);
                         if (found) {
                             childProgress = found.progress;
                             break;
@@ -854,6 +860,22 @@ export function renderTimelineView(container, labelName, excludedTicketIds = [])
 /**
  * Ganttチャート表示（横軸=日付、縦軸=担当者）
  */
+// 担当者別カラーパレット
+const ASSIGNEE_COLORS = [
+  { light: '#bfdbfe', dark: '#3b82f6' },  // 青
+  { light: '#bbf7d0', dark: '#22c55e' },  // 緑
+  { light: '#fed7aa', dark: '#f97316' },  // オレンジ
+  { light: '#e9d5ff', dark: '#a855f7' },  // 紫
+  { light: '#fecaca', dark: '#ef4444' },  // 赤
+  { light: '#a5f3fc', dark: '#06b6d4' },  // シアン
+  { light: '#fde68a', dark: '#eab308' },  // 黄
+  { light: '#fca5a5', dark: '#dc2626' },  // 濃い赤
+];
+
+function getAssigneeColor(assigneeIndex) {
+    return ASSIGNEE_COLORS[assigneeIndex % ASSIGNEE_COLORS.length];
+}
+
 function renderGanttChart(container, tickets, assignees) {
     // 全期間の最小/最大日付
     let globalMinDate = null, globalMaxDate = null;
@@ -887,11 +909,50 @@ function renderGanttChart(container, tickets, assignees) {
 
     if (workDays.length === 0) return;
 
+    // 担当者×チケットの行リストを生成
+    const allRows = [];
+    assignees.forEach((assignee, assigneeIdx) => {
+        const assigneeTickets = tickets.filter(t =>
+            t.assignees && t.assignees.includes(assignee)
+        );
+        assigneeTickets.forEach(ticket => {
+            allRows.push({
+                assignee,
+                assigneeIdx,
+                ticket,
+                label: `${assignee} - ${ticket.title || '無題'}`,
+                key: `${assignee}|${ticket.id}`
+            });
+        });
+    });
+
+    if (allRows.length === 0) return;
+
+    // カスタム行順序がある場合は適用
+    let rows = allRows;
+    if (timelineRowOrder !== null && timelineRowOrder.length > 0) {
+        const rowMap = new Map();
+        allRows.forEach(r => rowMap.set(r.key, r));
+        const ordered = [];
+        timelineRowOrder.forEach(key => {
+            if (rowMap.has(key)) {
+                ordered.push(rowMap.get(key));
+            }
+        });
+        // 新規行は末尾に追加
+        allRows.forEach(r => {
+            if (!timelineRowOrder.includes(r.key)) {
+                ordered.push(r);
+            }
+        });
+        rows = ordered;
+    }
+
     // パラメータ
     const rowHeight = 28;
-    const dayWidth = 15;
+    const dayWidth = 30;
     const barHeight = 16;
-    const leftPadding = 80;
+    const leftPadding = 160;
     const topPadding = 25;
 
     // コンテナ作成
@@ -902,14 +963,14 @@ function renderGanttChart(container, tickets, assignees) {
     const grid = document.createElement('div');
     grid.className = 'timeline-grid';
     grid.style.gridTemplateColumns = `${leftPadding}px repeat(${workDays.length}, ${dayWidth}px)`;
-    grid.style.gridTemplateRows = `${topPadding}px repeat(${assignees.length}, ${rowHeight}px)`;
+    grid.style.gridTemplateRows = `${topPadding}px repeat(${rows.length}, ${rowHeight}px)`;
 
     // 日付ラベル行（row 1）
-    const labelInterval = Math.max(1, Math.floor(workDays.length / 20));
+    const labelInterval = Math.max(1, Math.floor(workDays.length / 15));
     workDays.forEach((day, i) => {
         const cell = document.createElement('div');
         cell.className = 'timeline-date-cell';
-        cell.style.gridColumn = i + 2; // 担当者名列分offset
+        cell.style.gridColumn = i + 2;
         cell.style.gridRow = 1;
         if (i % labelInterval === 0 || i === workDays.length - 1) {
             cell.textContent = `${day.getMonth() + 1}/${day.getDate()}`;
@@ -919,16 +980,21 @@ function renderGanttChart(container, tickets, assignees) {
         grid.appendChild(cell);
     });
 
-    // 担当者行（row 2〜）
-    assignees.forEach((assignee, row) => {
-        const gridRow = row + 2; // ヘッダー行分offset
+    // 担当者 - チケット行（row 2〜）
+    const assigneeCells = [];
+    rows.forEach((rowInfo, row) => {
+        const gridRow = row + 2;
 
-        // 担当者名セル
+        // 担当者名セル（「山田 - aaa」形式）
         const assigneeCell = document.createElement('div');
-        assigneeCell.className = 'timeline-assignee-cell';
-        assigneeCell.textContent = assignee;
+        assigneeCell.className = 'timeline-assignee-cell draggable-timeline-row';
+        assigneeCell.textContent = rowInfo.label;
+        assigneeCell.title = rowInfo.label + '（ドラッグで入れ替え）';
         assigneeCell.style.gridColumn = 1;
         assigneeCell.style.gridRow = gridRow;
+        assigneeCell.draggable = true;
+        assigneeCell.dataset.rowKey = rowInfo.key;
+        assigneeCells.push(assigneeCell);
         grid.appendChild(assigneeCell);
 
         // 日付セル（バー配置用）
@@ -941,7 +1007,7 @@ function renderGanttChart(container, tickets, assignees) {
         });
     });
 
-    // 今日マーカー
+     // 今日マーカー
     const today = getToday();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     if (dateToIndex.has(todayKey)) {
@@ -949,47 +1015,62 @@ function renderGanttChart(container, tickets, assignees) {
         const todayLine = document.createElement('div');
         todayLine.className = 'timeline-today-line';
         todayLine.style.left = `${leftPadding + todayIndex * dayWidth + dayWidth / 2}px`;
-        todayLine.style.height = `${assignees.length * rowHeight}px`;
+        todayLine.style.height = `${rows.length * rowHeight}px`;
         todayLine.style.top = `${topPadding}px`;
         wrapper.appendChild(todayLine);
     }
 
-    // チケットバー
-    tickets.forEach(ticket => {
-        if (!ticket.assignees) return;
+    // チケットバー（予定＋実績）
+    rows.forEach((rowInfo, row) => {
+        const ticket = rowInfo.ticket;
         const start = parseDate(ticket.startDate);
         const end = parseDate(ticket.endDate);
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
-        const progress = sanitizeNum(ticket.progress, 0);
-        const color = getProgressColor(progress);
+        const progress = Math.min(100, Math.max(0, sanitizeNum(ticket.progress, 0)));
+        const colors = getAssigneeColor(rowInfo.assigneeIdx);
 
-        ticket.assignees.forEach(assignee => {
-            const row = assignees.indexOf(assignee);
-            if (row < 0) return;
+        const startKey = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`;
+        const endKey = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`;
+        const startIndex = dateToIndex.has(startKey) ? dateToIndex.get(startKey) : -1;
+        const endIndex = dateToIndex.has(endKey) ? dateToIndex.get(endKey) : -1;
 
-            const startKey = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`;
-            const endKey = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`;
-            const startIndex = dateToIndex.has(startKey) ? dateToIndex.get(startKey) : -1;
-            const endIndex = dateToIndex.has(endKey) ? dateToIndex.get(endKey) : -1;
+        if (startIndex < 0 || endIndex < 0 || startIndex > endIndex) return;
 
-            if (startIndex < 0 || endIndex < 0 || startIndex > endIndex) return;
+        const totalDays = endIndex - startIndex + 1;
+        const gridColStart = startIndex + 2;
+        const gridColSpan = totalDays;
+        const gridRowVal = row + 2;
 
-            const bar = document.createElement('div');
-            bar.className = 'timeline-bar';
-            bar.style.gridColumn = `${startIndex + 2} / span ${endIndex - startIndex + 1}`;
-            bar.style.gridRow = row + 2;
-            bar.style.background = color;
-            bar.style.height = `${barHeight}px`;
-            bar.title = `${ticket.title} (${progress}%)`;
+        // 予定バー（薄い色の長方形）
+        const plannedBar = document.createElement('div');
+        plannedBar.className = 'timeline-bar-planned';
+        plannedBar.style.gridColumn = `${gridColStart} / span ${gridColSpan}`;
+        plannedBar.style.gridRow = gridRowVal;
+        plannedBar.style.background = colors.light;
+        plannedBar.style.height = `${barHeight}px`;
+        plannedBar.title = `${ticket.title} 予定 (${progress}%)`;
+        grid.appendChild(plannedBar);
 
-            const barWidth = (endIndex - startIndex + 1) * dayWidth;
-            if (barWidth > 30) {
-                bar.textContent = `${progress}%`;
+        // 実績バー（濃い色の長方形 - 進捗率に応じて幅を計算）
+        if (progress > 0) {
+            const totalBarWidth = totalDays * dayWidth;
+            const actualWidth = Math.round(totalBarWidth * progress / 100);
+            const actualBar = document.createElement('div');
+            actualBar.className = 'timeline-bar-actual';
+            actualBar.style.gridColumn = `${gridColStart} / span ${totalDays}`;
+            actualBar.style.gridRow = gridRowVal;
+            actualBar.style.background = colors.dark;
+            actualBar.style.height = `${barHeight}px`;
+            actualBar.style.width = `${actualWidth}px`;
+            actualBar.title = `${ticket.title} 実績 (${progress}%)`;
+
+            if (actualWidth > 40) {
+                actualBar.textContent = `${progress}%`;
             }
 
-            grid.appendChild(bar);
-        });
+            grid.appendChild(actualBar);
+        }
     });
 
     wrapper.appendChild(grid);

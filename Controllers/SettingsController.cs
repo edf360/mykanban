@@ -382,7 +382,9 @@ public class SettingsController : ControllerBase
             var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
             
             ticket.Title = title;
-            ticket.Progress = ParseProgress(csv.GetField(columnIndexes["バケット"]) ?? "");
+            // バケット進捗は一時的に保持（子タスクから計算があれば上書き）
+            var bucketProgress = ParseProgress(csv.GetField(columnIndexes["バケット"]) ?? "");
+            ticket.Progress = bucketProgress;
             ticket.Column = MapStateToColumn(csv.GetField(columnIndexes["状態"]) ?? "");
             ticket.IsArchived = false;
             
@@ -403,9 +405,16 @@ public class SettingsController : ControllerBase
             ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
             ticket.EndDate = ParseDate(csv.GetField(columnIndexes["完了日"]) ?? "");
 
-            // チェックリストの処理（完了状況はCSV元データに問題があるため取り込まない）
+            // チェックリストの処理
             var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
             ticket.ChildTasks = ParseChecklist(checklistItems);
+
+            // 子タスクに【X%】指定があればバケットを無視して子タスクから進捗率を計算
+            if (HasProgressAnnotation(checklistItems))
+            {
+                var totalProgress = ticket.ChildTasks.Sum(ct => ct.Progress);
+                ticket.Progress = (int)(totalProgress / ticket.ChildTasks.Count);
+            }
 
             // ラベルの処理
             var labelsStr = csv.GetField(columnIndexes["ラベル"]) ?? "";
@@ -535,17 +544,47 @@ public class SettingsController : ControllerBase
             .Where(s => !string.IsNullOrEmpty(s))
             .ToList();
 
-        // CSVの元データの完了状況チェックには問題があるため、完了状態は取り込まない
         foreach (var item in items)
         {
-            result.Add(new ChildTask
+            var ct = new ChildTask { Text = item, Done = false };
+            // 【X%】表記から進捗率をパース（0%〜100%）
+            if (TryExtractProgress(item, out var progress))
             {
-                Text = item,
-                Done = false
-            });
+                ct.Progress = progress;
+                // タイトルから【X%】表記を除去
+                ct.Text = System.Text.RegularExpressions.Regex.Replace(item, @"【\d+%】", "").TrimStart();
+                // 100%なら完了済み
+                ct.Done = progress >= 100;
+            }
+            result.Add(ct);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// テキストから【X%】形式の進捗率を抽出（0-100）
+    /// </summary>
+    private static bool TryExtractProgress(string text, out int progress)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"【(\d+)%】");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var p))
+        {
+            progress = Math.Clamp(p, 0, 100);
+            return true;
+        }
+        progress = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// チェックリスト項目に【X%】の進捗指定が含まれているか確認
+    /// </summary>
+    private static bool HasProgressAnnotation(string itemsStr)
+    {
+        if (string.IsNullOrWhiteSpace(itemsStr))
+            return false;
+        return System.Text.RegularExpressions.Regex.IsMatch(itemsStr, @"【\d+%】");
     }
 
     private static List<string> ParseSemicolonSeparated(string value)

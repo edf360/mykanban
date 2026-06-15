@@ -1858,7 +1858,7 @@ body {
     display: flex;
     flex-direction: column;
     padding: 12px 16px;
-    overflow: hidden;
+    overflow-y: auto;
 }
 
 .graph-panel-controls {
@@ -2110,16 +2110,19 @@ body {
 .timeline-assignee-cell {
     font-size: 11px;
     color: #374151;
-    text-align: right;
-    padding: 0 10px 0 0;
+    text-align: left;
+    padding: 0 10px 0 10px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     border-bottom: 0.5px solid #e5e7eb;
     background: #fff;
     position: sticky;
     left: 0;
     z-index: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .timeline-cells {
@@ -2140,6 +2143,36 @@ body {
     height: 16px;
     border-radius: 3px;
     opacity: 0.8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: #fff;
+    font-weight: 600;
+    cursor: default;
+    box-sizing: border-box;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+    z-index: 3;
+}
+
+/* 予定バー（薄い色） */
+.timeline-bar-planned {
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0.5;
+    cursor: default;
+    box-sizing: border-box;
+    z-index: 2;
+}
+
+/* 実績バー（濃い色） */
+.timeline-bar-actual {
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0.9;
     display: flex;
     align-items: center;
     justify-content: center;
