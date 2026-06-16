@@ -353,9 +353,10 @@ public class SettingsController : ControllerBase
         var existingTicketsDict = await _context.Tickets.ToDictionaryAsync(t => t.TicketId);
 
         // カラム別最大Positionを事前計算（ループ中のDBアクセスを回避）
+        // TicketService.CreateAsync と同じロジックで -1000 をベースにする
         var maxPositionByColumn = await _context.Tickets
             .GroupBy(t => t.Column)
-            .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1);
+            .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1000);
 
         // 次Idを事前計算（自動採番されないスキーマでも登録可能に）
         var nextTicketInternalId = (await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0) + 1;
@@ -376,8 +377,9 @@ public class SettingsController : ControllerBase
                 continue;
             }
 
-            // 既存チケットをDictionaryから検索
+            // 既存チケットをDictionaryから検索（インポート中に追加/更新したチケットも含まれる）
             existingTicketsDict.TryGetValue(ticketId, out var existingTicket);
+            var originalColumn = existingTicket?.Column;
 
             var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
             
@@ -403,7 +405,7 @@ public class SettingsController : ControllerBase
 
             // 日付の処理
             ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
-            ticket.EndDate = ParseDate(csv.GetField(columnIndexes["完了日"]) ?? "");
+            ticket.EndDate = ParseDate(csv.GetField(columnIndexes["期限"]) ?? "");
 
             // チェックリストの処理
             var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
@@ -436,16 +438,28 @@ public class SettingsController : ControllerBase
 
                 // 新規チケットのPosition設定（事前計算値を使用）
                 if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
-                    maxPos = -1;
-                ticket.Position = maxPos + 1.0;
+                    maxPos = -1000;
+                ticket.Position = maxPos + 1000.0;
                 maxPositionByColumn[ticket.Column] = ticket.Position;
                 _context.Tickets.Add(ticket);
+
+                // Dictionaryに追加して同一IDの重複インポートを防ぐ
+                existingTicketsDict[ticket.TicketId] = ticket;
 
                 // 作成履歴を記録
                 AddHistory(ticket.TicketId, HistoryTypes.Created, ticket.Title, null);
             }
             else
             {
+                if (!string.Equals(originalColumn, ticket.Column, StringComparison.Ordinal))
+                {
+                    if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
+                    {
+                        maxPos = -1000;
+                    }
+                    ticket.Position = maxPos + 1000.0;
+                    maxPositionByColumn[ticket.Column] = ticket.Position;
+                }
                 // 既存チケット更新 - 変更フィールドを比較して履歴記録
                 if (existingTicket.Title != ticket.Title)
                 {
@@ -490,6 +504,9 @@ public class SettingsController : ControllerBase
 
             // 発見した担当者とラベルを設定に追加
             await MergeDiscoveredSettingsAsync(discoveredAssignees, discoveredLabels);
+
+            // 各カラムのPositionを再配置（重複を解消）
+            RepositionAllColumns();
 
             await _context.SaveChangesAsync();
             return Ok(new { message = "インポートが完了しました", count = imported, skipped = skipped });
@@ -552,7 +569,7 @@ public class SettingsController : ControllerBase
             {
                 ct.Progress = progress;
                 // タイトルから【X%】表記を除去
-                ct.Text = System.Text.RegularExpressions.Regex.Replace(item, @"【\d+%】", "").TrimStart();
+                ct.Text = System.Text.RegularExpressions.Regex.Replace(item, @"【[0-9０-９]+[%％]】", "").TrimStart();
                 // 100%なら完了済み
                 ct.Done = progress >= 100;
             }
@@ -567,7 +584,7 @@ public class SettingsController : ControllerBase
     /// </summary>
     private static bool TryExtractProgress(string text, out int progress)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(text, @"【(\d+)%】");
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"【([0-9０-９]+)[%％]】");
         if (match.Success && int.TryParse(match.Groups[1].Value, out var p))
         {
             progress = Math.Clamp(p, 0, 100);
@@ -584,7 +601,7 @@ public class SettingsController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(itemsStr))
             return false;
-        return System.Text.RegularExpressions.Regex.IsMatch(itemsStr, @"【\d+%】");
+        return System.Text.RegularExpressions.Regex.IsMatch(itemsStr, @"【[0-9０-９]+[%％]】");
     }
 
     private static List<string> ParseSemicolonSeparated(string value)
@@ -610,6 +627,32 @@ public class SettingsController : ControllerBase
             PreviousValue = previousValue,
             Date = DateTime.UtcNow
         });
+    }
+
+    /// <summary>
+    /// 各カラムのPositionを再配置（重複を解消）
+    /// </summary>
+    private void RepositionAllColumns()
+    {
+        // Localビューを使用し、DBに保存されていない新規チケットも含める
+        // アーカイブチケットは除外（Position=0に固定）
+        var localTickets = _context.Tickets.Local
+            .Where(t => !t.IsArchived)
+            .ToList();
+        var columns = localTickets.Select(t => t.Column).Distinct().ToList();
+        foreach (var column in columns)
+        {
+            var tickets = localTickets
+                .Where(t => t.Column == column)
+                .OrderBy(t => t.Position)
+                .ThenBy(t => t.Id)
+                .ToList();
+
+            for (int i = 0; i < tickets.Count; i++)
+            {
+                tickets[i].Position = i * 1000.0;
+            }
+        }
     }
 
     /// <summary>

@@ -115,6 +115,13 @@ function _renderLabelSelect(closeDropdown = false) {
     const allLabels = getLabelSuggestions();
     const currentLabels = getCurrentLabels();
     const labelColors = getLabelColorMap();
+
+    // ドロップダウンボタンのテキストを更新
+    if (currentLabels.length > 0) {
+        toggleBtn.textContent = currentLabels.join(', ') + ' ▼';
+    } else {
+        toggleBtn.textContent = 'ラベルを選択 ▼';
+    }
     
     allLabels.forEach(label => {
         const color = labelColors[label] || '#808080';

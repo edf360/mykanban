@@ -97,7 +97,7 @@ export async function open() {
     currentAdminState = isAdmin();
     renderUsers(currentAdminState);
     renderLabels(currentAdminState);
-    renderHolidays();
+    renderHolidays(currentAdminState);
 
     // 管理者のみ機能の表示/非表示
     const holidaysSection = document.querySelector('#holidaysTextarea')?.closest('.settings-section');
@@ -422,10 +422,12 @@ function cancelLabelInlineEdit(id) {
 /**
  * 休日テキストエリアをレンダリング
  */
-function renderHolidays() {
+function renderHolidays(admin) {
     const textarea = document.getElementById('holidaysTextarea');
     if (textarea) {
         textarea.value = settings.holidays.join('\n');
+        // 管理者のみ編集可能
+        textarea.readOnly = !admin;
     }
 }
 
@@ -675,6 +677,8 @@ function addLabel() {
  * 休日を保存（textarea変更時）
  */
 function saveHolidays() {
+    // 管理者のみ保存可能
+    if (!currentAdminState) return;
     const textarea = document.getElementById('holidaysTextarea');
     const lines = textarea.value.split('\n')
         .map(l => l.trim())

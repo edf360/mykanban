@@ -855,6 +855,11 @@ export function renderTimelineView(container, labelName, excludedTicketIds = [])
     if (ticketsWithoutDates.length > 0) {
         renderTimelineTable(container, ticketsWithoutDates, assignees);
     }
+
+    // 有効な情報がない場合はメッセージを表示
+    if (ticketsWithDates.length === 0 && ticketsWithoutDates.length === 0) {
+        container.innerHTML = '<p class="graph-placeholder">有効な情報がありません</p>';
+    }
 }
 
 /**
@@ -912,9 +917,27 @@ function renderGanttChart(container, tickets, assignees) {
     // 担当者×チケットの行リストを生成
     const allRows = [];
     assignees.forEach((assignee, assigneeIdx) => {
-        const assigneeTickets = tickets.filter(t =>
+        let assigneeTickets = tickets.filter(t =>
             t.assignees && t.assignees.includes(assignee)
         );
+        // 同じ担当者のチケットを並べ替え（開始日昇順 → 終了日昇順）
+        assigneeTickets.sort((a, b) => {
+            const aStart = parseDate(a.startDate);
+            const bStart = parseDate(b.startDate);
+            const aStartValid = !isNaN(aStart.getTime());
+            const bStartValid = !isNaN(bStart.getTime());
+            if (aStartValid && bStartValid) {
+                if (aStart.getTime() !== bStart.getTime()) {
+                    return aStart.getTime() - bStart.getTime();
+                }
+                const aEnd = parseDate(a.endDate);
+                const bEnd = parseDate(b.endDate);
+                if (!isNaN(aEnd.getTime()) && !isNaN(bEnd.getTime())) {
+                    return aEnd.getTime() - bEnd.getTime();
+                }
+            }
+            return 0;
+        });
         assigneeTickets.forEach(ticket => {
             allRows.push({
                 assignee,

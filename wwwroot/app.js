@@ -633,8 +633,8 @@ function initGraphPanelInternal() {
     let isResizing = false;
     let startY = 0;
     let startHeight = 0;
-    const minHeight = 150;
-    const maxHeight = window.innerHeight - 100;
+    const minHeight = 50;
+    const maxHeight = window.innerHeight - 20;
 
     graphPanelResizeHandle.addEventListener('mousedown', (e) => {
       if (!state.graphPanelOpen) return;

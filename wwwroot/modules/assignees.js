@@ -87,6 +87,13 @@ export function renderAssigneeSelect() {
     const currentAssignees = getCurrentAssignees();
     const mainAssignee = getMainAssignee();
 
+    // ドロップダウンボタンのテキストを更新
+    if (currentAssignees.length > 0) {
+        toggleBtn.textContent = currentAssignees.join(', ') + ' ▼';
+    } else {
+        toggleBtn.textContent = '担当者を選択 ▼';
+    }
+
     allAssignees.forEach(assignee => {
         const isEnabled = currentAssignees.includes(assignee);
         const isMain = assignee === mainAssignee;
