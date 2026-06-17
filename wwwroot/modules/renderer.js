@@ -263,10 +263,28 @@ export function createTicketElement(data) {
         visibleChildTasks.forEach((task) => {
             const childId = task.id || '';
             const progress = task.progress || 0;
+            const reviewState = task.reviewState || 'none';
+            let reviewIcon = '';
+            let reviewTitle = '';
+            switch (reviewState) {
+                case 'requested':
+                    reviewIcon = '⏳';
+                    reviewTitle = 'レビュー依頼中';
+                    break;
+                case 'completed':
+                    reviewIcon = '✅';
+                    reviewTitle = 'レビュー完了';
+                    break;
+                default:
+                    reviewIcon = '📄';
+                    reviewTitle = 'レビュー前';
+                    break;
+            }
             childTasksHtml += `
                 <div class="ticket-child-task-item" data-child-id="${childId}">
                     <span class="ticket-child-task-text">${escapeHtml(task.text)}</span>
                     <span class="ticket-child-task-progress" data-child-progress="${childId}" title="クリックして進捗率を変更">${progress}%</span>
+                    <button class="ticket-child-task-review-btn ${reviewState !== 'none' ? 'review-' + reviewState : ''}" data-review-id="${childId}" title="${reviewTitle}（クリックで切り替え）">${reviewIcon}</button>
                 </div>`;
         });
         childTasksHtml += '</div>';
@@ -528,6 +546,39 @@ export function createTicketElement(data) {
         } catch (error) {
             console.error('Failed to delete ticket:', error);
         }
+    });
+
+    // レビュー状態ボタン
+    const reviewBtns = ticket.querySelectorAll('.ticket-child-task-review-btn');
+    reviewBtns.forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const childId = btn.dataset.reviewId;
+            const ticketId = ticket.dataset.id;
+            const ticketData = getTicket(ticketId);
+            if (!ticketData) return;
+
+            // 現在のレビュー状態を取得
+            const childTask = ticketData.childTasks?.find(t => t.id === childId);
+            if (!childTask) return;
+
+            // 次の状態に切り替え
+            const states = ['none', 'requested', 'completed'];
+            const currentIndex = states.indexOf(childTask.reviewState || 'none');
+            const newState = states[(currentIndex + 1) % states.length];
+
+            try {
+                const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticketId)}/child-task/${encodeURIComponent(childId)}`, {
+                    done: childTask.done,
+                    progress: childTask.progress,
+                    reviewState: newState
+                });
+                setTicket(ticketId, updated);
+                renderAllTickets();
+            } catch (error) {
+                console.error('Failed to update review state:', error);
+            }
+        });
     });
 
     return ticket;

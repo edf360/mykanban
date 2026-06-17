@@ -17,6 +17,7 @@ public class TicketDto
     public List<ChildTaskDto> ChildTasks { get; set; } = new();
     public bool IsLocked { get; set; }
     public bool IsEmergency { get; set; }
+    public string? Category { get; set; }
 }
 
 public class ChildTaskDto
@@ -25,6 +26,8 @@ public class ChildTaskDto
     public string Text { get; set; } = string.Empty;
     public bool Done { get; set; }
     public int Progress { get; set; }
+    public string? Category { get; set; }
+    public string ReviewState { get; set; } = "none";
 }
 
 /// <summary>
@@ -55,6 +58,7 @@ public class ChildTaskUpdateDto
 {
     public bool Done { get; set; }
     public int? Progress { get; set; }
+    public string? ReviewState { get; set; }
 }
 
 /// <summary>

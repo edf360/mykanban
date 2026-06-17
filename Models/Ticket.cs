@@ -22,6 +22,7 @@ public class Ticket
     public int? Effort { get; set; }
     public bool IsLocked { get; set; }
     public bool IsEmergency { get; set; }
+    public string? Category { get; set; }
 
     // DB用フィールド（シリアライズ時は非表示）
     [JsonIgnore]
@@ -106,4 +107,10 @@ public class ChildTask
 
     [JsonPropertyName("progress")]
     public int Progress { get; set; }
+
+    [JsonPropertyName("category")]
+    public string? Category { get; set; }
+
+    [JsonPropertyName("reviewState")]
+    public string ReviewState { get; set; } = "none";
 }

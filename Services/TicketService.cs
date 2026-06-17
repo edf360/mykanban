@@ -47,7 +47,8 @@ public class TicketService
                 Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                 Text = ct.Text,
                 Done = ct.Done,
-                Progress = ct.Progress
+                Progress = ct.Progress,
+                Category = ct.Category
             })
             .ToList();
 
@@ -76,7 +77,8 @@ public class TicketService
             Memo = dto.Memo,
             ChildTasks = validChildTasks,
             IsLocked = dto.IsLocked,
-            IsEmergency = dto.IsEmergency
+            IsEmergency = dto.IsEmergency,
+            Category = dto.Category
         };
 
         // Id は DB AUTOINCREMENT だが、既存制約のため一時的に設定
@@ -153,6 +155,7 @@ public class TicketService
         ticket.Memo = dto.Memo;
         ticket.IsLocked = dto.IsLocked;
         ticket.IsEmergency = dto.IsEmergency;
+        ticket.Category = dto.Category;
         if (dto.ChildTasks != null)
         {
             ticket.ChildTasks = dto.ChildTasks
@@ -162,7 +165,8 @@ public class TicketService
                     Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                     Text = ct.Text,
                     Done = ct.Done,
-                    Progress = ct.Progress
+                    Progress = ct.Progress,
+                    Category = ct.Category
                 })
                 .ToList();
         }
@@ -370,6 +374,10 @@ public class TicketService
         if (dto.Progress.HasValue)
         {
             childTask.Progress = Math.Max(0, Math.Min(100, dto.Progress.Value));
+        }
+        if (!string.IsNullOrEmpty(dto.ReviewState))
+        {
+            childTask.ReviewState = dto.ReviewState;
         }
         ticket.ChildTasks = childTasks!;
 

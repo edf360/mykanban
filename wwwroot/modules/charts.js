@@ -443,39 +443,39 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     
     const assigneeOrder = getAssigneeOrder();
     
-    // チケット名でグループ化（出現順保持）
-    const titleMap = new Map();
+    // カテゴリでグループ化（カテゴリ未設定の場合はチケットタイトルを使用）
+    const categoryMap = new Map();
     tickets.forEach(t => {
-        const title = t.title || '無題';
-        if (!titleMap.has(title)) {
-            titleMap.set(title, []);
+        const category = t.category || (t.title || '無題');
+        if (!categoryMap.has(category)) {
+            categoryMap.set(category, []);
         }
-        titleMap.get(title).push(t);
+        categoryMap.get(category).push(t);
     });
     
     // カスタム列順序がある場合はそれを使用、なければ進捗率順でソート
-    let titles;
+    let categories;
     if (progressMatrixColumnOrder !== null && progressMatrixColumnOrder.length > 0) {
-        // カスタム順序でソート（新規タイトルは末尾に追加）
-        titles = Array.from(titleMap.keys()).sort((a, b) => {
+        // カスタム順序でソート（新規カテゴリは末尾に追加）
+        categories = Array.from(categoryMap.keys()).sort((a, b) => {
             const aIdx = progressMatrixColumnOrder.indexOf(a);
             const bIdx = progressMatrixColumnOrder.indexOf(b);
             const aFallback = (aIdx >= 0) ? aIdx : Infinity;
             const bFallback = (bIdx >= 0) ? bIdx : Infinity;
             if (aFallback !== bFallback) return aFallback - bFallback;
             // 両方とも新規の場合は進捗率順
-            const aTickets = titleMap.get(a);
-            const bTickets = titleMap.get(b);
+            const aTickets = categoryMap.get(a);
+            const bTickets = categoryMap.get(b);
             const aAvg = aTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / aTickets.length;
             const bAvg = bTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / bTickets.length;
             return bAvg - aAvg;
         });
     } else {
         // 対象者全員の平均進捗率の高い順でソート（子タスクはタスク内だけでソート）
-        titles = Array.from(titleMap.keys()).sort((a, b) => {
-            const aTickets = titleMap.get(a);
-            const bTickets = titleMap.get(b);
-            // 各タイトルの全チケットの平均進捗率を計算
+        categories = Array.from(categoryMap.keys()).sort((a, b) => {
+            const aTickets = categoryMap.get(a);
+            const bTickets = categoryMap.get(b);
+            // 各カテゴリの全チケットの平均進捗率を計算
             const aAvgProgress = aTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / aTickets.length;
             const bAvgProgress = bTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / bTickets.length;
             // 進捗率の高い順（降順）。同率の場合はカラム順でソート
@@ -489,23 +489,24 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         });
     }
     
-    // 各タイトルの子タスクを収集（重複除去、done=false のみ）
-    // 同じ名前の子タスクは1列に統合（text で重複除去）
-    const titleChildTasks = new Map();
-    titles.forEach(title => {
-        const titleTickets = titleMap.get(title);
-        const childSet = new Map(); // text -> childTask（最初に見つかったものを保持）
-        titleTickets.forEach(t => {
+    // 各カテゴリの子タスクを収集（重複除去、done=false のみ）
+    // 同じ名前の子タスクは1列に統合（text + category で重複除去）
+    const categoryChildTasks = new Map();
+    categories.forEach(category => {
+        const categoryTickets = categoryMap.get(category);
+        const childSet = new Map(); // text+category -> childTask（最初に見つかったものを保持）
+        categoryTickets.forEach(t => {
             if (t.childTasks && Array.isArray(t.childTasks)) {
                 t.childTasks.forEach(ct => {
-                    const key = ct.text || '無題';
+                    const ctCategory = ct.category || category;
+                    const key = `${ctCategory}::${ct.text || '無題'}`;
                     if (!ct.done && !childSet.has(key)) {
                         childSet.set(key, ct);
                     }
                 });
             }
         });
-        titleChildTasks.set(title, Array.from(childSet.values()));
+        categoryChildTasks.set(category, Array.from(childSet.values()));
     });
     
     // 担当者を収集
@@ -523,10 +524,10 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         return (ia >= 0 ? ia : Infinity) - (ib >= 0 ? ib : Infinity);
     });
     
-    console.log(`renderProgressMatrix: titles=${titles.length}, assignees=${assignees.length}`);
-    if (assignees.length === 0 || titles.length === 0) {
+    console.log(`renderProgressMatrix: categories=${categories.length}, assignees=${assignees.length}`);
+    if (assignees.length === 0 || categories.length === 0) {
         container.innerHTML = '<p class="graph-placeholder">データがありません</p>';
-        console.log('renderProgressMatrix: no assignees or titles');
+        console.log('renderProgressMatrix: no assignees or categories');
         return;
     }
     
@@ -540,20 +541,20 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     thName.textContent = '担当者';
     headerRow.appendChild(thName);
     
-    titles.forEach(title => {
-        const childTasks = titleChildTasks.get(title) || [];
+    categories.forEach(category => {
+        const childTasks = categoryChildTasks.get(category) || [];
         const hasChildren = childTasks.length > 0;
         
-        // title重複回避のため、タイトル+チケット数のハッシュをキーに使用
-        const visibilityKey = `${title}::${titleMap.get(title).length}`;
+        // カテゴリ重複回避のため、カテゴリ+チケット数のハッシュをキーに使用
+        const visibilityKey = `${category}::${categoryMap.get(category).length}`;
         
         // メインタスクヘッダー
         const th = document.createElement('th');
         th.className = hasChildren ? 'main-task-header clickable draggable-column-header' : 'main-task-header draggable-column-header';
-        th.textContent = title;
-        th.title = title + '（ドラッグで列入れ替え）';
+        th.textContent = category;
+        th.title = category + '（ドラッグで列入れ替え）';
         th.draggable = true;
-        th.dataset.columnTitle = title;
+        th.dataset.columnTitle = category;
         if (hasChildren) {
             const prefixSpan = document.createElement('span');
             prefixSpan.className = 'child-toggle-icon';
@@ -568,8 +569,9 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         childTasks.forEach(ct => {
             const childTh = document.createElement('th');
             childTh.className = 'child-task-header';
-            childTh.dataset.parentTitle = title;
-            childTh.textContent = ct.text || '無題';
+            childTh.dataset.parentTitle = category;
+            const ctCategory = ct.category || category;
+            childTh.textContent = ctCategory ? `[${ctCategory}] ${ct.text || '無題'}` : (ct.text || '無題');
             childTh.title = ct.text || '無題';
             if (!childTaskVisibility.get(visibilityKey)) {
                 childTh.style.display = 'none';
@@ -589,21 +591,21 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         tdName.title = assignee;
         tr.appendChild(tdName);
         
-        titles.forEach(title => {
+        categories.forEach(category => {
             // メインタスクセル
             const td = document.createElement('td');
-            const titleTickets = titleMap.get(title).filter(t =>
+            const categoryTickets = categoryMap.get(category).filter(t =>
                 t.assignees && t.assignees.includes(assignee)
             );
             
-            if (titleTickets.length === 0) {
+            if (categoryTickets.length === 0) {
                 const span = document.createElement('span');
                 span.style.color = '#d1d5db';
                 span.textContent = '—';
                 td.appendChild(span);
             } else {
                 const avgProgress = Math.round(
-                    titleTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / titleTickets.length
+                    categoryTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / categoryTickets.length
                 );
                 const color = getProgressColor(avgProgress);
                 
@@ -630,20 +632,24 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
             tr.appendChild(td);
             
             // 子タスクセル
-            const childTasks = titleChildTasks.get(title) || [];
-            const visibilityKey = `${title}::${titleMap.get(title).length}`;
+            const childTasks = categoryChildTasks.get(category) || [];
+            const visibilityKey = `${category}::${categoryMap.get(category).length}`;
             childTasks.forEach(ct => {
                 const childTd = document.createElement('td');
                 childTd.className = 'child-task-cell';
-                childTd.dataset.parentTitle = title;
+                childTd.dataset.parentTitle = category;
                 
                 // 子タスクの進捗率を表示
-                // 該当チケットから同じ名前の子タスクを探す（text でマッチ）
+                // 該当チケットから同じカテゴリ+名前の子タスクを探す
                 let childProgress = null;
-                const ctKey = ct.text || '無題';
-                for (const t of titleTickets) {
+                const ctKey = `${ct.category || category}::${ct.text || '無題'}`;
+                for (const t of categoryTickets) {
                     if (t.childTasks) {
-                        const found = t.childTasks.find(c => (c.text || '無題') === ctKey);
+                        const ctCat = ct.category || category;
+                        const found = t.childTasks.find(c => {
+                            const cCat = c.category || category;
+                            return cCat === ctCat && (c.text || '無題') === (ct.text || '無題');
+                        });
                         if (found) {
                             childProgress = found.progress;
                             break;
@@ -747,7 +753,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
             const targetTitle = header.dataset.columnTitle;
             
             if (progressMatrixColumnOrder === null) {
-                progressMatrixColumnOrder = [...titles];
+                progressMatrixColumnOrder = [...categories];
             }
             
             const dragIdx = progressMatrixColumnOrder.indexOf(draggedTitle);

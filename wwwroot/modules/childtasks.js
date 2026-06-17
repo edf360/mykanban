@@ -33,14 +33,39 @@ function resetDragState() {
 }
 
 /**
+ * レビュー状態の次へ切り替え
+ */
+function nextReviewState(current) {
+    const states = ['none', 'requested', 'completed'];
+    const index = states.indexOf(current);
+    return states[(index + 1) % states.length];
+}
+
+/**
+ * レビュー状態のアイコンとツールチップを取得
+ */
+function getReviewStateInfo(state) {
+    switch (state) {
+        case 'requested':
+            return { icon: '⏳', title: 'レビュー依頼中' };
+        case 'completed':
+            return { icon: '✅', title: 'レビュー完了' };
+        default:
+            return { icon: '📄', title: 'レビュー前' };
+    }
+}
+
+/**
  * 子タスクを追加
  */
-export function addChildTask(text, done = false, id = null, progress = 0) {
+export function addChildTask(text, done = false, id = null, progress = 0, category = '', reviewState = 'none') {
     const task = {
         id: id || generateLocalId(),
         text: text.trim(),
         done,
-        progress: progress || 0
+        progress: progress || 0,
+        category: category || '',
+        reviewState: reviewState || 'none'
     };
     addChildTaskToState(task);
     renderChildTasks();
@@ -95,6 +120,38 @@ function addChildTaskToDom(task) {
     progressSpan.textContent = `${task.progress || 0}%`;
     progressSpan.title = 'クリックして進捗率を変更';
 
+    // カテゴリボタン
+    const categoryBtn = document.createElement('button');
+    categoryBtn.className = 'child-task-category-btn';
+    categoryBtn.textContent = '🏷️';
+    categoryBtn.title = task.category ? `カテゴリ: ${task.category}` : 'カテゴリを設定';
+    categoryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const current = task.category || '';
+        const input = prompt('子タスクのカテゴリを入力してください', current);
+        if (input !== null) {
+            updateChildTask(task.id, { category: input.trim() });
+            renderChildTasks();
+        }
+    });
+
+    // レビュー状態ボタン
+    const reviewState = task.reviewState || 'none';
+    const reviewInfo = getReviewStateInfo(reviewState);
+    const reviewBtn = document.createElement('button');
+    reviewBtn.className = 'child-task-review-btn';
+    if (reviewState !== 'none') {
+        reviewBtn.classList.add(`review-${reviewState}`);
+    }
+    reviewBtn.textContent = reviewInfo.icon;
+    reviewBtn.title = `${reviewInfo.title} (クリックで切り替え)`;
+    reviewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newState = nextReviewState(reviewState);
+        updateChildTask(task.id, { reviewState: newState });
+        renderChildTasks();
+    });
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-child-task';
     removeBtn.textContent = '\u00d7'; // ×記号
@@ -103,6 +160,8 @@ function addChildTaskToDom(task) {
     div.appendChild(checkbox);
     div.appendChild(textInput);
     div.appendChild(progressSpan);
+    div.appendChild(categoryBtn);
+    div.appendChild(reviewBtn);
     div.appendChild(removeBtn);
     childTasksEl.appendChild(div);
 

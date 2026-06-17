@@ -1071,6 +1071,30 @@ body {
     color: #374151;
 }
 
+/* レビュー状態ボタン */
+.ticket-child-task-review-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.ticket-child-task-review-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.ticket-child-task-review-btn.review-requested {
+    color: #d97706;
+}
+
+.ticket-child-task-review-btn.review-completed {
+    color: #059669;
+}
+
 .child-progress-slider-popup {
     position: fixed;
     background: white;

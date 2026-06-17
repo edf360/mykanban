@@ -30,7 +30,8 @@ const internal = {
         currentAssignees: [],
         mainAssignee: null,
         currentChildTasks: [],
-        newTicketColumn: 'todo'
+        newTicketColumn: 'todo',
+        currentCategory: ''  // 集計カテゴリ（チケットレベル）
     },
     suggestions: {
         labels: [],
@@ -171,6 +172,7 @@ export function resetModalState() {
     internal.modal.mainAssignee = null;
     internal.modal.currentChildTasks = [];
     internal.modal.newTicketColumn = 'todo';
+    internal.modal.currentCategory = '';
     emit('modal-changed', internal.modal);
 }
 
@@ -662,4 +664,21 @@ export function setChildTaskHidden(ticketId, childId, hidden) {
     } else {
         internal.ui.hiddenChildTasks.delete(key);
     }
+}
+
+// ===== カテゴリ関連のgetter/setter =====
+
+/**
+ * 現在のモーダルカテゴリを取得
+ */
+export function getCurrentCategory() {
+    return internal.modal.currentCategory || '';
+}
+
+/**
+ * 現在のモーダルカテゴリを設定
+ */
+export function setCurrentCategory(category) {
+    internal.modal.currentCategory = category || '';
+    emit('modal-changed', internal.modal);
 }

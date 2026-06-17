@@ -2,7 +2,7 @@
  * モーダル操作モジュール
  */
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, on } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks } from './childtasks.js';
@@ -25,6 +25,7 @@ const el = {
     saveBtn: null,
     lockBtn: null,
     emergencyBtn: null,
+    categoryBtn: null,
     savePerAssigneeBtn: null,
     viewActualBtn: null,
 };
@@ -47,6 +48,7 @@ function cacheElements() {
     el.saveBtn = document.getElementById('saveBtn');
     el.lockBtn = document.getElementById('modalLockBtn');
     el.emergencyBtn = document.getElementById('modalEmergencyBtn');
+    el.categoryBtn = document.getElementById('modalCategoryBtn');
     el.savePerAssigneeBtn = document.getElementById('savePerAssigneeBtn');
     el.viewActualBtn = document.getElementById('viewActualBtn');
 }
@@ -95,7 +97,8 @@ function _openModal(options) {
             currentLabels: data.labels ? [...data.labels] : [],
             currentAssignees: data.assignees ? [...data.assignees] : [],
             mainAssignee,
-            currentChildTasks: data.childTasks ? data.childTasks.map(t => ({...t})) : []
+            currentChildTasks: data.childTasks ? data.childTasks.map(t => ({...t})) : [],
+            currentCategory: data.category || ''
         });
         setTicketLocked(data.isLocked || false);
         setTicketEmergency(data.isEmergency || false);
@@ -112,6 +115,7 @@ function _openModal(options) {
     // ロックUI更新
     updateLockButton();
     updateEmergencyButton();
+    updateCategoryButton();
     applyEmergencyToModal();
     applyLockToModal();
     
@@ -231,6 +235,30 @@ function applyEmergencyToModal() {
 }
 
 /**
+ * カテゴリボタンを更新
+ */
+function updateCategoryButton() {
+    if (el.categoryBtn) {
+        const category = getCurrentCategory();
+        el.categoryBtn.textContent = category ? '🏷️' : '🏷️';
+        el.categoryBtn.title = category ? `集計カテゴリ: ${category}` : '集計カテゴリを設定';
+        el.categoryBtn.classList.toggle('has-category', !!category);
+    }
+}
+
+/**
+ * カテゴリ入力ダイアログを開く
+ */
+export function openCategoryDialog() {
+    const current = getCurrentCategory() || '';
+    const input = prompt('集計カテゴリを入力してください', current);
+    if (input !== null) {
+        setModalState({ currentCategory: input.trim() });
+        updateCategoryButton();
+    }
+}
+
+/**
  * フォームからチケットデータを収集
  */
 function collectFormData() {
@@ -264,7 +292,8 @@ function collectFormData() {
         memo: memoVal,
         childTasks: getChildTasks().map(t => ({...t})),
         isLocked: isTicketLocked(),
-        isEmergency: isTicketEmergency()
+        isEmergency: isTicketEmergency(),
+        category: getCurrentCategory()
     };
 }
 
@@ -337,6 +366,7 @@ export async function saveTicketsPerAssignee() {
             childTasks: data.childTasks,
             isLocked: data.isLocked,
             isEmergency: data.isEmergency,
+            category: data.category,
             column,
         };
         await createTicketsPerAssignee(baseData, assignees);
@@ -369,6 +399,9 @@ export function initModal() {
     if (el.emergencyBtn) {
         el.emergencyBtn.addEventListener('click', toggleEmergency);
     }
+    if (el.categoryBtn) {
+        el.categoryBtn.addEventListener('click', openCategoryDialog);
+    }
     if (el.savePerAssigneeBtn) {
         el.savePerAssigneeBtn.addEventListener('click', saveTicketsPerAssignee);
     }
@@ -384,6 +417,24 @@ export function initModal() {
     // 担当者変更時にボタンの状態を更新
     on('modal-changed', () => {
         updateSavePerAssigneeButton();
+    });
+    
+    // キーボードショートカット（ESC=キャンセル、Enter=保存）
+    el.modal.addEventListener('keydown', (e) => {
+        // モーダルがアクティブな時のみ有効
+        if (!el.modal.classList.contains('active')) return;
+        
+        // テキスト入力フィールド（textarea）での入力は許可
+        const tagName = e.target.tagName;
+        if (tagName === 'TEXTAREA') return;
+        
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeModal();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            saveTicket();
+        }
     });
     
     // モーダル外クリックで保存

@@ -384,6 +384,8 @@ public class SettingsController : ControllerBase
             var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
             
             ticket.Title = title;
+            // CSVインポート時はタイトルを集計カテゴリに設定
+            ticket.Category = title;
             // バケット進捗は一時的に保持（子タスクから計算があれば上書き）
             var bucketProgress = ParseProgress(csv.GetField(columnIndexes["バケット"]) ?? "");
             ticket.Progress = bucketProgress;
@@ -407,9 +409,14 @@ public class SettingsController : ControllerBase
             ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
             ticket.EndDate = ParseDate(csv.GetField(columnIndexes["期限"]) ?? "");
 
-            // チェックリストの処理
+            // チェックリストの処理（子タスクのCategoryにタイトルを設定）
             var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
             ticket.ChildTasks = ParseChecklist(checklistItems);
+            // 各子タスクのCategoryにテキストを設定
+            foreach (var ct in ticket.ChildTasks)
+            {
+                ct.Category = ct.Text;
+            }
 
             // 子タスクに【X%】指定があればバケットを無視して子タスクから進捗率を計算
             if (HasProgressAnnotation(checklistItems))
