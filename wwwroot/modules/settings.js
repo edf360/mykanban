@@ -4,6 +4,12 @@ import { isAdmin, getToken } from './auth.js';
 import { renderAllTickets } from './renderer.js';
 import { invalidateLabelColorCache } from './state.js';
 
+// ローカルID生成（HTTP環境でも動作）
+let localIdCounter = 0;
+function generateLocalId() {
+    return `local-${Date.now()}-${++localIdCounter}`;
+}
+
 // 設定データ
 // users: { id, name } のオブジェクト配列（APIとのやり取りで変換）
 // labels: { id, name, color } のオブジェクト配列
@@ -43,7 +49,7 @@ export async function load() {
         // APIから読み込んだusers（文字列配列）を { id, name } へ変換
         settings.users = settings.users.map(u => {
             if (typeof u === 'string') {
-                return { id: crypto.randomUUID(), name: u };
+                return { id: generateLocalId(), name: u };
             }
             return u;
         });
@@ -51,7 +57,7 @@ export async function load() {
         // labelsにidがない場合は付与
         settings.labels = settings.labels.map(l => {
             if (!l.id) {
-                return { ...l, id: crypto.randomUUID() };
+                return { ...l, id: generateLocalId() };
             }
             return l;
         });
@@ -641,7 +647,7 @@ function addUser() {
         return;
     }
     
-    settings.users.push({ id: crypto.randomUUID(), name });
+    settings.users.push({ id: generateLocalId(), name });
     input.value = '';
     renderUsers(currentAdminState);
     save();
@@ -664,7 +670,7 @@ function addLabel() {
         return;
     }
     
-    settings.labels.push({ id: crypto.randomUUID(), name, color: colorInput.value });
+    settings.labels.push({ id: generateLocalId(), name, color: colorInput.value });
     nameInput.value = '';
     colorInput.value = '#808080';
     renderLabels(currentAdminState);

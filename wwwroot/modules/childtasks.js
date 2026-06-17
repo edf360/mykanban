@@ -6,6 +6,12 @@
 
 import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks } from './state.js';
 
+// ローカルID生成（HTTP環境でも動作）
+let childTaskIdCounter = 0;
+function generateLocalId() {
+    return `local-${Date.now()}-${++childTaskIdCounter}`;
+}
+
 // ドラッグ中の子タスクID
 let draggedChildId = null;
 // dragoverで決定したドロップ先ターゲットID
@@ -31,7 +37,7 @@ function resetDragState() {
  */
 export function addChildTask(text, done = false, id = null, progress = 0) {
     const task = {
-        id: id || crypto.randomUUID(),
+        id: id || generateLocalId(),
         text: text.trim(),
         done,
         progress: progress || 0
