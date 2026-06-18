@@ -645,9 +645,9 @@ body {
 .modal.locked #labelDropdown,
 .modal.locked #addChildTaskBtn { opacity: 0.5; pointer-events: none; }
 
-/* ロック時は子タスクのテキスト入力と削除ボタンのみ無効（チェック・ドラッグ・進捗は操作可能） */
+/* ロック時は子タスクのテキスト入力と設定ボタンのみ無効（ドラッグは操作可能） */
 .modal.locked .child-task-item input[type="text"] { opacity: 0.5; pointer-events: none; }
-.modal.locked .remove-child-task { opacity: 0.5; pointer-events: none; }
+.modal.locked .child-task-settings-btn { opacity: 0.5; pointer-events: none; }
 
 .form-group { margin-bottom: 16px; position: relative; }
 
@@ -1095,6 +1095,32 @@ body {
     color: #059669;
 }
 
+/* アイコン選択ポップアップ */
+.review-icon-popup {
+    position: fixed;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 6px;
+    display: flex;
+    gap: 4px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.review-icon-item {
+    font-size: 20px;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+    user-select: none;
+}
+
+.review-icon-item:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
 .child-progress-slider-popup {
     position: fixed;
     background: white;
@@ -1159,6 +1185,58 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 8px;
+}
+
+/* 子タスク設定ボタン */
+.child-task-settings-btn {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.child-task-settings-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: #374151;
+}
+
+/* 子タスク設定メニュー */
+.child-task-settings-menu {
+    position: fixed;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    min-width: 150px;
+    padding: 4px 0;
+}
+
+.child-task-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s ease;
+}
+
+.child-task-menu-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.child-task-menu-item-delete {
+    color: #ef4444;
+}
+
+.child-task-menu-item-delete:hover {
+    background: rgba(239, 68, 68, 0.08);
 }
 
 .ticket-chart {

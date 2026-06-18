@@ -33,26 +33,24 @@ function resetDragState() {
 }
 
 /**
- * レビュー状態の次へ切り替え
+ * レビューアイコンのマップ
  */
-function nextReviewState(current) {
-    const states = ['none', 'requested', 'completed'];
-    const index = states.indexOf(current);
-    return states[(index + 1) % states.length];
-}
+const REVIEW_ICONS = {
+    'none': '📄',
+    'editing': '📝',
+    'requested': '📑',
+    'completed': '✅',
+    'thumbsup': '👍',
+    'happy': '😄',
+    'sad': '😥',
+    'shock': '😱'
+};
 
 /**
- * レビュー状態のアイコンとツールチップを取得
+ * レビュー状態のアイコンを取得
  */
 function getReviewStateInfo(state) {
-    switch (state) {
-        case 'requested':
-            return { icon: '⏳', title: 'レビュー依頼中' };
-        case 'completed':
-            return { icon: '✅', title: 'レビュー完了' };
-        default:
-            return { icon: '📄', title: 'レビュー前' };
-    }
+    return { icon: REVIEW_ICONS[state] || '📄', title: '' };
 }
 
 /**
@@ -98,92 +96,35 @@ function addChildTaskToDom(task) {
     div.dataset.childId = task.id;
     div.draggable = true;
 
-    // ドラッグハンドル（☰）
+    // ドラッグハンドル（🔸）- 左側配置
     const dragHandle = document.createElement('span');
     dragHandle.className = 'child-task-drag-handle';
-    dragHandle.textContent = '\u2630'; // ☰
+    dragHandle.textContent = '🔸';
     dragHandle.title = 'ドラッグして順番を入れ替え';
-
-    // XSS対策: innerHTML ではなく createElement/setAttribute を使用
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = task.done;
 
     const textInput = document.createElement('input');
     textInput.type = 'text';
     textInput.value = task.text;
     textInput.placeholder = '子タスク名';
 
-    // 進捗表示（クリックでスライダー表示）
-    const progressSpan = document.createElement('span');
-    progressSpan.className = 'child-task-progress';
-    progressSpan.textContent = `${task.progress || 0}%`;
-    progressSpan.title = 'クリックして進捗率を変更';
-
-    // カテゴリボタン
-    const categoryBtn = document.createElement('button');
-    categoryBtn.className = 'child-task-category-btn';
-    categoryBtn.textContent = '🏷️';
-    categoryBtn.title = task.category ? `カテゴリ: ${task.category}` : 'カテゴリを設定';
-    categoryBtn.addEventListener('click', (e) => {
+    // ハンバーガーメニュー（☰）- 右側配置
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'child-task-settings-btn';
+    menuBtn.textContent = '\u2630'; // ☰
+    menuBtn.title = '設定';
+    menuBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const current = task.category || '';
-        const input = prompt('子タスクのカテゴリを入力してください', current);
-        if (input !== null) {
-            updateChildTask(task.id, { category: input.trim() });
-            renderChildTasks();
-        }
+        showChildTaskMenu(menuBtn, task, div);
     });
-
-    // レビュー状態ボタン
-    const reviewState = task.reviewState || 'none';
-    const reviewInfo = getReviewStateInfo(reviewState);
-    const reviewBtn = document.createElement('button');
-    reviewBtn.className = 'child-task-review-btn';
-    if (reviewState !== 'none') {
-        reviewBtn.classList.add(`review-${reviewState}`);
-    }
-    reviewBtn.textContent = reviewInfo.icon;
-    reviewBtn.title = `${reviewInfo.title} (クリックで切り替え)`;
-    reviewBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const newState = nextReviewState(reviewState);
-        updateChildTask(task.id, { reviewState: newState });
-        renderChildTasks();
-    });
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'remove-child-task';
-    removeBtn.textContent = '\u00d7'; // ×記号
 
     div.appendChild(dragHandle);
-    div.appendChild(checkbox);
     div.appendChild(textInput);
-    div.appendChild(progressSpan);
-    div.appendChild(categoryBtn);
-    div.appendChild(reviewBtn);
-    div.appendChild(removeBtn);
+    div.appendChild(menuBtn);
     childTasksEl.appendChild(div);
 
-    // イベント（IDベースでstate更新）
-    checkbox.addEventListener('change', () => {
-        updateChildTask(task.id, { done: checkbox.checked });
-        // 打消し線クラスを更新
-        div.classList.toggle('done', checkbox.checked);
-    });
 
     textInput.addEventListener('input', () => {
         updateChildTask(task.id, { text: textInput.value });
-    });
-
-    // 進捗スライダー
-    progressSpan.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showChildTaskProgressSlider(progressSpan, task.id, task.progress || 0);
-    });
-
-    removeBtn.addEventListener('click', () => {
-        removeChildTask(task.id);
     });
 
     // ドラッグ＆ドロップイベント
@@ -231,74 +172,97 @@ function addChildTaskToDom(task) {
     });
 }
 
+let activeChildTaskMenu = null;
+
 /**
- * 子タスクの進捗スライダーを表示
+ * 子タスクの設定メニューを隠す
  */
-function showChildTaskProgressSlider(progressSpan, childId, currentProgress) {
-    // 既存のスライダーを削除
-    const existing = document.querySelector('.child-task-progress-slider-popup');
-    if (existing) existing.remove();
+function hideChildTaskMenu() {
+    if (activeChildTaskMenu) {
+        activeChildTaskMenu.remove();
+        activeChildTaskMenu = null;
+    }
+}
 
-    const popup = document.createElement('div');
-    popup.className = 'child-task-progress-slider-popup';
-    popup.style.position = 'absolute';
-    popup.style.background = 'white';
-    popup.style.border = '1px solid rgba(0,0,0,0.15)';
-    popup.style.borderRadius = '8px';
-    popup.style.padding = '12px 16px';
-    popup.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-    popup.style.zIndex = '1000';
-    popup.style.display = 'flex';
-    popup.style.flexDirection = 'column';
-    popup.style.alignItems = 'center';
-    popup.style.gap = '8px';
+/**
+ * 子タスクの設定メニューを表示
+ */
+function showChildTaskMenu(button, task, itemDiv) {
+    // 既存のメニューを閉じる
+    hideChildTaskMenu();
 
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = '100';
-    slider.step = '10';
-    slider.value = currentProgress;
-    slider.style.width = '150px';
-    slider.style.cursor = 'pointer';
+    const menu = document.createElement('div');
+    menu.className = 'child-task-settings-menu';
 
-    const label = document.createElement('span');
-    label.style.fontSize = '14px';
-    label.style.fontWeight = '600';
-    label.style.color = 'rgba(0,0,0,0.8)';
-    label.textContent = `${currentProgress}%`;
+    // 「隠す」メニュー項目
+    const hideItem = document.createElement('div');
+    hideItem.className = 'child-task-menu-item';
 
-    slider.addEventListener('input', () => {
-        label.textContent = `${slider.value}%`;
+    const hideCheckbox = document.createElement('input');
+    hideCheckbox.type = 'checkbox';
+    hideCheckbox.checked = task.done;
+    hideCheckbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newDone = hideCheckbox.checked;
+        updateChildTask(task.id, { done: newDone });
+        itemDiv.classList.toggle('done', newDone);
+        hideChildTaskMenu();
     });
 
-    slider.addEventListener('change', () => {
-        const newProgress = parseInt(slider.value);
-        progressSpan.textContent = `${newProgress}%`;
-        updateChildTask(childId, { progress: newProgress });
-        popup.remove();
-        // 再描画をトリガー
-        renderChildTasks();
+    const hideLabel = document.createElement('span');
+    hideLabel.textContent = '隠す';
+
+    hideItem.appendChild(hideCheckbox);
+    hideItem.appendChild(hideLabel);
+    menu.appendChild(hideItem);
+
+    // 「集計カテゴリ編集」メニュー項目
+    const categoryItem = document.createElement('div');
+    categoryItem.className = 'child-task-menu-item';
+    categoryItem.textContent = '集計カテゴリ編集';
+    categoryItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideChildTaskMenu();
+        const current = task.category || '';
+        const input = prompt('子タスクのカテゴリを入力してください', current);
+        if (input !== null) {
+            updateChildTask(task.id, { category: input.trim() });
+            renderChildTasks();
+        }
     });
+    menu.appendChild(categoryItem);
 
-    popup.appendChild(slider);
-    popup.appendChild(label);
+    // 「削除」メニュー項目
+    const deleteItem = document.createElement('div');
+    deleteItem.className = 'child-task-menu-item child-task-menu-item-delete';
+    deleteItem.textContent = '削除';
+    deleteItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideChildTaskMenu();
+        removeChildTask(task.id);
+    });
+    menu.appendChild(deleteItem);
 
-    // ポジション設定
-    const rect = progressSpan.getBoundingClientRect();
-    popup.style.top = `${rect.top - popup.offsetHeight - 8}px`;
-    popup.style.left = `${rect.left}px`;
+    // bodyに追加（position: fixed で配置）
+    document.body.appendChild(menu);
+    activeChildTaskMenu = menu;
 
-    document.body.appendChild(popup);
+    // メニュー位置設定
+    const btnRect = button.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = `${btnRect.bottom}px`;
+    menu.style.right = `${window.innerWidth - btnRect.right}px`;
+    menu.style.left = 'auto';
 
-    // クリックで閉じる
-    const closeHandler = (e) => {
-        if (!popup.contains(e.target)) {
-            popup.remove();
-            document.removeEventListener('click', closeHandler);
+    // 外クリックで閉じる（一度だけ）
+    const clickHandler = (e) => {
+        if (!menu.contains(e.target) && !button.contains(e.target)) {
+            hideChildTaskMenu();
+            document.removeEventListener('click', clickHandler);
         }
     };
-    setTimeout(() => document.addEventListener('click', closeHandler), 0);
+    // 現在のクリックイベントが終わってからリスナーを追加
+    setTimeout(() => document.addEventListener('click', clickHandler), 0);
 }
 
 /**
