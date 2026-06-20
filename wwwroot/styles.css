@@ -360,6 +360,8 @@ body {
     cursor: pointer;
     flex: 1;
     min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-all;
 }
 
 .ticket-content[contenteditable="true"] {
@@ -621,21 +623,90 @@ body {
     color: #1f2937;
 }
 
-.modal-lock-btn {
+.modal-hamburger-btn {
     background: none;
     border: 1px solid rgba(0, 0, 0, 0);
-    font-size: 14px;
+    font-size: 18px;
     cursor: pointer;
-    padding: 2px 6px;
+    padding: 2px 8px;
     border-radius: 4px;
     transition: all 0.2s ease;
     color: #6b7280;
     line-height: 1;
 }
 
-.modal-lock-btn:hover { background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.25); }
+.modal-hamburger-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.25);
+}
 
-.modal.locked #ticketTitle,
+/* モーダルハンバーガーメニュー */
+.modal-hamburger-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 220px;
+    z-index: 20;
+    display: none;
+    overflow: hidden;
+}
+
+.modal-hamburger-menu.active {
+    display: block;
+}
+
+.modal-menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s ease;
+    color: #374151;
+}
+
+.modal-menu-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.modal-menu-item.disabled {
+    color: #999 !important;
+    cursor: not-allowed;
+}
+
+.modal-menu-item.disabled:hover {
+    background: transparent;
+}
+
+.modal-menu-item .menu-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.modal-menu-item .menu-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modal-menu-item .menu-check {
+    font-size: 14px;
+    font-weight: bold;
+    color: #3b82f6;
+    flex-shrink: 0;
+}
+
+.modal-header-buttons {
+    position: relative;
+}
+
+/* ロック時にグレー表示 + 編集不可にする要素（タイトルと子タスク名は編集可能） */
 .modal.locked #startDate,
 .modal.locked #endDate,
 .modal.locked #effort,
@@ -645,9 +716,30 @@ body {
 .modal.locked #labelDropdown,
 .modal.locked #addChildTaskBtn { opacity: 0.5; pointer-events: none; }
 
-/* ロック時は子タスクのテキスト入力と設定ボタンのみ無効（ドラッグは操作可能） */
-.modal.locked .child-task-item input[type="text"] { opacity: 0.5; pointer-events: none; }
-.modal.locked .child-task-settings-btn { opacity: 0.5; pointer-events: none; }
+/* ロック時にエディットボックスの背景をグレーに */
+.modal.locked #startDate,
+.modal.locked #endDate,
+.modal.locked #effort {
+    background-color: #e0e0e0 !important;
+}
+
+/* ロック時はドロップダウンボタンをグレー表示 */
+.modal.locked #assigneeToggleBtn,
+.modal.locked #labelToggleBtn {
+    background-color: #e0e0e0 !important;
+    color: #999 !important;
+    cursor: not-allowed !important;
+}
+
+/* ロック時でも子タスクのテキスト入力は編集可能 */
+.modal.locked .child-task-item input[type="text"] {
+    /* 編集可能なので opacity/pointer-events なし */
+}
+
+/* ロック時は子タスク設定ボタンをグレー（メニューは開けるが、集計カテゴリ編集/削除は無効） */
+.modal.locked .child-task-settings-btn {
+    opacity: 0.5;
+}
 
 .form-group { margin-bottom: 16px; position: relative; }
 
@@ -1239,6 +1331,15 @@ body {
     background: rgba(239, 68, 68, 0.08);
 }
 
+.child-task-menu-item.disabled {
+    color: #999 !important;
+    cursor: not-allowed;
+}
+
+.child-task-menu-item.disabled:hover {
+    background: transparent;
+}
+
 .ticket-chart {
     margin-top: 8px;
     padding-top: 8px;
@@ -1361,6 +1462,18 @@ body {
 
 .memo-area textarea::placeholder { color: #9ca3af; }
 
+.memo-locked {
+    background: #f3f4f6 !important;
+    color: #6b7280 !important;
+    cursor: not-allowed !important;
+    border-color: transparent !important;
+}
+
+.memo-locked:focus {
+    box-shadow: none !important;
+    border-color: transparent !important;
+}
+
 .ticket-assignee.main {
     background: rgba(245, 158, 11, 0.15);
     color: #d97706;
@@ -1374,6 +1487,10 @@ body {
 }
 
 .modal-btn.history:hover { background: rgba(107, 114, 128, 0.2); }
+.modal-btn.history:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 
 .history-modal { max-width: 600px; }
 
@@ -2447,7 +2564,7 @@ body {
 #assigneeToggleBtn {
     width: 100%;
     padding: 8px 12px;
-    background-color: #f0f0f0;
+    background-color: #fff;
     border: 1px solid #ccc;
     border-radius: 4px;
     cursor: pointer;
@@ -2458,7 +2575,7 @@ body {
 }
 
 #assigneeToggleBtn:hover {
-    background-color: #e0e0e0;
+    background-color: #f5f5f5;
 }
 
 /* 担当者ドロップダウンリスト */

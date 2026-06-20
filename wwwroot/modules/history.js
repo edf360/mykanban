@@ -2,7 +2,7 @@
  * 履歴表示モジュール
  */
 
-import { API_BASE, escapeHtml, state, getEditingTicketId } from './state.js';
+import { API_BASE, escapeHtml, state, getEditingTicketId, on } from './state.js';
 import { apiRequest } from './api.js';
 
 /**
@@ -229,10 +229,24 @@ export async function showHistory(ticketId) {
 /**
  * 履歴ダイアログを初期化（イベントリスナー設定）
  */
+/**
+ * 履歴確認ボタンの有効/無効を更新
+ * 新規チケット時は無効、既存チケット編集時は有効
+ */
+function updateHistoryButton() {
+    const viewHistoryBtn = document.getElementById('viewHistoryBtn');
+    if (!viewHistoryBtn) return;
+    const isEdit = !!getEditingTicketId();
+    viewHistoryBtn.disabled = !isEdit;
+}
+
 export function initHistory() {
     const historyModal = document.getElementById('historyModal');
     const viewHistoryBtn = document.getElementById('viewHistoryBtn');
     const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+
+    // 初期状態でボタンの有効/無効を設定
+    updateHistoryButton();
 
     viewHistoryBtn.addEventListener('click', () => {
         const editingId = getEditingTicketId();
@@ -249,5 +263,10 @@ export function initHistory() {
         if (e.target.id === 'historyModal') {
             historyModal.classList.remove('active');
         }
+    });
+
+    // モーダル状態変更時にボタンの有効/無効を更新
+    on('modal-changed', () => {
+        updateHistoryButton();
     });
 }

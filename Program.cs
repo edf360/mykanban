@@ -7,11 +7,13 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog設定 - ファイルログ出力を追加
+// Serilog設定 - ファイルログ出力を追加（ログパスは設定ファイルから取得）
+var logPath = builder.Configuration.GetValue<string>("LogPath")
+    ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "kanban.log");
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File(
-        path: Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "kanban.log"),
+        path: logPath,
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 7,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")

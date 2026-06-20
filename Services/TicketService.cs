@@ -8,6 +8,12 @@ public class TicketService
 {
     private readonly KanbanDbContext _context;
 
+    // カラム順序マップ（EF CoreがDictionary.GetValueOrDefaultをSQL変換できないためクライアントサイドソート）
+    private static readonly Dictionary<string, int> ColumnOrderMap = new()
+    {
+        { "todo", 0 }, { "doing", 1 }, { "done", 2 }, { "archive", 3 }
+    };
+
     public TicketService(KanbanDbContext context)
     {
         _context = context;
@@ -16,12 +22,8 @@ public class TicketService
     public async Task<List<Ticket>> GetAllAsync()
     {
         var tickets = await _context.Tickets.ToListAsync();
-        // クライアントサイドでカラム順序を明示的にソート（EF CoreがDictionary.GetValueOrDefaultをSQL変換できないため）
-        var columnOrderMap = new Dictionary<string, int> {
-            { "todo", 0 }, { "doing", 1 }, { "done", 2 }, { "archive", 3 }
-        };
         return tickets
-            .OrderBy(t => columnOrderMap.GetValueOrDefault(t.Column.ToLowerInvariant(), 999))
+            .OrderBy(t => ColumnOrderMap.GetValueOrDefault(t.Column.ToLowerInvariant(), 999))
             .ThenBy(t => t.Position)
             .ThenBy(t => t.Id)
             .ToList();
@@ -81,14 +83,15 @@ public class TicketService
             Category = dto.Category
         };
 
-        // Id は DB AUTOINCREMENT だが、既存制約のため一時的に設定
+        // Id は MaxAsync + 1 で生成（インメモリSQLiteテストとの互換性のためAUTOINCREMENT不使用）
         var maxId = await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0;
         ticket.Id = maxId + 1;
 
-        var maxPosition = await _context.Tickets
+        var existingPositions = await _context.Tickets
             .Where(t => t.Column == column)
-            .MaxAsync(t => (double?)t.Position) ?? -1000.0;
-        ticket.Position = maxPosition + 1000.0;
+            .Select(t => t.Position)
+            .ToListAsync();
+        ticket.Position = existingPositions.Count == 0 ? 0 : existingPositions.Max() + 1000.0;
 
         _context.Tickets.Add(ticket);
 

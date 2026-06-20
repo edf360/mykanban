@@ -4,6 +4,7 @@
 
 import { getFilterAssignee } from './state.js';
 import { renderAssigneeChart } from './charts.js';
+import { getUsername } from './auth.js';
 
 // ===== Storage層 =====
 
@@ -50,6 +51,15 @@ function getSelectedAssignee() {
     return getFilterAssignee();
 }
 
+/**
+ * 現在選択されている担当者がログインユーザー自身かどうかを判定
+ */
+function isSelfEditAllowed() {
+    const selectedAssignee = getFilterAssignee();
+    const loggedInUser = getUsername();
+    return selectedAssignee !== null && selectedAssignee === loggedInUser;
+}
+
 // ===== UI層 =====
 
 let memoSaveTimeout = null;
@@ -73,6 +83,11 @@ export function updateMemoColumn() {
     assigneeMemoText.value = getMemo(selectedAssignee);
     memoColumnTitle.textContent = `${selectedAssignee} - Memo`;
 
+    // ログインユーザー自身がフィルターで選択している場合のみ編集可能
+    const canEdit = isSelfEditAllowed();
+    assigneeMemoText.readOnly = !canEdit;
+    assigneeMemoText.classList.toggle('memo-locked', !canEdit);
+
     // グラフ描画（担当者が変わった時のみ）
     const chartContainer = document.getElementById('assigneeChart');
     if (chartContainer) {
@@ -93,8 +108,9 @@ export function initMemo() {
         return;
     }
 
-    // oninput上書きで重複登録防止
+    // oninput上書きで重複登録防止（自分自身のみ編集可能）
     assigneeMemoText.oninput = () => {
+        if (!isSelfEditAllowed()) return;
         const selectedAssignee = getSelectedAssignee();
         if (!selectedAssignee) return;
         clearTimeout(memoSaveTimeout);

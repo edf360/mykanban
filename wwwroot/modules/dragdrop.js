@@ -77,10 +77,15 @@ export function setupDropZones() {
                 }
             }
             
-            if (insertIndex === -1 || insertIndex > tickets.length - 1) {
+            if (insertIndex === -1 || insertIndex >= tickets.length) {
                 const lastTicket = tickets[tickets.length - 1];
                 if (lastTicket) {
-                    list.insertBefore(draggedTicket, lastTicket.nextSibling);
+                    const nextSibling = lastTicket.nextSibling;
+                    if (nextSibling) {
+                        list.insertBefore(draggedTicket, nextSibling);
+                    } else {
+                        list.appendChild(draggedTicket);
+                    }
                 } else {
                     list.appendChild(draggedTicket);
                 }
@@ -136,20 +141,16 @@ export function setupDropZones() {
                     
                     if (wasArchived && !isNowArchived) {
                         await apiRequest('PATCH', `${API_BASE}/${ticketId}/restore`, null);
-                        updateTicketField(ticketId, 'isArchived', false);
                     } else if (!wasArchived && isNowArchived) {
-                        // DELETE APIはNoContentを返すため、ローカルでisArchivedを設定
+                        // DELETE APIはNoContentを返すため、loadTickets()で最新状態を取得
                         await apiRequest('DELETE', `${API_BASE}/${ticketId}`, null);
-                        updateTicketField(ticketId, 'isArchived', true);
                     }
-                    
-                    updateTicketField(ticketId, 'column', newColumn);
                 }
                 
                 // サーバー側で中間値を計算してもらうためにインデックスを送信
                 await apiRequest('PATCH', `${API_BASE}/${ticketId}/column`, { column: newColumn, insertIndex: insertIdx });
                 
-                // サーバーから最新のチケットデータを取得してから再描画
+                // サーバーから最新のチケットデータを取得してから再描画（isArchived/column/Position 全て最新化）
                 await loadTickets();
                 renderAllTickets();
             } catch (error) {

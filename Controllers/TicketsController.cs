@@ -12,11 +12,13 @@ public class TicketsController : ControllerBase
 {
     private readonly TicketService _ticketService;
     private readonly KanbanDbContext _dbContext;
+    private readonly IWebHostEnvironment _env;
 
-    public TicketsController(TicketService ticketService, KanbanDbContext dbContext)
+    public TicketsController(TicketService ticketService, KanbanDbContext dbContext, IWebHostEnvironment env)
     {
         _ticketService = ticketService;
         _dbContext = dbContext;
+        _env = env;
     }
 
     /// <summary>
@@ -25,8 +27,19 @@ public class TicketsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<Ticket>>> GetAll()
     {
-        var tickets = await _ticketService.GetAllAsync();
-        return Ok(tickets);
+        try
+        {
+            var tickets = await _ticketService.GetAllAsync();
+            return Ok(tickets);
+        }
+        catch (Exception ex)
+        {
+            if (_env.IsDevelopment())
+            {
+                return StatusCode(500, new { error = "Failed to retrieve tickets: " + ex.Message });
+            }
+            return StatusCode(500, new { error = "Internal server error" });
+        }
     }
 
     /// <summary>
@@ -35,7 +48,7 @@ public class TicketsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Ticket>> Create([FromBody] TicketDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
         try
         {
@@ -54,7 +67,7 @@ public class TicketsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<Ticket>> Update(string id, [FromBody] TicketDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
         try
         {
@@ -130,11 +143,17 @@ public class TicketsController : ControllerBase
     [HttpPatch("{id}/column")]
     public async Task<IActionResult> UpdateColumn(string id, [FromBody] ColumnUpdateDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
+        
+        // チケット存在チェックを先に実行
+        var ticket = await _ticketService.GetAsync(id);
+        if (ticket == null)
+            return NotFound(new { error = "Ticket not found" });
+        
         var success = await _ticketService.UpdateColumnAsync(id, dto);
         if (!success)
-            return NotFound(new { error = "Ticket not found" });
+            return BadRequest(new { error = "Failed to update column" });
         return NoContent();
     }
 
@@ -144,7 +163,7 @@ public class TicketsController : ControllerBase
     [HttpPatch("{id}/progress")]
     public async Task<IActionResult> UpdateProgress(string id, [FromBody] ProgressUpdateDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
         var success = await _ticketService.UpdateProgressAsync(id, dto);
         if (!success)
@@ -158,7 +177,7 @@ public class TicketsController : ControllerBase
     [HttpPatch("{id}/child-task/{childId}")]
     public async Task<ActionResult<Ticket>> UpdateChildTask(string id, string childId, [FromBody] ChildTaskUpdateDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
         var ticket = await _ticketService.UpdateChildTaskAsync(id, childId, dto);
         if (ticket == null)
@@ -210,7 +229,7 @@ public class TicketsController : ControllerBase
     [HttpPost("{id}/actuals")]
     public async Task<ActionResult<TicketActual>> CreateOrUpdateActual(string id, [FromBody] ActualDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
         if (dto.Hours < 0)
             return BadRequest(new { error = "Hours must be non-negative" });
@@ -249,7 +268,7 @@ public class TicketsController : ControllerBase
     [HttpPut("{id}/actuals/{date}")]
     public async Task<ActionResult<TicketActual>> UpdateActual(string id, string date, [FromBody] ActualDto? dto)
     {
-        if (dto == null)
+        if (dto is null)
             return BadRequest(new { error = "Request body is required" });
         if (dto.Hours < 0)
             return BadRequest(new { error = "Hours must be non-negative" });

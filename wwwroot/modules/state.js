@@ -73,6 +73,9 @@ export function emit(event, data) {
 }
 
 // ===== Proxyベースの変更通知 =====
+// 注意: Proxy はトップレベルのプロパティのみを監視する。
+// internal.filter.assignee = 'xxx' のようなネストされた変更は検出されない。
+// 変更通知が必要な場合は setFilter() などの mutation 関数を使用すること。
 const stateProxy = new Proxy(internal, {
     set(target, property, value) {
         const oldValue = target[property];
@@ -85,6 +88,7 @@ const stateProxy = new Proxy(internal, {
 });
 
 // ===== 安全なparseInt =====
+// 無効な入力は0にフォールバック（ticketCounter用）
 function safeParseInt(id) {
     const num = Number(id);
     return Number.isFinite(num) ? num : 0;
@@ -93,7 +97,9 @@ function safeParseInt(id) {
 // ===== Mutation関数 =====
 
 /**
- * チケット設定
+ * チケットを設定
+ * @param {string} ticketId - チケットID
+ * @param {object} ticket - チケットデータ
  */
 export function setTicket(ticketId, ticket) {
     internal.tickets.set(ticketId, ticket);
@@ -106,7 +112,8 @@ export function setTicket(ticketId, ticket) {
 }
 
 /**
- * チケット追加
+ * チケットを追加
+ * @param {object} ticket - チケットデータ
  */
 export function addTicket(ticket) {
     internal.tickets.set(ticket.ticketId, ticket);
@@ -117,7 +124,8 @@ export function addTicket(ticket) {
 }
 
 /**
- * チケット削除
+ * チケットを削除
+ * @param {string} ticketId - チケットID
  */
 export function removeTicket(ticketId) {
     internal.tickets.delete(ticketId);
@@ -126,7 +134,10 @@ export function removeTicket(ticketId) {
 }
 
 /**
- * チケットフィールド更新
+ * チケットのフィールドを更新
+ * @param {string} ticketId - チケットID
+ * @param {string} field - フィールド名
+ * @param {*} value - 更新値
  */
 export function updateTicketField(ticketId, field, value) {
     const ticket = internal.tickets.get(ticketId);
@@ -138,6 +149,7 @@ export function updateTicketField(ticketId, field, value) {
 
 /**
  * チケットデータを初期化
+ * @param {Array} tickets - チケット配列
  */
 export function initTickets(tickets) {
     internal.tickets.clear();
@@ -155,7 +167,8 @@ export function initTickets(tickets) {
 }
 
 /**
- * モーダル状態設定（部分的な更新）
+ * モーダル状態を設定（部分的な更新）
+ * @param {object} partialState - 部分的な状態オブジェクト
  */
 export function setModalState(partialState) {
     Object.assign(internal.modal, partialState);
@@ -177,7 +190,8 @@ export function resetModalState() {
 }
 
 /**
- * フィルター設定（部分的な更新）
+ * フィルターを設定（部分的な更新）
+ * @param {object} partial - 部分的なフィルターオブジェクト
  */
 export function setFilter(partial) {
     Object.assign(internal.filter, partial);
@@ -185,7 +199,8 @@ export function setFilter(partial) {
 }
 
 /**
- * ラベルサジェスト設定
+ * ラベルサジェストを設定
+ * @param {string[]} labels - ラベル配列
  */
 export function setLabelSuggestions(labels) {
     internal.suggestions.labels = labels;
@@ -193,7 +208,8 @@ export function setLabelSuggestions(labels) {
 }
 
 /**
- * 担当者サジェスト設定
+ * 担当者サジェストを設定
+ * @param {string[]} assignees - 担当者配列
  */
 export function setAssigneeSuggestions(assignees) {
     internal.suggestions.assignees = assignees;

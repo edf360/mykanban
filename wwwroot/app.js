@@ -17,12 +17,12 @@ import { populateAssigneeFilter, populateLabelFilter, initFilter, adjustBoardFor
 import { initArchive } from './modules/archive.js';
 import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
-import { getToken, login, logout, showLoginScreen, showAppScreen, getUsername } from './modules/auth.js';
+import { getToken, login, logout, showLoginScreen, showAppScreen, getUsername, isAdmin } from './modules/auth.js';
 import { logInfo, logError, copyToClipboard, exportAsText, getLogBuffer, onUIUpdate } from './modules/logger.js';
 import { renderProgressMatrix, renderTimelineView, getTicketsByLabel } from './modules/charts.js';
 
-// ===== 初期化ガード =====
-let appInitialized = false;
+// ===== 初期化ガード（= new Set(['initialized']);にするとログインできなくなる =====
+const initGuard = new Set();
 
 // ===== イベントコントローラー（統合削除用） =====
 let eventController = null;
@@ -34,13 +34,17 @@ let resizeTimer = null;
  * アプリケーションのメイン初期化処理
  */
 async function initApp() {
-  if (appInitialized) {
+  console.log('initApp start');
+
+  if (initGuard.has('initialized')) {
+    console.log('already initialized');
     logError('[app] initApp already called, skipping');
     return;
   }
-  appInitialized = true;
 
-  console.log('[app] DOMContentLoaded fired');
+  initGuard.add('initialized');
+
+  console.log('after guard');
 
   // イベントコントローラー作成
   eventController = new AbortController();
@@ -68,6 +72,14 @@ async function initApp() {
 
     // 5.5 統合ドキュメントクリックハンドラ（AbortController使用）
     document.addEventListener('click', (e) => {
+      // カラム追加ボタン（イベントデリゲーション）
+      const addBtn = e.target.closest('.column-add-btn');
+      if (addBtn) {
+        e.stopPropagation();
+        openNewModal(addBtn.dataset.column);
+        return;
+      }
+
       // 担当者ドロップダウン
       const assigneeDropdown = document.getElementById('assigneeDropdown');
       if (assigneeDropdown && !assigneeDropdown.contains(e.target)) {
@@ -90,15 +102,6 @@ async function initApp() {
 
     // 6. 設定パネル
     initSettings();
-
-    // 6.5 カラムヘッダーの追加ボタン（todo/doing/done）
-    document.querySelectorAll('.column-add-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const column = btn.dataset.column;
-        openNewModal(column);
-      });
-    });
 
     // 7. 子タスク追加ボタン
     const addChildTaskBtn = document.getElementById('addChildTaskBtn');
@@ -142,13 +145,18 @@ async function initApp() {
     populateAssigneeFilter();
     populateLabelFilter();
 
-    // ログインユーザーのチケットをデフォルトで表示
+    // ログインユーザーのチケットをデフォルトで表示（管理者は「すべて」選択）
     const username = getUsername();
     if (username) {
       const assigneeSelect = document.getElementById('assigneeFilterSelect');
       if (assigneeSelect) {
-        assigneeSelect.value = username;
-        logInfo('[app] Default assignee filter set to: ' + username);
+        if (isAdmin()) {
+          assigneeSelect.value = '';
+          logInfo('[app] Admin logged in, assignee filter set to all');
+        } else {
+          assigneeSelect.value = username;
+          logInfo('[app] Default assignee filter set to: ' + username);
+        }
       }
     }
 
@@ -175,6 +183,12 @@ async function initApp() {
     
     logInfo('[app] Initialization complete');
   } catch (error) {
+    console.error('INIT ERROR', error);
+    alert(
+      error?.stack ||
+      error?.message ||
+      String(error)
+    );
     logError('Failed to initialize application: ' + error.message);
     console.error('Failed to initialize application:', error);
   }
@@ -664,3 +678,8 @@ function initGraphPanelInternal() {
     });
   }
 }
+
+// ===== イベントコントローラーのクリーンアップ =====
+window.addEventListener('beforeunload', () => {
+  eventController?.abort();
+});

@@ -36,7 +36,8 @@ function debounce(fn, delay) {
     let timer = null;
     return function (...args) {
         clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
+        // fn に引数のみ渡し、this 束縛は行わない（イベントハンドラ外で使用する想定）
+        timer = setTimeout(() => fn(...args), delay);
     };
 }
 

@@ -2,6 +2,9 @@
  * モーダル操作モジュール
  */
 
+// モーダルアニメーション完了までの待機時間（ms）
+export const MODAL_ANIMATION_DURATION = 350;
+
 import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
@@ -23,9 +26,7 @@ const el = {
     childTasks: null,
     cancelBtn: null,
     saveBtn: null,
-    lockBtn: null,
-    emergencyBtn: null,
-    categoryBtn: null,
+    hamburgerBtn: null,
     savePerAssigneeBtn: null,
     viewActualBtn: null,
 };
@@ -46,9 +47,7 @@ function cacheElements() {
     el.childTasks = document.getElementById('childTasks');
     el.cancelBtn = document.getElementById('cancelBtn');
     el.saveBtn = document.getElementById('saveBtn');
-    el.lockBtn = document.getElementById('modalLockBtn');
-    el.emergencyBtn = document.getElementById('modalEmergencyBtn');
-    el.categoryBtn = document.getElementById('modalCategoryBtn');
+    el.hamburgerBtn = document.getElementById('modalHamburgerBtn');
     el.savePerAssigneeBtn = document.getElementById('savePerAssigneeBtn');
     el.viewActualBtn = document.getElementById('viewActualBtn');
 }
@@ -113,9 +112,7 @@ function _openModal(options) {
     }
     
     // ロックUI更新
-    updateLockButton();
-    updateEmergencyButton();
-    updateCategoryButton();
+    updateHamburgerMenu();
     applyEmergencyToModal();
     applyLockToModal();
     
@@ -146,7 +143,7 @@ function _openModal(options) {
                 el.ticketTitle.focus();
                 el.ticketTitle.select();
             }
-        }, 350);
+        }, MODAL_ANIMATION_DURATION);
     }
 }
 
@@ -177,12 +174,10 @@ export function closeModal() {
 }
 
 /**
- * ロックボタンを更新（テキストアイコン）
+ * ハンバーガーメニューを更新
  */
-function updateLockButton() {
-    if (el.lockBtn) {
-        el.lockBtn.textContent = isTicketLocked() ? '🔒' : '🔓';
-    }
+function updateHamburgerMenu() {
+    // メニューの状態は動的に生成するのでここでは何もしない
 }
 
 /**
@@ -203,26 +198,16 @@ function applyLockToModal() {
  */
 export function toggleLock() {
     setTicketLocked(!isTicketLocked());
-    updateLockButton();
+    updateHamburgerMenu();
     applyLockToModal();
 }
 
-/**
- * 緊急ボタンを更新
- */
-function updateEmergencyButton() {
-    if (el.emergencyBtn) {
-        el.emergencyBtn.textContent = isTicketEmergency() ? '🏃' : '🚶';
-        el.emergencyBtn.classList.toggle('active', isTicketEmergency());
-    }
-}
 
 /**
  * 緊急フラグをトグル
  */
 export function toggleEmergency() {
     setTicketEmergency(!isTicketEmergency());
-    updateEmergencyButton();
     applyEmergencyToModal();
 }
 
@@ -234,17 +219,6 @@ function applyEmergencyToModal() {
     el.modalContent.classList.toggle('emergency', isTicketEmergency());
 }
 
-/**
- * カテゴリボタンを更新
- */
-function updateCategoryButton() {
-    if (el.categoryBtn) {
-        const category = getCurrentCategory();
-        el.categoryBtn.textContent = category ? '🏷️' : '🏷️';
-        el.categoryBtn.title = category ? `集計カテゴリ: ${category}` : '集計カテゴリを設定';
-        el.categoryBtn.classList.toggle('has-category', !!category);
-    }
-}
 
 /**
  * カテゴリ入力ダイアログを開く
@@ -254,7 +228,95 @@ export function openCategoryDialog() {
     const input = prompt('集計カテゴリを入力してください', current);
     if (input !== null) {
         setModalState({ currentCategory: input.trim() });
-        updateCategoryButton();
+    }
+}
+
+// ハンバーガーメニューのドキュメントイベントリスナー
+let hamburgerDocListener = null;
+
+/**
+ * ハンバーガーメニューをトグル
+ */
+function toggleHamburgerMenu() {
+    const menu = document.getElementById('modalHamburgerMenu');
+    if (!menu) return;
+    
+    if (menu.classList.contains('active')) {
+        closeHamburgerMenu();
+    } else {
+        openHamburgerMenu();
+    }
+}
+
+function openHamburgerMenu() {
+    const menu = document.getElementById('modalHamburgerMenu');
+    if (!menu) return;
+    
+    // ロック状態を取得
+    const locked = isTicketLocked();
+    
+    const category = getCurrentCategory() || '(未設定)';
+    menu.innerHTML = `
+        <div class="modal-menu-item" data-action="lock">
+            <span class="menu-icon">${isTicketLocked() ? '🔒' : '🔓'}</span>
+            <span class="menu-label">編集ロック</span>
+            <span class="menu-check">${isTicketLocked() ? '✓' : ''}</span>
+        </div>
+        <div class="modal-menu-item" data-action="emergency">
+            <span class="menu-icon">🚨</span>
+            <span class="menu-label">緊急チケット</span>
+            <span class="menu-check">${isTicketEmergency() ? '✓' : ''}</span>
+        </div>
+        <div class="modal-menu-item${locked ? ' disabled' : ''}" data-action="category">
+            <span class="menu-icon">🏷️</span>
+            <span class="menu-label">集計カテゴリ: ${category}</span>
+            <span class="menu-check"></span>
+        </div>
+    `;
+    
+    menu.classList.add('active');
+    
+    // メニューアイテムのクリックイベント
+    menu.querySelectorAll('.modal-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const action = item.dataset.action;
+            if (item.classList.contains('disabled')) return;
+            
+            switch (action) {
+                case 'lock':
+                    toggleLock();
+                    break;
+                case 'emergency':
+                    toggleEmergency();
+                    break;
+                case 'category':
+                    openCategoryDialog();
+                    break;
+            }
+            closeHamburgerMenu();
+        });
+    });
+    
+    // 外部クリックで閉じる
+    hamburgerDocListener = (e) => {
+        const btn = document.getElementById('modalHamburgerBtn');
+        const menu = document.getElementById('modalHamburgerMenu');
+        if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) {
+            closeHamburgerMenu();
+        }
+    };
+    document.addEventListener('click', hamburgerDocListener);
+}
+
+function closeHamburgerMenu() {
+    const menu = document.getElementById('modalHamburgerMenu');
+    if (menu) {
+        menu.classList.remove('active');
+    }
+    if (hamburgerDocListener) {
+        document.removeEventListener('click', hamburgerDocListener);
+        hamburgerDocListener = null;
     }
 }
 
@@ -301,8 +363,21 @@ function collectFormData() {
  * チケットを保存
  */
 export async function saveTicket() {
-    const data = collectFormData();
+    let data = collectFormData();
     if (!data) return;
+    
+    // 集計カテゴリが空だったらタイトルをそのまま使用
+    if (!data.category || data.category.trim() === '') {
+        data.category = data.title;
+    }
+
+    // 子タスクの集計カテゴリが空だったら子タスク名をコピー
+    data.childTasks = data.childTasks.map(task => {
+        if (!task.category || task.category.trim() === '') {
+            return { ...task, category: task.text };
+        }
+        return task;
+    });
     
     try {
         const editingId = getEditingTicketId();
@@ -351,8 +426,21 @@ export async function saveTicketsPerAssignee() {
     const assignees = getCurrentAssignees();
     if (isEdit || assignees.length < 2) return;
     
-    const data = collectFormData();
+    let data = collectFormData();
     if (!data) return;
+    
+    // 集計カテゴリが空だったらタイトルをそのまま使用
+    if (!data.category || data.category.trim() === '') {
+        data.category = data.title;
+    }
+
+    // 子タスクの集計カテゴリが空だったら子タスク名をコピー
+    data.childTasks = data.childTasks.map(task => {
+        if (!task.category || task.category.trim() === '') {
+            return { ...task, category: task.text };
+        }
+        return task;
+    });
     
     try {
         const column = getNewTicketColumn() || 'todo';
@@ -393,14 +481,11 @@ export function initModal() {
     if (el.saveBtn) {
         el.saveBtn.addEventListener('click', saveTicket);
     }
-    if (el.lockBtn) {
-        el.lockBtn.addEventListener('click', toggleLock);
-    }
-    if (el.emergencyBtn) {
-        el.emergencyBtn.addEventListener('click', toggleEmergency);
-    }
-    if (el.categoryBtn) {
-        el.categoryBtn.addEventListener('click', openCategoryDialog);
+    if (el.hamburgerBtn) {
+        el.hamburgerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleHamburgerMenu();
+        });
     }
     if (el.savePerAssigneeBtn) {
         el.savePerAssigneeBtn.addEventListener('click', saveTicketsPerAssignee);

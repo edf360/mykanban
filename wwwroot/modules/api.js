@@ -38,6 +38,10 @@ async function parseResponseBody(response) {
 
 /**
  * 共通APIリクエスト関数
+ * @param {string} method - HTTPメソッド（GET, POST, PUT, PATCH, DELETE）
+ * @param {string} url - リクエストURL
+ * @param {object} [body] - リクエストボディ（オプション）
+ * @returns {Promise<object>} レスポンスデータ
  */
 export async function apiRequest(method, url, body) {
     // リクエストログ
@@ -67,11 +71,11 @@ export async function apiRequest(method, url, body) {
     try {
         const response = await fetch(url, options);
 
-        // 401: 認証失敗 → ログイン画面に戻る
+        // 401: 認証失敗 → ログイン画面に戻る（replaceで履歴に残らないように）
         if (response.status === 401) {
             console.warn('[api] Unauthorized - redirecting to login');
             logApiError(method, url, new UnauthorizedError());
-            window.location.href = '/';
+            window.location.replace('/');
             throw new UnauthorizedError();
         }
 
@@ -111,6 +115,7 @@ export async function apiRequest(method, url, body) {
 
 /**
  * チケット一覧をサーバーから取得して状態に反映
+ * @returns {Promise<void>}
  */
 export async function loadTickets() {
     try {
@@ -126,7 +131,8 @@ export async function loadTickets() {
 }
 
 /**
- * サジェストデータをロード
+ * 担当者・ラベルのサジェストデータをロード
+ * @returns {Promise<void>}
  */
 export async function loadSuggestions() {
     try {
@@ -135,8 +141,6 @@ export async function loadSuggestions() {
             apiRequest('GET', `${API_BASE}/labels/suggest`, null),
             apiRequest('GET', `${API_BASE}/assignees/suggest`, null)
         ]);
-        console.log('[loadSuggestions] t=', Date.now(), 'data:', assigneeData);
-
         // 安全に文字列配列に変換（文字列はそのまま、オブジェクトは name プロパティを使用）
         const labels = Array.isArray(labelData)
             ? labelData.map(item => typeof item === 'string' ? item : (item.name || ''))
@@ -161,6 +165,8 @@ export async function loadSuggestions() {
 
 /**
  * チケット履歴を取得
+ * @param {string} ticketId - チケットID
+ * @returns {Promise<Array>} 履歴データ配列
  */
 export async function loadHistory(ticketId) {
     try {

@@ -1,0 +1,26 @@
+# Build outputs
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# E2E Test artifacts
+E2ETests/playwright-report/
+E2ETests/test-results/
+E2ETests/e2e_test_result.txt
+
+# Node modules (E2E tests)
+E2ETests/node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

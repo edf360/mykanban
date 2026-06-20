@@ -13,7 +13,7 @@ let logIdCounter = 0;
 function generateLogId() {
     logIdCounter++;
     const now = Date.now();
-    const random = Math.floor(Math.random() * 10000);
+    const random = Math.floor(Math.random() * 1000000);
     return `log-${now}-${random}-${logIdCounter}`;
 }
 
@@ -29,7 +29,8 @@ function getDeviceInfo() {
     else if (ua.includes('Safari/')) browser = 'Safari';
 
     let os = 'Unknown';
-    if (ua.includes('Windows NT 10')) os = 'Windows 10/11';
+    if (ua.includes('Windows NT 10.0') && ua.includes('Windows 11')) os = 'Windows 11';
+    else if (ua.includes('Windows NT 10')) os = 'Windows 10';
     else if (ua.includes('Windows')) os = 'Windows';
     else if (ua.includes('Mac OS X')) os = 'macOS';
     else if (ua.includes('Linux')) os = 'Linux';

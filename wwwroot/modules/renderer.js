@@ -37,6 +37,7 @@ let cachedLabelColors = null;
 
 /**
  * 色値が有効なHEXコードか検証する（#RGB または #RRGGBB のみ許可）
+ * 注意: 8桁HEX (#RRGGBBAA) はサポートしない
  */
 function isValidHexColor(color) {
     if (typeof color !== 'string') return false;
@@ -84,18 +85,28 @@ function getLabelColorMap() {
 
 /**
  * 背景色に対するコントラスト文字色を計算（明るい背景なら黒、暗い背景なら白）
+ * 入力は sanitizeColor() 経由で #RRGGBB 形式が保証されていること
  */
 function getContrastColor(hex) {
     const c = hex.replace('#', '');
+    if (c.length !== 6) {
+        // 不正な形式の場合はデフォルト黒を返す
+        return '#000000';
+    }
     const r = parseInt(c.substring(0, 2), 16);
     const g = parseInt(c.substring(2, 4), 16);
     const b = parseInt(c.substring(4, 6), 16);
+    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+        return '#000000';
+    }
     const luminance = (r * 299 + g * 587 + b * 114) / 1000;
     return luminance > 128 ? '#000000' : '#ffffff';
 }
 
 /**
  * チケットがフィルター条件に一致するかチェック
+ * @param {object} ticket - チケットデータ
+ * @returns {boolean} フィルターに一致するかどうか
  */
 export function ticketMatchesFilter(ticket) {
     // 担当者フィルター
@@ -140,7 +151,9 @@ export function ticketMatchesFilter(ticket) {
  */
 function cleanupProgressListeners() {
     progressSliderListeners.forEach(({ onClick }, id) => {
-        document.removeEventListener('click', onClick);
+        if (onClick) {
+            document.removeEventListener('click', onClick);
+        }
     });
     progressSliderListeners.clear();
     // 表示中のスライダーを削除
@@ -149,6 +162,7 @@ function cleanupProgressListeners() {
 
 /**
  * 全チケットを再描画
+ * @returns {void}
  */
 export function renderAllTickets() {
     // 古い進捗ドラッグリスナーをクリーンアップ（メモリリーク防止）
@@ -156,7 +170,7 @@ export function renderAllTickets() {
     
     // 各カラムのticket-listをクリア
     document.querySelectorAll('.ticket-list').forEach(list => {
-        list.innerHTML = '';
+        list.replaceChildren();
     });
     
     // Positionでソートして描画（ドラッグ＆ドロップ後の順番を反映）

@@ -4,7 +4,7 @@
  * ドラッグ＆ドロップで順序入れ替え可能
  */
 
-import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks } from './state.js';
+import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked } from './state.js';
 
 // ローカルID生成（HTTP環境でも動作）
 let childTaskIdCounter = 0;
@@ -194,34 +194,38 @@ function showChildTaskMenu(button, task, itemDiv) {
     const menu = document.createElement('div');
     menu.className = 'child-task-settings-menu';
 
-    // 「隠す」メニュー項目
+    const locked = isTicketLocked();
+
+    // 「隠す」メニュー項目（ロック時でも有効）
     const hideItem = document.createElement('div');
     hideItem.className = 'child-task-menu-item';
 
-    const hideCheckbox = document.createElement('input');
-    hideCheckbox.type = 'checkbox';
-    hideCheckbox.checked = task.done;
-    hideCheckbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const newDone = hideCheckbox.checked;
+    const toggleHide = () => {
+        const newDone = !task.done;
         updateChildTask(task.id, { done: newDone });
         itemDiv.classList.toggle('done', newDone);
         hideChildTaskMenu();
+    };
+
+    hideItem.textContent = task.done ? '✓ 隠す' : '隠す';
+    hideItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHide();
     });
 
-    const hideLabel = document.createElement('span');
-    hideLabel.textContent = '隠す';
-
-    hideItem.appendChild(hideCheckbox);
-    hideItem.appendChild(hideLabel);
     menu.appendChild(hideItem);
 
-    // 「集計カテゴリ編集」メニュー項目
+    // 「集計カテゴリ編集」メニュー項目（ロック時は無効）
     const categoryItem = document.createElement('div');
     categoryItem.className = 'child-task-menu-item';
-    categoryItem.textContent = '集計カテゴリ編集';
+    if (locked) {
+        categoryItem.classList.add('disabled');
+    }
+    const categoryName = task.category || '(未設定)';
+    categoryItem.textContent = `集計カテゴリ: ${categoryName}`;
     categoryItem.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (locked) return;
         hideChildTaskMenu();
         const current = task.category || '';
         const input = prompt('子タスクのカテゴリを入力してください', current);
@@ -232,12 +236,16 @@ function showChildTaskMenu(button, task, itemDiv) {
     });
     menu.appendChild(categoryItem);
 
-    // 「削除」メニュー項目
+    // 「削除」メニュー項目（ロック時は無効）
     const deleteItem = document.createElement('div');
     deleteItem.className = 'child-task-menu-item child-task-menu-item-delete';
+    if (locked) {
+        deleteItem.classList.add('disabled');
+    }
     deleteItem.textContent = '削除';
     deleteItem.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (locked) return;
         hideChildTaskMenu();
         removeChildTask(task.id);
     });

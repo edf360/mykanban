@@ -74,10 +74,7 @@ export function getUsername() {
  * 管理者チェック。一般ユーザーの場合は false を返す
  */
 export function requireAdmin() {
-    if (!isAdmin()) {
-        return false;
-    }
-    return true;
+    return isAdmin();
 }
 
 /**
