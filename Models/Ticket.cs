@@ -23,6 +23,7 @@ public class Ticket
     public bool IsLocked { get; set; }
     public bool IsEmergency { get; set; }
     public string? Category { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     // DB用フィールド（シリアライズ時は非表示）
     [JsonIgnore]

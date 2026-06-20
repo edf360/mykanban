@@ -254,8 +254,9 @@ function openHamburgerMenu() {
     
     // ロック状態を取得
     const locked = isTicketLocked();
-    
+    const isEdit = !!getEditingTicketId();
     const category = getCurrentCategory() || '(未設定)';
+    
     menu.innerHTML = `
         <div class="modal-menu-item" data-action="lock">
             <span class="menu-icon">${isTicketLocked() ? '🔒' : '🔓'}</span>
@@ -272,6 +273,14 @@ function openHamburgerMenu() {
             <span class="menu-label">集計カテゴリ: ${category}</span>
             <span class="menu-check"></span>
         </div>
+        ${isEdit ? `
+        <div class="modal-menu-item" data-action="details">
+            <span class="menu-icon">📋</span>
+            <span class="menu-label">詳細</span>
+            <span class="menu-arrow">▶</span>
+        </div>
+        <div class="modal-menu-submenu" id="modalDetailsSubmenu"></div>
+        ` : ''}
     `;
     
     menu.classList.add('active');
@@ -282,6 +291,11 @@ function openHamburgerMenu() {
             e.stopPropagation();
             const action = item.dataset.action;
             if (item.classList.contains('disabled')) return;
+            
+            if (action === 'details') {
+                toggleDetailsSubmenu();
+                return;
+            }
             
             switch (action) {
                 case 'lock':
@@ -307,6 +321,67 @@ function openHamburgerMenu() {
         }
     };
     document.addEventListener('click', hamburgerDocListener);
+}
+
+/**
+ * 詳細サブメニューの展開/折りたたみをトグル
+ */
+function toggleDetailsSubmenu() {
+    const submenu = document.getElementById('modalDetailsSubmenu');
+    const detailsItem = document.querySelector('[data-action="details"]');
+    if (!submenu) return;
+    
+    const arrow = detailsItem ? detailsItem.querySelector('.menu-arrow') : null;
+    
+    if (submenu.classList.contains('expanded')) {
+        submenu.classList.remove('expanded');
+        if (arrow) arrow.textContent = '▶';
+    } else {
+        const ticketId = getEditingTicketId();
+        const data = ticketId ? getTicket(ticketId) : null;
+        
+        if (data) {
+            submenu.innerHTML = `
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">チケットID</span>
+                    <span class="detail-value">${data.ticketId || '-'}</span>
+                </div>
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">内部ID</span>
+                    <span class="detail-value">${data.id || '-'}</span>
+                </div>
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">位置</span>
+                    <span class="detail-value">${data.position ?? '-'}</span>
+                </div>
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">カラム</span>
+                    <span class="detail-value">${data.column || '-'}</span>
+                </div>
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">進捗</span>
+                    <span class="detail-value">${data.progress ?? '-'}%</span>
+                </div>
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">前カラム</span>
+                    <span class="detail-value">${data.previousColumn || '-'}</span>
+                </div>
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">作成日</span>
+                    <span class="detail-value">${data.createdAt ? new Date(data.createdAt).toLocaleString('ja-JP') : '-'}</span>
+                </div>
+            `;
+        } else {
+            submenu.innerHTML = `
+                <div class="modal-menu-submenu-row">
+                    <span class="detail-label">詳細情報なし</span>
+                </div>
+            `;
+        }
+        
+        submenu.classList.add('expanded');
+        if (arrow) arrow.textContent = '▼';
+    }
 }
 
 function closeHamburgerMenu() {

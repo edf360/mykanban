@@ -114,11 +114,13 @@
     </div><!-- /kanban-board -->
         </div><!-- /kanban-main -->
 
-        <!-- 設定パネル（初期非表示） -->
-        <div class="side-panel settings-panel" id="settingsPanel">
-            <div class="side-panel-header settings-header">
-                <div class="side-panel-title settings-title">⚙️ 設定</div>
-                <button class="side-panel-close-btn settings-close-btn" id="settingsCloseBtn" title="閉じる">✕</button>
+    </div><!-- /main-container -->
+
+    <!-- 設定モーダル -->
+    <div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true">
+        <div class="modal settings-modal">
+            <div class="modal-header">
+                <div class="modal-title">⚙️ 設定</div>
             </div>
             <div class="settings-body">
                 <!-- 担当者管理 -->
@@ -163,8 +165,8 @@
                     </div>
                 </section>
             </div>
-        </div><!-- /settings-panel -->
-    </div><!-- /main-container -->
+        </div>
+    </div><!-- /settingsModal -->
 
     <!-- 画面左下のボタン（検索 + グラフ + 設定 + Archive + ログ + ログアウト） -->
     <div class="bottom-left-buttons">

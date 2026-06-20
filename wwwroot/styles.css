@@ -193,15 +193,15 @@ body {
 .kanban-board {
     display: flex;
     gap: 20px;
-    width: 100%;
-    max-width: 1580px;
+    width: 95vw;
+    max-width: 95vw;
     margin: 0 auto;
     height: calc(100dvh - 20px);
     padding: 4px;
     transition: height 0.3s ease, padding-top 0.3s ease;
 }
 
-.main-container.settings-open .kanban-board { margin: 0; max-width: none; }
+/* .main-container.settings-open .kanban-board は削除（設定がモーダル化） */
 
 .column {
     background: rgba(255, 255, 255, 0.85);
@@ -209,9 +209,9 @@ body {
     border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 16px;
     flex: 1;
+    min-width: 250px;
     display: flex;
     flex-direction: column;
-    min-width: 300px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
@@ -700,6 +700,51 @@ body {
     font-weight: bold;
     color: #3b82f6;
     flex-shrink: 0;
+}
+
+.modal-menu-item .menu-arrow {
+    font-size: 10px;
+    color: #9ca3af;
+    flex-shrink: 0;
+}
+
+/* 詳細サブメニュー */
+.modal-menu-submenu {
+    display: none;
+    padding: 8px 16px 8px 42px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+}
+
+.modal-menu-submenu.expanded {
+    display: block;
+}
+
+.modal-menu-submenu-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+    color: #6b7280;
+    gap: 8px;
+}
+
+.modal-menu-submenu-row .detail-label {
+    font-weight: 600;
+    color: #374151;
+    flex-shrink: 0;
+    min-width: 60px;
+}
+
+.modal-menu-submenu-row .detail-value {
+    font-family: monospace;
+    color: #4b5563;
+    text-align: right;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .modal-header-buttons {
@@ -1372,8 +1417,8 @@ body {
 
 .bottom-left-buttons {
     position: fixed;
-    bottom: 32px;
-    left: 32px;
+    bottom: 14px;
+    left: 8px;
     z-index: 10000;
     display: flex;
     flex-direction: column;
@@ -1429,7 +1474,7 @@ body {
     font-size: 20px;
 }
 
-#archiveColumn .delete-btn { opacity: 1; }
+#archiveColumn .ticket:hover .delete-btn { opacity: 1; }
 
 .column-memo .column-header { background: rgba(139, 92, 246, 0.06); }
 
@@ -1675,7 +1720,15 @@ body {
 
 .side-panel-close-btn:hover { background: #e2e8f0; color: #1e293b; }
 
-.settings-panel.active { width: 400px; min-width: 350px; }
+/* .settings-panel.active は削除（設定がモーダル化） */
+.settings-modal {
+    max-width: 600px;
+    width: 90%;
+}
+.settings-modal .settings-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
 
 .settings-body {
     flex: 1;
@@ -2520,17 +2573,9 @@ body {
 @media (max-width: 768px) {
     .kanban-board { overflow-x: auto; }
 
-    .column { min-width: 260px; }
+    .column { min-width: 250px; }
 
-    .settings-panel.active {
-        width: 100vw;
-        min-width: 0;
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100dvh;
-        z-index: 9999;
-    }
+    /* .settings-panel.active は削除（設定がモーダル化） */
 
     .logs-panel.active { width: 100vw; min-width: 0; }
 

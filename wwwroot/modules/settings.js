@@ -116,22 +116,22 @@ export async function open() {
     if (importDbBtn) importDbBtn.style.display = currentAdminState ? '' : 'none';
     if (importCsvBtn) importCsvBtn.style.display = currentAdminState ? '' : 'none';
 
-    const panel = document.getElementById('settingsPanel');
+    const modal = document.getElementById('settingsModal');
     const btn = document.getElementById('settingsBtn');
-    console.log('[Settings] panel element:', panel, 'btn element:', btn);
-    if (panel) panel.classList.add('active');
+    console.log('[Settings] modal element:', modal, 'btn element:', btn);
+    if (modal) modal.classList.add('active');
     if (btn) btn.classList.add('active');
     isOpen = true;
-    console.log('[Settings] panel active:', panel ? panel.classList.contains('active') : 'N/A');
+    console.log('[Settings] modal active:', modal ? modal.classList.contains('active') : 'N/A');
 }
 
 /**
- * 設定パネルを閉じる
+ * 設定モーダルを閉じる
  */
 export function close() {
-    const panel = document.getElementById('settingsPanel');
+    const modal = document.getElementById('settingsModal');
     const btn = document.getElementById('settingsBtn');
-    if (panel) panel.classList.remove('active');
+    if (modal) modal.classList.remove('active');
     if (btn) btn.classList.remove('active');
     isOpen = false;
     // 編集状態をクリア
@@ -834,7 +834,16 @@ function bindEvents() {
             await open();
         }
     });
-    bind('settingsCloseBtn', 'click', close);
+
+    // オーバーレイクリックで閉じる
+    const settingsModal = document.getElementById('settingsModal');
+    if (settingsModal) {
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                close();
+            }
+        });
+    }
 
     // ユーザ追加
     bind('addUserBtn', 'click', addUser);

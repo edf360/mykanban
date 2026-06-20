@@ -80,7 +80,8 @@ public class TicketService
             ChildTasks = validChildTasks,
             IsLocked = dto.IsLocked,
             IsEmergency = dto.IsEmergency,
-            Category = dto.Category
+            Category = dto.Category,
+            CreatedAt = DateTime.Now
         };
 
         // Id は MaxAsync + 1 で生成（インメモリSQLiteテストとの互換性のためAUTOINCREMENT不使用）
