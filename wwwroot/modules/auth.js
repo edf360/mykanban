@@ -138,12 +138,10 @@ export function showLoginScreen() {
     const loginScreen = document.getElementById('loginScreen');
     const appContent = document.getElementById('appContent');
     const bottomButtons = document.querySelector('.bottom-left-buttons');
-    const filterArea = document.getElementById('filterArea');
 
     setVisible(loginScreen, true);
     setVisible(appContent, false);
     setVisible(bottomButtons, false);
-    setVisible(filterArea, false);
 }
 
 /**
@@ -153,10 +151,8 @@ export function showAppScreen() {
     const loginScreen = document.getElementById('loginScreen');
     const appContent = document.getElementById('appContent');
     const bottomButtons = document.querySelector('.bottom-left-buttons');
-    const filterArea = document.getElementById('filterArea');
 
     setVisible(loginScreen, false);
     setVisible(appContent, true);
     setVisible(bottomButtons, true);
-    setVisible(filterArea, true);
 }

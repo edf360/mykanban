@@ -228,9 +228,8 @@ body {
     font-weight: 600;
     letter-spacing: 0.3px;
     color: #374151;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
     gap: 6px;
 }
 
@@ -1469,6 +1468,12 @@ body {
 .floating-icon-btn.active { background: linear-gradient(145deg, var(--primary) 0%, var(--primary-dark) 100%); }
 
 .archive-toggle-bottom-btn {
+    position: static;
+    z-index: 10000;
+    font-size: 20px;
+}
+
+.memo-toggle-bottom-btn {
     position: static;
     z-index: 10000;
     font-size: 20px;

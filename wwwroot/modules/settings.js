@@ -41,10 +41,11 @@ let currentAdminState = false;
 export async function load() {
     try {
         const response = await apiRequest('GET', '/api/settings', null);
-        settings = response || { users: [], labels: [], holidays: [] };
+        settings = response || { users: [], labels: [], holidays: [], memos: {} };
         if (!settings.users) settings.users = [];
         if (!settings.labels) settings.labels = [];
         if (!settings.holidays) settings.holidays = [];
+        if (!settings.memos) settings.memos = {};
         
         // APIから読み込んだusers（文字列配列）を { id, name } へ変換
         settings.users = settings.users.map(u => {
@@ -63,7 +64,7 @@ export async function load() {
         });
     } catch (e) {
         console.error('設定の読み込みに失敗', e);
-        settings = { users: [], labels: [], holidays: [] };
+        settings = { users: [], labels: [], holidays: [], memos: {} };
     }
 }
 
@@ -76,7 +77,8 @@ export async function save() {
         const payload = {
             users: settings.users.map(u => u.name),
             labels: settings.labels.map(l => ({ name: l.name, color: l.color })),
-            holidays: settings.holidays
+            holidays: settings.holidays,
+            memos: settings.memos
         };
         await apiRequest('PUT', '/api/settings', payload);
         // サジェストを再ロードして最新の状態に更新

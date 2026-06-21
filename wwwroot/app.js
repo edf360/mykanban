@@ -3,7 +3,8 @@
  * 各モジュールを統合して初期化
  */
 
-import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions } from './modules/state.js';
+import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks } from './modules/state.js';
+import { loadUserSettings, saveUserSettings } from './modules/userSettings.js';
 import { loadTickets, loadSuggestions } from './modules/api.js';
 import { renderAllTickets } from './modules/renderer.js';
 import { setupDropZones } from './modules/dragdrop.js';
@@ -128,7 +129,10 @@ async function initApp() {
       });
     }
 
-    // 9. サーバーからデータをロード
+    // 9. 子タスク非表示状態を復元
+    restoreHiddenChildTasks();
+
+    // 10. サーバーからデータをロード
     logInfo('[app] Starting data initialization...');
     console.log('[app] state address:', state, 'id:', state.ticketCounter);
 
@@ -163,16 +167,19 @@ async function initApp() {
     // チケットを描画
     renderAllTickets();
 
-    // 初期状態でメモカラムを更新
-    updateMemoColumn();
-
     // フィルターを一元初期化（担当者・検索・メイン担当・トグル）
     initFilter();
 
-    // 10. ログパネル初期化（DOM準備後）
+    // メモカラムを初期化（表示/非表示復元・イベント設定）
+    initMemo();
+
+    // 初期状態でメモカラムの内容を更新
+    updateMemoColumn();
+
+    // 12. ログパネル初期化（DOM準備後）
     initLogsPanelInternal();
 
-    // 11. グラフパネル初期化（DOM準備後）
+    // 13. グラフパネル初期化（DOM準備後）
     initGraphPanelInternal();
 
     // アプリ画面を表示
@@ -466,6 +473,7 @@ function initGraphPanelInternal() {
           excludedTicketSet.delete(t.id);
         }
         updateGraphPanel();
+        saveGraphSettings();
       });
       const span = document.createElement('span');
       span.textContent = t.title || '無題';
@@ -549,6 +557,19 @@ function initGraphPanelInternal() {
     window.visualViewport.addEventListener('resize', handleBrowserResizeDebounced);
   }
 
+  // グラフ設定を保存
+  function saveGraphSettings() {
+    const settings = loadUserSettings();
+    settings.graph = {
+      visible: isGraphPanelOpen(),
+      label: graphLabelSelect?.value || '',
+      viewType: graphViewSelect?.value || 'matrix',
+      excludedTicketIds: Array.from(excludedTicketSet),
+      height: graphPanel?.style.height || '20vh'
+    };
+    saveUserSettings(settings);
+  }
+
   // グラフトグルボタン
   if (graphToggleBtn) {
     graphToggleBtn.addEventListener('click', () => {
@@ -609,6 +630,7 @@ function initGraphPanelInternal() {
         }
         graphPanel.style.height = '20vh';
       }
+      saveGraphSettings();
     });
   }
 
@@ -616,6 +638,7 @@ function initGraphPanelInternal() {
   if (graphLabelSelect) {
     graphLabelSelect.addEventListener('change', () => {
       updateGraphPanel();
+      saveGraphSettings();
     });
   }
 
@@ -623,6 +646,7 @@ function initGraphPanelInternal() {
   if (graphViewSelect) {
     graphViewSelect.addEventListener('change', () => {
       updateGraphPanel();
+      saveGraphSettings();
     });
   }
 
@@ -675,7 +699,77 @@ function initGraphPanelInternal() {
       if (!isResizing) return;
       isResizing = false;
       graphPanelResizeHandle.classList.remove('dragging');
+      saveGraphSettings();
     });
+  }
+
+  // 保存されたグラフ設定を復元
+  const settings = loadUserSettings();
+  const g = settings.graph;
+  if (g) {
+    // グラフパネル表示/非表示を復元
+    if (g.visible) {
+      setGraphPanelOpen(true);
+      graphPanel.classList.remove('hidden');
+      graphPanel.style.display = 'flex';
+      if (graphPanelBody) {
+        graphPanelBody.classList.remove('hidden');
+        graphPanelBody.style.display = 'block';
+      }
+      if (mainContainer) mainContainer.classList.add('graph-panel-open');
+      if (bottomLeftButtons) {
+        bottomLeftButtons.classList.add('graph-panel-open');
+      }
+      // 高さを先に復元
+      if (g.height) {
+        graphPanel.style.height = g.height;
+      }
+      // レンダリング完了後に高さを取得してレイアウトを調整
+      requestAnimationFrame(() => {
+        const panelHeight = graphPanel.offsetHeight;
+        const remainingHeight = window.innerHeight - panelHeight;
+        const kanbanMain = document.querySelector('.kanban-main');
+        const kanbanBoard = document.querySelector('.kanban-board');
+        if (kanbanMain) {
+          kanbanMain.style.height = `${remainingHeight}px`;
+        }
+        if (kanbanBoard) {
+          kanbanBoard.style.height = `${remainingHeight}px`;
+        }
+        if (bottomLeftButtons) {
+          bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
+        }
+        // グラフを描画
+        if (graphLabelSelect && graphLabelSelect.value) {
+          updateGraphPanel();
+        }
+      });
+      populateGraphLabelSelect();
+      // ラベル選択を復元
+      if (g.label && graphLabelSelect) {
+        graphLabelSelect.value = g.label;
+      }
+      // ビュータイプを復元
+      if (g.viewType && graphViewSelect) {
+        graphViewSelect.value = g.viewType;
+      }
+      // 除外チケットIDを復元
+      if (g.excludedTicketIds) {
+        g.excludedTicketIds.forEach(id => excludedTicketSet.add(id));
+      }
+    } else {
+      // 非表示の場合も設定値を復元（次回表示时用）
+      populateGraphLabelSelect();
+      if (g.label && graphLabelSelect) {
+        graphLabelSelect.value = g.label;
+      }
+      if (g.viewType && graphViewSelect) {
+        graphViewSelect.value = g.viewType;
+      }
+      if (g.excludedTicketIds) {
+        g.excludedTicketIds.forEach(id => excludedTicketSet.add(id));
+      }
+    }
   }
 }
 

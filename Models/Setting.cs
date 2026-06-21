@@ -20,6 +20,9 @@ public class Setting
     [JsonIgnore]
     public string HolidaysJson { get; set; } = "[]";
 
+    [JsonIgnore]
+    public string MemosJson { get; set; } = "{}";
+
     // ユーザリスト（APIレスポンス用）
     [JsonPropertyName("users")]
     public List<string> Users
@@ -42,6 +45,14 @@ public class Setting
     {
         get => JsonSerializer.Deserialize<List<string>>(HolidaysJson ?? "[]") ?? new();
         set => HolidaysJson = JsonSerializer.Serialize(value);
+    }
+
+    // 担当者メモ（APIレスポンス用）
+    [JsonPropertyName("memos")]
+    public Dictionary<string, string> Memos
+    {
+        get => JsonSerializer.Deserialize<Dictionary<string, string>>(MemosJson ?? "{}") ?? new();
+        set => MemosJson = JsonSerializer.Serialize(value);
     }
 }
 

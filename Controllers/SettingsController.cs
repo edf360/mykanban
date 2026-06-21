@@ -103,6 +103,7 @@ public class SettingsController : ControllerBase
         setting.Users = newUsers;
         setting.Labels = newLabels;
         setting.Holidays = dto.Holidays ?? new List<string>();
+        setting.Memos = dto.Memos ?? new Dictionary<string, string>();
 
         await _context.SaveChangesAsync();
         return NoContent();
@@ -176,7 +177,8 @@ public class SettingsController : ControllerBase
                 s.Id,
                 users = s.Users,
                 labels = s.Labels,
-                holidays = s.Holidays
+                holidays = s.Holidays,
+                memos = s.Memos
             }).ToList()
         };
 
@@ -275,7 +277,8 @@ public class SettingsController : ControllerBase
                         Id = s.Id,
                         Users = s.Users ?? new List<string>(),
                         Labels = s.Labels ?? new List<LabelConfig>(),
-                        Holidays = s.Holidays ?? new List<string>()
+                        Holidays = s.Holidays ?? new List<string>(),
+                        Memos = s.Memos ?? new Dictionary<string, string>()
                     };
                     _context.Settings.Add(setting);
                 }
@@ -737,6 +740,7 @@ public class SettingDto
     public List<string>? Users { get; set; }
     public List<LabelConfig>? Labels { get; set; }
     public List<string>? Holidays { get; set; }
+    public Dictionary<string, string>? Memos { get; set; }
 }
 
 /// <summary>
@@ -792,4 +796,5 @@ public class ImportSetting
     public List<string>? Users { get; set; }
     public List<LabelConfig>? Labels { get; set; }
     public List<string>? Holidays { get; set; }
+    public Dictionary<string, string>? Memos { get; set; }
 }

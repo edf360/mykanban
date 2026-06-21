@@ -30,7 +30,7 @@
     <!-- アプリケーションコンテンツ（ログイン成功后に表示） -->
     <div id="appContent" class="hidden">
     <!-- 画面左上のフィルターエリア -->
-    <div class="filter-area" id="filterArea">
+    <div class="filter-area hidden" id="filterArea">
         <!-- 閉じるボタン -->
         <button class="filter-close-btn" id="filterCloseBtn" title="閉じる">×</button>
         <!-- チケット検索ボックス -->
@@ -65,10 +65,13 @@
     <div class="main-container" id="mainContainer">
         <div class="kanban-main" id="kanbanMain">
             <div class="kanban-board">
-        <!-- 担当者用メモカラム（フィルターで人物を選択すると表示） -->
+        <!-- 担当者用メモカラム -->
         <div class="column column-memo hidden" data-column="memo" id="memoColumn">
             <div class="column-header">
-                <div class="column-title" id="memoColumnTitle">Memo</div>
+                <div class="column-title" id="memoColumnTitle">
+                    Memo
+                    <button class="column-close-btn" id="memoCloseBtn" title="閉じる">×</button>
+                </div>
             </div>
             <div class="memo-area">
                 <textarea id="assigneeMemoText" placeholder="メモを記述..."></textarea>
@@ -107,7 +110,7 @@
         <!-- アーカイブ（初期非表示） -->
         <div class="column hidden" data-column="archive" id="archiveColumn">
             <div class="column-header">
-                <div class="column-title">Archive<button class="column-close-btn" id="archiveCloseBtn" title="アーカイブを非表示">✕</button></div>
+                <div class="column-title">Archive<button class="column-close-btn" id="archiveCloseBtn" title="アーカイブを非表示">×</button></div>
             </div>
             <div class="ticket-list"></div>
         </div>
@@ -174,6 +177,7 @@
         <button class="floating-icon-btn graph-toggle-btn" id="graphToggleBtn" title="グラフを表示/非表示">📊</button>
         <button class="floating-icon-btn settings-btn" id="settingsBtn" title="設定">⚙️</button>
         <button class="floating-icon-btn archive-toggle-bottom-btn" id="archiveToggleBtn" title="アーカイブを表示/非表示">📦</button>
+        <button class="floating-icon-btn memo-toggle-bottom-btn hidden" id="memoToggleBtn" title="メモを表示/非表示">📝</button>
         <button class="floating-icon-btn logs-btn" id="logsBtn" title="ログ">📋</button>
         <button class="floating-icon-btn logout-btn hidden" id="logoutBtn" title="ログアウト">🚪</button>
     </div>

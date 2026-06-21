@@ -67,6 +67,9 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.UsersJson).HasDefaultValue("[]");
             entity.Property(e => e.LabelsJson).HasDefaultValue("[]");
             entity.Property(e => e.HolidaysJson).HasDefaultValue("[]");
+            entity.Property(e => e.MemosJson).HasDefaultValue("{}");
+            // Dictionary プロパティはナビゲーションプロパティとして認識されないよう無視
+            entity.Ignore(e => e.Memos);
         });
     }
 }

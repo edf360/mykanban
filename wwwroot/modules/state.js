@@ -4,6 +4,8 @@
  * Proxyベースの変更通知 + Mutation関数による安全な状態管理
  */
 
+import { loadUserSettings, saveUserSettings } from './userSettings.js';
+
 // APIベースURL
 export const API_BASE = '/api/tickets';
 
@@ -663,6 +665,15 @@ export function formatDateWithDay(date) {
 // ===== 子タスク表示/非表示管理 =====
 
 /**
+ * 子タスク非表示状態を保存
+ */
+function saveHiddenChildTasks() {
+    const settings = loadUserSettings();
+    settings.childTasks = { hidden: Array.from(internal.ui.hiddenChildTasks) };
+    saveUserSettings(settings);
+}
+
+/**
  * 子タスクの表示/非表示状態を取得
  */
 export function isChildTaskHidden(ticketId, childId) {
@@ -679,6 +690,19 @@ export function setChildTaskHidden(ticketId, childId, hidden) {
         internal.ui.hiddenChildTasks.add(key);
     } else {
         internal.ui.hiddenChildTasks.delete(key);
+    }
+    saveHiddenChildTasks();
+}
+
+/**
+ * 子タスク非表示状態を復元
+ */
+export function restoreHiddenChildTasks() {
+    const settings = loadUserSettings();
+    if (settings.childTasks && settings.childTasks.hidden && Array.isArray(settings.childTasks.hidden)) {
+        settings.childTasks.hidden.forEach(key => {
+            internal.ui.hiddenChildTasks.add(key);
+        });
     }
 }
 

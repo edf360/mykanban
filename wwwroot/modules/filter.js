@@ -6,6 +6,7 @@
 import { setFilter, getFilterAssignee, getAssigneeSuggestions, getLabelSuggestions } from './state.js';
 import { renderAllTickets } from './renderer.js';
 import { updateMemoColumn } from './memo.js';
+import { loadUserSettings, saveUserSettings } from './userSettings.js';
 
 // ===== DOM要素を一元化 =====
 const elements = {
@@ -67,32 +68,42 @@ function onAssigneeChange() {
     setFilter({ assignee: elements.assigneeSelect?.value || '' });
     syncMainAssigneeCheckbox();
     triggerRender();
+    saveFilterState();
 }
 
 // ===== 検索入力ハンドラー（debounce適用） =====
 function onSearchInput() {
     setFilter({ keyword: elements.searchInput?.value || '' });
     debouncedRender();
+    saveFilterState();
 }
 
 // ===== メイン担当チェックボックス変更ハンドラー =====
 function onMainAssigneeChange() {
     setFilter({ mainOnly: elements.mainAssigneeCheckbox?.checked || false });
     triggerRender();
+    saveFilterState();
 }
 
 // ===== ラベルフィルター変更ハンドラー =====
 function onLabelChange() {
     setFilter({ label: elements.labelSelect?.value || '' });
     triggerRender();
+    saveFilterState();
 }
 
 // ===== フィルター表示トグルハンドラー =====
 function onFilterToggle() {
     if (!elements.filterArea || !elements.filterToggleBtn) return;
+    const isHidden = elements.filterArea.classList.contains('hidden');
     elements.filterArea.classList.toggle('hidden');
-    elements.filterToggleBtn.classList.toggle('active');
+    if (isHidden) {
+        elements.filterToggleBtn.classList.add('active');
+    } else {
+        elements.filterToggleBtn.classList.remove('active');
+    }
     adjustBoardForFilter();
+    saveFilterState();
 }
 
 // ===== フィルター閉じるハンドラー =====
@@ -101,6 +112,7 @@ function onFilterClose() {
     elements.filterArea.classList.add('hidden');
     elements.filterToggleBtn.classList.remove('active');
     adjustBoardForFilter();
+    saveFilterState();
 }
 
 // ===== カンバンボードのフィルター調整 =====
@@ -165,10 +177,49 @@ export function populateAssigneeFilter() {
 }
 
 /**
+ * フィルター状態を保存
+ */
+function saveFilterState() {
+    const settings = loadUserSettings();
+    settings.filter = {
+        visible: !elements.filterArea?.classList.contains('hidden'),
+        assignee: elements.assigneeSelect?.value || '',
+        keyword: elements.searchInput?.value || '',
+        label: elements.labelSelect?.value || '',
+        mainOnly: elements.mainAssigneeCheckbox?.checked || false
+    };
+    saveUserSettings(settings);
+}
+
+/**
  * フィルター機能をすべて初期化（一元化）
  */
 export function initFilter() {
     cacheElements();
+
+    // 保存された設定を復元
+    const settings = loadUserSettings();
+    const f = settings.filter;
+
+    // フィルター表示/非表示を復元
+    if (elements.filterArea) {
+        if (f.visible === true) {
+            elements.filterArea.classList.remove('hidden');
+            if (elements.filterToggleBtn) elements.filterToggleBtn.classList.add('active');
+        } else {
+            elements.filterArea.classList.add('hidden');
+            if (elements.filterToggleBtn) elements.filterToggleBtn.classList.remove('active');
+        }
+    }
+
+    // フィルター値を復元
+    if (elements.assigneeSelect) elements.assigneeSelect.value = f.assignee || '';
+    if (elements.searchInput) elements.searchInput.value = f.keyword || '';
+    if (elements.labelSelect) elements.labelSelect.value = f.label || '';
+    if (elements.mainAssigneeCheckbox) elements.mainAssigneeCheckbox.checked = f.mainOnly || false;
+
+    // stateに反映
+    setFilter({ assignee: f.assignee || '', keyword: f.keyword || '', label: f.label || '', mainOnly: f.mainOnly || false });
 
     // 初期調整（ページ読み込み時にフィルターが表示されている場合の対応）
     adjustBoardForFilter();
@@ -192,7 +243,6 @@ export function initFilter() {
 
     // フィルター表示トグル
     if (elements.filterToggleBtn && elements.filterArea) {
-        elements.filterToggleBtn.classList.add('active');
         elements.filterToggleBtn.addEventListener('click', onFilterToggle);
     }
 
