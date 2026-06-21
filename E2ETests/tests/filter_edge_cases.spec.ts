@@ -116,7 +116,7 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
   test('担当者フィルターで絞り込める（設定に担当者がいる場合）', async ({ page }) => {
     // 設定パネルを開いて担当者を確認
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 担当者が存在するか確認
     const userCount = await page.locator('#usersList .user-item').count();
@@ -137,14 +137,21 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
   test('メイン担当限定フィルターを切替できる', async ({ page }) => {
     // 事前に「テスト担当者」を設定に追加
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     const hasUser = await page.locator('#usersList:has-text("テスト担当者")').count();
     if (hasUser === 0) {
       await page.fill('#newUserInput', 'テスト担当者');
       await page.click('#addUserBtn');
     }
     await page.click('#settingsBtn');  // 設定を閉じる
-    await page.waitForTimeout(500);
+    
+    // ページをリロードしてフィルタードロップダウンに担当者が反映されるまで待機
+    await page.reload();
+    await page.waitForTimeout(1000);
+    const loginVisible = await page.locator('#loginScreen').isVisible();
+    if (loginVisible) {
+      await login(page);
+    }
     
     // チケットを作成
     const ticketName = uniqueName('担当者フィル');
@@ -205,7 +212,7 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
   test('ラベルフィルターで絞り込める', async ({ page }) => {
     // ラベルが設定にない場合は追加
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     const hasLabelSetting = await page.locator('#labelsList:has-text("テストラベル")').count();
     if (hasLabelSetting === 0) {
       await page.fill('#newLabelNameInput', 'テストラベル');

@@ -36,9 +36,9 @@ test.describe('設定操作完全フロー', () => {
       await dialog.accept();
     });
     
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 既存の担当者が存在することを確認
     const initialCount = await page.locator('#usersList .user-item').count();
@@ -58,9 +58,9 @@ test.describe('設定操作完全フロー', () => {
       await dialog.accept();
     });
     
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 既存のラベルが存在する場合、削除を試みる
     const labelCount = await page.locator('#labelsList .label-item').count();
@@ -75,9 +75,9 @@ test.describe('設定操作完全フロー', () => {
   });
 
   test('休日を追加できる', async ({ page }) => {
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 休日テキストエリアに日付を入力（8桁形式）
     const holidayInput = page.locator('#holidaysTextarea');
@@ -96,37 +96,37 @@ test.describe('設定操作完全フロー', () => {
   });
 
   test('DBエクスポートボタンが存在する', async ({ page }) => {
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // DBエクスポートボタンが存在することを確認
     await expect(page.locator('#exportDbBtn')).toBeVisible();
   });
 
   test('CSVインポートボタンが存在する', async ({ page }) => {
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // CSVインポートボタンが存在することを確認
     await expect(page.locator('#importCsvBtn')).toBeVisible();
   });
 
   test('設定パネルを閉じられる', async ({ page }) => {
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 設定ボタンを再度クリックして閉じる
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).not.toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).not.toHaveClass(/active/);
   });
 
   test('管理者のみ設定で書き込み可能', async ({ page }) => {
-    // 管理者でログインしている場合、設定パネルで書き込み可能
+    // 管理者でログインしている場合、設定モーダルで書き込み可能
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 担当者追加ボタンが有効
     await expect(page.locator('#addUserBtn')).toBeEnabled();

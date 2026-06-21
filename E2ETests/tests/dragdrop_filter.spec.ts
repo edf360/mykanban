@@ -239,20 +239,36 @@ test.describe('担当者メモ', () => {
   });
 
   test('メモカラムにメモを入力して保存', async ({ page }) => {
-    // memoカラムを表示（担当者フィルターで）
-    const select = page.locator('#assigneeFilterSelect');
-    const options = select.locator('option');
-    const count = await options.count();
+    // 設定に「admin」が担当者にいることを確認して追加
+    await page.click('#settingsBtn');
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+    const hasAdmin = await page.locator('#usersList:has-text("admin")').count();
+    if (hasAdmin === 0) {
+      await page.fill('#newUserInput', 'admin');
+      await page.click('#addUserBtn');
+    }
+    await page.click('#settingsBtn');  // 設定を閉じる
     
-    if (count > 1) {
-      await select.selectOption({ index: 1 });
-      await page.waitForTimeout(500);
-      
-      // メモ入力
-      await page.fill('#assigneeMemoText', 'テストメモ');
-      
-      // 入力値が反映されていることを確認
-      await expect(page.locator('#assigneeMemoText')).toHaveValue('テストメモ');
+    // ページをリロードしてフィルターに反映
+    await page.reload();
+    await page.waitForTimeout(1000);
+    const loginVisible = await page.locator('#loginScreen').isVisible();
+    if (loginVisible) {
+      await login(page);
+    }
+    
+    // 担当者フィルターで「admin」を選択
+    await page.selectOption('#assigneeFilterSelect', 'admin');
+    await page.waitForTimeout(500);
+    
+    // メモ入力フィールドが編集可能であることを確認
+    const memoText = page.locator('#assigneeMemoText');
+    const isReadOnly = await memoText.getAttribute('readonly');
+    
+    if (isReadOnly === null) {
+      // 編集可能な場合のみメモ入力テスト
+      await memoText.fill('テストメモ');
+      await expect(memoText).toHaveValue('テストメモ');
     }
   });
 });

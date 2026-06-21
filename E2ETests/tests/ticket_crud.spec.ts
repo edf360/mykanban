@@ -132,12 +132,11 @@ test.describe('チケットCRUD', () => {
     await page.click('.column-add-btn[data-column="todo"]');
     await page.fill('#ticketTitle', uniqueName('ロックテスト'));
     
-    // ロックボタンをクリック
-    await page.click('#modalLockBtn');
+    // ハンバーガーメニューからロック設定
+    await page.click('#modalHamburgerBtn');
+    await expect(page.locator('#modalHamburgerMenu')).toHaveClass(/active/);
+    await page.click('[data-action="lock"]');
     
-    // ロックボタンのテキストが🔒に変わることを確認
-    await expect(page.locator('#modalLockBtn')).toContainText('🔒');
-
     // モーダルにlockedクラスが付く（CSSでopacity:0.5, pointer-events:none）
     await expect(page.locator('#ticketModal .modal')).toHaveClass(/locked/);
   });
@@ -146,8 +145,9 @@ test.describe('チケットCRUD', () => {
     await page.click('.column-add-btn[data-column="todo"]');
     await page.fill('#ticketTitle', uniqueName('ロックテスト'));
     
-    // ロック
-    await page.click('#modalLockBtn');
+    // ハンバーガーメニューからロック
+    await page.click('#modalHamburgerBtn');
+    await page.click('[data-action="lock"]');
     
     // メモフィールドは有効なまま
     await expect(page.locator('#memo')).toBeEnabled();

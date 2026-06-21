@@ -37,17 +37,17 @@ test.describe('設定パネル（管理者）', () => {
     // 設定ボタンをクリック
     await page.click('#settingsBtn');
     
-    // 設定パネルがactiveクラスを持つことを確認
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    // 設定モーダルがactiveクラスを持つことを確認
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
-    // 閉じるボタンで閉じる
-    await page.click('#settingsCloseBtn');
-    await expect(page.locator('#settingsPanel')).not.toHaveClass(/active/);
+    // 設定ボタンを再度クリックして閉じる（トグル方式）
+    await page.click('#settingsBtn');
+    await expect(page.locator('#settingsModal')).not.toHaveClass(/active/);
   });
 
   test('担当者追加', async ({ page }) => {
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
     // 担当者入力フィールドと追加ボタンが存在
     await expect(page.locator('#newUserInput')).toBeVisible();
@@ -111,7 +111,7 @@ test.describe('設定パネル（一般ユーザー）', () => {
     
     // 設定パネルが表示される（フロントエンドでは表示されるが、
     // サーバーAPIへの書き込みアクセスは管理者のみ）
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
   });
 });
 

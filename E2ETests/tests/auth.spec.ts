@@ -104,9 +104,9 @@ test.describe('認証', () => {
     await page.click('#loginBtn');
     await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
 
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
 
     // 管理者は担当者追加ボタンが有効
     await expect(page.locator('#addUserBtn')).toBeEnabled();
@@ -120,9 +120,9 @@ test.describe('認証', () => {
     await page.click('#loginBtn');
     await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
 
-    // 設定パネルを開く
+    // 設定モーダルを開く
     await page.click('#settingsBtn');
-    await expect(page.locator('#settingsPanel')).toHaveClass(/active/);
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
 
     // 一般ユーザーは休日セクションが非表示
     await expect(page.locator('#holidaysTextarea')).not.toBeVisible();

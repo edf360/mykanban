@@ -50,12 +50,12 @@ public class TicketServiceTests : IDisposable
         // Act
         var result = await _service.GetAllAsync();
 
-        // Assert: 明示的なカラム順序（todo→doing→done→archive）→Position昇順
+        // Assert: 明示的なカラム順序（todo→doing→done→archive）→Position降順
         Assert.Equal(4, result.Count);
         Assert.Equal("todo", result[0].Column);
-        Assert.Equal("Todo-1", result[0].Title); // todo Position 0 (昇順で先頭)
+        Assert.Equal("Todo-2", result[0].Title); // todo Position 1 (降順で先頭)
         Assert.Equal("todo", result[1].Column);
-        Assert.Equal("Todo-2", result[1].Title); // todo Position 1
+        Assert.Equal("Todo-1", result[1].Title); // todo Position 0
         Assert.Equal("doing", result[2].Column);
         Assert.Equal("Doing-1", result[2].Title);
         Assert.Equal("done", result[3].Column);

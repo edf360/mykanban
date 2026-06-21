@@ -24,7 +24,7 @@ public class TicketService
         var tickets = await _context.Tickets.ToListAsync();
         return tickets
             .OrderBy(t => ColumnOrderMap.GetValueOrDefault(t.Column.ToLowerInvariant(), 999))
-            .ThenBy(t => t.Position)
+            .ThenByDescending(t => t.Position)
             .ThenBy(t => t.Id)
             .ToList();
     }
@@ -270,9 +270,10 @@ public class TicketService
         {
             int insertIdx = dto.InsertIndex.Value;
 
+            // Position降順でソート（大きい値が先頭＝上部に表示）
             var ordered = await _context.Tickets
                 .Where(t => t.Column == newColumn && t.TicketId != ticketId)
-                .OrderBy(t => t.Position)
+                .OrderByDescending(t => t.Position)
                 .ThenBy(t => t.Id)
                 .ToListAsync();
 
@@ -280,11 +281,13 @@ public class TicketService
 
             if (insertIdx <= 0)
             {
-                newPos = ordered.Count > 0 ? ordered[0].Position - 1000.0 : 0.0;
+                // 先頭（上部）に挿入：最大のpositionより大きくする
+                newPos = ordered.Count > 0 ? ordered[0].Position + 1000.0 : 0.0;
             }
             else if (insertIdx >= ordered.Count)
             {
-                newPos = ordered.Count > 0 ? ordered[ordered.Count - 1].Position + 1000.0 : 0.0;
+                // 末尾（下部）に挿入：最小のpositionより小さくする
+                newPos = ordered.Count > 0 ? ordered[ordered.Count - 1].Position - 1000.0 : 0.0;
             }
             else
             {
@@ -300,17 +303,17 @@ public class TicketService
                 await RepositionColumn(newColumn, ticketId);
                 ordered = await _context.Tickets
                     .Where(t => t.Column == newColumn && t.TicketId != ticketId)
-                    .OrderBy(t => t.Position)
+                    .OrderByDescending(t => t.Position)
                     .ThenBy(t => t.Id)
                     .ToListAsync();
 
                 if (insertIdx <= 0)
                 {
-                    newPos = ordered.Count > 0 ? ordered[0].Position - 1000.0 : 0.0;
+                    newPos = ordered.Count > 0 ? ordered[0].Position + 1000.0 : 0.0;
                 }
                 else if (insertIdx >= ordered.Count)
                 {
-                    newPos = ordered.Count > 0 ? ordered[ordered.Count - 1].Position + 1000.0 : 0.0;
+                    newPos = ordered.Count > 0 ? ordered[ordered.Count - 1].Position - 1000.0 : 0.0;
                 }
                 else
                 {
@@ -327,6 +330,7 @@ public class TicketService
         }
         else
         {
+            // 先頭（上部）に配置：最大のpositionより大きくする
             var maxPos = await _context.Tickets
                 .Where(t => t.Column == dto.Column && t.TicketId != ticketId)
                 .MaxAsync(t => (double?)t.Position) ?? -1000.0;
@@ -501,15 +505,17 @@ public class TicketService
     /// </summary>
     private async Task RepositionColumn(string column, string? excludeTicketId = null)
     {
+        // Position降順でソート（大きい値が先頭＝上部に表示）
         var tickets = await _context.Tickets
             .Where(t => t.Column == column && (excludeTicketId == null || t.TicketId != excludeTicketId))
-            .OrderBy(t => t.Position)
+            .OrderByDescending(t => t.Position)
             .ThenBy(t => t.Id)
             .ToListAsync();
 
+        // 先頭から大きな値を割り当て（降順で配置）
         for (int i = 0; i < tickets.Count; i++)
         {
-            tickets[i].Position = i * 1000.0;
+            tickets[i].Position = (tickets.Count - i) * 1000.0;
         }
         // Positionの変更は呼び元でSaveChangesAsyncにより保存される
     }

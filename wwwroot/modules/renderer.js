@@ -180,7 +180,7 @@ export function renderAllTickets() {
         if (a.column !== b.column) {
             return getColumnOrder(a.column) - getColumnOrder(b.column);
         }
-        return (a.position ?? 0) - (b.position ?? 0) || a.ticketId.localeCompare(b.ticketId);
+        return (b.position ?? 0) - (a.position ?? 0) || a.ticketId.localeCompare(b.ticketId);
     });
     
     sortedTickets.forEach(ticket => {

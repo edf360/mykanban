@@ -403,7 +403,8 @@ public class TicketTests : IDisposable
 
         // Act: そのチケットをdoingカラムのPosition 0に移動（コントローラー経由）
         var service = new KanbanServer.Services.TicketService(_context);
-        var controller = new KanbanServer.Controllers.TicketsController(service, _context);
+        var env = new Tests.TestWebHostEnvironment();
+        var controller = new KanbanServer.Controllers.TicketsController(service, _context, env);
         var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         var result = await controller.UpdateColumn("single-a", dto);
 
@@ -452,7 +453,8 @@ public class TicketTests : IDisposable
     {
         // Arrange: コントローラーを使用して複数チケットを連続作成
         var service = new KanbanServer.Services.TicketService(_context);
-        var controller = new KanbanServer.Controllers.TicketsController(service, _context);
+        var env = new Tests.TestWebHostEnvironment();
+        var controller = new KanbanServer.Controllers.TicketsController(service, _context, env);
 
         // Act: 5つのチケットをtodoカラムに連続作成
         var createdTickets = new List<Ticket>();

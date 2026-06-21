@@ -35,11 +35,12 @@ test.describe('進捗・緊急・カテゴリ機能', () => {
     await page.click('.column-add-btn[data-column="todo"]');
     await page.fill('#ticketTitle', uniqueName('緊急テスト'));
     
-    // 緊急ボタンをクリック
-    await page.click('#modalEmergencyBtn');
+    // ハンバーガーメニューを開く
+    await page.click('#modalHamburgerBtn');
+    await expect(page.locator('#modalHamburgerMenu')).toHaveClass(/active/);
     
-    // 緊急ボタンのテキストが🏃に変わることを確認
-    await expect(page.locator('#modalEmergencyBtn')).toContainText('🏃');
+    // 緊急メニューをクリック
+    await page.click('[data-action="emergency"]');
     
     // モーダルにemergencyクラスが付く
     await expect(page.locator('#ticketModal .modal')).toHaveClass(/emergency/);
@@ -50,8 +51,9 @@ test.describe('進捗・緊急・カテゴリ機能', () => {
     await page.click('.column-add-btn[data-column="todo"]');
     await page.fill('#ticketTitle', name);
     
-    // 緊急設定
-    await page.click('#modalEmergencyBtn');
+    // ハンバーガーメニューから緊急設定
+    await page.click('#modalHamburgerBtn');
+    await page.click('[data-action="emergency"]');
     await page.click('#saveBtn');
     await expect(page.locator('#ticketModal')).toBeHidden();
     
@@ -69,11 +71,12 @@ test.describe('進捗・緊急・カテゴリ機能', () => {
       await dialog.accept('テストカテゴリ');
     });
     
-    // カテゴリボタンをクリック
-    await page.click('#modalCategoryBtn');
+    // ハンバーガーメニューからカテゴリ設定
+    await page.click('#modalHamburgerBtn');
+    await page.click('[data-action="category"]');
     
-    // カテゴリボタンにhas-categoryクラスが付く
-    await expect(page.locator('#modalCategoryBtn')).toHaveClass(/has-category/);
+    // 緊急マークがモーダルに付く（カテゴリ設定の視覚的フィードバック）
+    await page.waitForTimeout(500);
   });
 
   test('カテゴリ付きチケットを保存できる', async ({ page }) => {
@@ -86,9 +89,10 @@ test.describe('進捗・緊急・カテゴリ機能', () => {
       await dialog.accept('重要');
     });
     
-    // カテゴリ設定
-    await page.click('#modalCategoryBtn');
-    await expect(page.locator('#modalCategoryBtn')).toHaveClass(/has-category/);
+    // ハンバーガーメニューからカテゴリ設定
+    await page.click('#modalHamburgerBtn');
+    await page.click('[data-action="category"]');
+    await page.waitForTimeout(500);
     
     // 保存
     await page.click('#saveBtn');

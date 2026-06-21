@@ -99,9 +99,10 @@ export function setupDropZones() {
             try {
                 const allTickets = getAllTickets();
                 // ドロップ先カラムの全チケットを取得（ドラッグ中除外）
+                // Position降順でソート（大きい値が先頭＝上部に表示）
                 const allColumnTickets = allTickets
                     .filter(t => t.column === newColumn && String(t.ticketId) !== ticketId)
-                    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+                    .sort((a, b) => (b.position ?? 0) - (a.position ?? 0));
 
                 // ドロップ後のDOMから可視チケット順を取得
                 const visibleTickets = Array.from(

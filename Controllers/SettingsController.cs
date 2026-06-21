@@ -649,15 +649,17 @@ public class SettingsController : ControllerBase
         var columns = localTickets.Select(t => t.Column).Distinct().ToList();
         foreach (var column in columns)
         {
+            // Position降順でソート（大きい値が先頭＝上部に表示）
             var tickets = localTickets
                 .Where(t => t.Column == column)
-                .OrderBy(t => t.Position)
+                .OrderByDescending(t => t.Position)
                 .ThenBy(t => t.Id)
                 .ToList();
 
+            // 先頭から大きな値を割り当て（降順で配置）
             for (int i = 0; i < tickets.Count; i++)
             {
-                tickets[i].Position = i * 1000.0;
+                tickets[i].Position = (tickets.Count - i) * 1000.0;
             }
         }
     }

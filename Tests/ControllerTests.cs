@@ -2,10 +2,29 @@ using KanbanServer.Controllers;
 using KanbanServer.Data;
 using KanbanServer.Models;
 using KanbanServer.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 
 namespace Tests;
+
+/// <summary>
+/// IWebHostEnvironmentのテスト用モック
+/// </summary>
+public class TestWebHostEnvironment : IWebHostEnvironment
+{
+    public string ApplicationName { get; set; } = "";
+    public IFileProvider ContentRootFileProvider { get; set; } = null!;
+    public string ContentRootPath { get; set; } = "";
+    public IFileProvider WebRootFileProvider { get; set; } = null!;
+    public string WebRootPath { get; set; } = "";
+    public string EnvironmentName { get; set; } = "Development";
+    public bool IsDevelopment() => EnvironmentName == "Development";
+    public bool IsStaging() => EnvironmentName == "Staging";
+    public bool IsProduction() => EnvironmentName == "Production";
+    public bool IsEnvironment(string environmentName) => string.Equals(EnvironmentName, environmentName, StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>
 /// コントローラーのAPIロジックをユニットテストで検証
@@ -20,7 +39,8 @@ public class ControllerTests : IDisposable
     {
         _context = TestDbContextFactory.Create();
         _ticketService = new TicketService(_context);
-        _controller = new TicketsController(_ticketService, _context);
+        var env = new TestWebHostEnvironment();
+        _controller = new TicketsController(_ticketService, _context, env);
     }
 
     public void Dispose()
@@ -47,12 +67,12 @@ public class ControllerTests : IDisposable
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
         var tickets = Assert.IsAssignableFrom<List<Ticket>>(okResult.Value!);
 
-        // カラム順（明示的順序：todo→doing→done→archive）→Position昇順にソートされている
+        // カラム順（明示的順序：todo→doing→done→archive）→Position降順にソートされている
         Assert.Equal(4, tickets.Count);
         Assert.Equal("todo", tickets[0].Column);
-        Assert.Equal("Todo-1", tickets[0].Title); // todo Position 0 (昇順で先頭)
+        Assert.Equal("Todo-2", tickets[0].Title); // todo Position 1 (降順で先頭)
         Assert.Equal("todo", tickets[1].Column);
-        Assert.Equal("Todo-2", tickets[1].Title); // todo Position 1
+        Assert.Equal("Todo-1", tickets[1].Title); // todo Position 0
         Assert.Equal("doing", tickets[2].Column);
         Assert.Equal("Doing-1", tickets[2].Title);
         Assert.Equal("done", tickets[3].Column);
@@ -699,11 +719,11 @@ public class ControllerTests : IDisposable
         // doneカラムを確認
         var doneTickets = await _context.Tickets
             .Where(t => t.Column == "done")
-            .OrderBy(t => t.Position)
+            .OrderByDescending(t => t.Position)
             .ToListAsync();
         Assert.Equal(2, doneTickets.Count);
-        Assert.Equal(todoTickets[1].TicketId, doneTickets[0].TicketId); // Position 0
-        Assert.Equal(todoTickets[0].TicketId, doneTickets[1].TicketId); // Position 1
+        Assert.Equal(todoTickets[1].TicketId, doneTickets[0].TicketId); // InsertIndex=0で先頭に挿入（Position最大）
+        Assert.Equal(todoTickets[0].TicketId, doneTickets[1].TicketId); // InsertIndex=1で末尾に挿入（Position最小）
 
         // Step 5: 残りのtodoチケットを削除
         await _controller.Delete(todoTickets[2].TicketId);
@@ -901,7 +921,8 @@ public class AdditionalControllerTests : IDisposable
     {
         _context = TestDbContextFactory.Create();
         _ticketService = new TicketService(_context);
-        _controller = new TicketsController(_ticketService, _context);
+        var env = new TestWebHostEnvironment();
+        _controller = new TicketsController(_ticketService, _context, env);
     }
 
     public void Dispose()
@@ -1272,11 +1293,11 @@ public class AdditionalControllerTests : IDisposable
         var tickets = Assert.IsAssignableFrom<List<Ticket>>(okResult.Value!);
 
         Assert.Equal(2, tickets.Count);
-        // IsArchived=false が先に来る（ソート順）
-        Assert.Equal("visible", tickets[0].TicketId);
-        Assert.False(tickets[0].IsArchived);
-        Assert.Equal("hidden", tickets[1].TicketId);
-        Assert.True(tickets[1].IsArchived);
+        // Position降順でソートされるため、Position 1のhiddenが先頭
+        Assert.Equal("hidden", tickets[0].TicketId);
+        Assert.True(tickets[0].IsArchived);
+        Assert.Equal("visible", tickets[1].TicketId);
+        Assert.False(tickets[1].IsArchived);
     }
 
     // ===== JSON逆シリアライズの例外ハンドリングテスト =====
