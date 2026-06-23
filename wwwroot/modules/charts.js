@@ -331,7 +331,7 @@ export function renderAssigneeChart(container, assigneeName) {
 function getProgressColor(progress) {
     if (progress >= 100) return '#10b981';
     if (progress >= 75) return '#3b82f6';
-    if (progress >= 50) return '#0ea5e9';
+    if (progress >= 50) return '#3b82f6';
     if (progress >= 25) return '#f59e0b';
     return '#ef4444';
 }

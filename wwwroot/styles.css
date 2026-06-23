@@ -43,7 +43,7 @@
 }
 
 body {
-    background: linear-gradient(135deg, #e8ecf1 0%, #d5dce6 50%, #c9d1db 100%);
+    background: #f3f4f6;
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -296,6 +296,7 @@ body {
     gap: 12px;
     position: relative;
     min-height: 100px;
+    background: #f8fafc;
 }
 
 .drop-indicator {
@@ -321,8 +322,8 @@ body {
 }
 
 .ticket {
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: #ffffff;
+    border: 2px solid #d6dde6;
     border-radius: 10px;
     padding: 14px;
     cursor: move;
@@ -1394,17 +1395,17 @@ body {
 
 .add-ticket-btn:active { transform: translateY(0); }
 
-.column[data-column="todo"] .column-title { color: #d97706; }
+.column[data-column="todo"] .column-title { color: rgb(88, 124, 179); }
 
-.column[data-column="todo"] .column-header { background: rgba(245, 158, 11, 0.06); }
+.column[data-column="todo"] .column-header { background: rgb(238, 244, 251); }
 
-.column[data-column="doing"] .column-title { color: #4b5563; }
+.column[data-column="doing"] .column-title { color: rgb(76, 145, 119); }
 
-.column[data-column="doing"] .column-header { background: rgba(75, 85, 99, 0.06); }
+.column[data-column="doing"] .column-header { background: rgb(238, 248, 244); }
 
-.column[data-column="done"] .column-title { color: #059669; }
+.column[data-column="done"] .column-title { color: rgb(126, 109, 177); }
 
-.column[data-column="done"] .column-header { background: rgba(16, 185, 129, 0.06); }
+.column[data-column="done"] .column-header { background: rgb(243, 240, 250); }
 
 ::-webkit-scrollbar { width: 6px; }
 
@@ -1429,7 +1430,7 @@ body {
     width: 36px;
     height: 36px;
     min-width: 36px;
-    background: linear-gradient(145deg, var(--gray-500) 0%, var(--gray-600) 100%);
+    background: var(--gray-500);
     color: white;
     border: none;
     border-radius: 50%;
@@ -1449,7 +1450,7 @@ body {
 }
 
 .floating-icon-btn:hover {
-    background: linear-gradient(145deg, var(--gray-400) 0%, var(--gray-500) 100%);
+    background: var(--gray-400);
     transform: scale(1.08) translateY(-2px);
     box-shadow:
         0 12px 32px rgba(75, 85, 99, 0.5),
@@ -1465,7 +1466,7 @@ body {
         inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
-.floating-icon-btn.active { background: linear-gradient(145deg, var(--primary) 0%, var(--primary-dark) 100%); }
+.floating-icon-btn.active { background: rgb(88, 124, 179); }
 
 .archive-toggle-bottom-btn {
     position: static;
@@ -1481,9 +1482,13 @@ body {
 
 #archiveColumn .ticket:hover .delete-btn { opacity: 1; }
 
-.column-memo .column-header { background: rgba(139, 92, 246, 0.06); }
+.column-memo .column-header { background: rgb(244, 246, 248); }
 
-.column-memo .column-title { color: #7c3aed; }
+.column-memo .column-title { color: rgb(75, 85, 99); }
+
+.column-archive .column-header { background: rgb(236, 238, 241); }
+
+.column-archive .column-title { color: rgb(107, 114, 128); }
 
 .memo-area {
     flex: 1;
@@ -1896,7 +1901,7 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #3f4a5d;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -1904,7 +1909,7 @@ body {
 }
 
 .login-box {
-    background: white;
+    background: #fcfdff;
     border-radius: 16px;
     padding: 40px;
     width: 380px;
@@ -1915,7 +1920,7 @@ body {
 .login-box h2 {
     text-align: center;
     margin-bottom: 8px;
-    color: #1e293b;
+    color: #1f2937;
     font-size: 1.5rem;
 }
 
@@ -1947,14 +1952,14 @@ body {
 
 .login-field input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    border-color: rgb(88, 124, 179);
+    box-shadow: 0 0 0 3px rgba(88, 124, 179, 0.15);
 }
 
 .login-btn {
     width: 100%;
     padding: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: rgb(88, 124, 179);
     color: white;
     border: none;
     border-radius: 8px;
@@ -1964,7 +1969,11 @@ body {
     transition: transform 0.1s, box-shadow 0.2s;
 }
 
-.login-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
+.login-btn:hover {
+    transform: translateY(-1px);
+    background: rgb(76, 112, 166);
+    box-shadow: 0 4px 12px rgba(88, 124, 179, 0.25);
+}
 
 .login-btn:active { transform: translateY(0); }
 
