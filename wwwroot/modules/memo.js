@@ -89,7 +89,16 @@ export async function updateMemoColumn() {
 
     const memo = await getMemoFromDb(selectedAssignee);
     assigneeMemoText.value = memo;
-    memoColumnTitle.textContent = `${selectedAssignee} - Memo`;
+    // ×ボタンを一時保存してタイトル更新後に再挿入
+    const closeBtn = memoColumnTitle.querySelector('#memoCloseBtn');
+    if (closeBtn) {
+        const parent = closeBtn.parentNode;
+        closeBtn.remove();
+        parent.textContent = `${selectedAssignee} - Memo`;
+        parent.appendChild(closeBtn);
+    } else {
+        memoColumnTitle.textContent = `${selectedAssignee} - Memo`;
+    }
 
     // ログインユーザー自身がフィルターで選択している場合のみ編集可能
     const canEdit = isSelfEditAllowed();
