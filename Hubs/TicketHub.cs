@@ -12,6 +12,6 @@ public class TicketHub : Hub
     /// </summary>
     public async Task BroadcastTicketChanged()
     {
-        await Clients.All.SendAsync("TicketChanged");
+        await Clients.Others.SendAsync("TicketChanged");
     }
 }
