@@ -13,24 +13,28 @@ function sanitizeClassName(str) {
 }
 
 /**
- * ISO文字列から時間を安全に抽出 (HH:mm)
+ * ISO文字列から日本時間(HH:mm)を抽出
  */
-function extractTime(isoString) {
+function extractTimeJST(isoString) {
     if (!isoString) return '';
-    const parts = isoString.split('T');
-    if (parts.length < 2) return '';
-    const match = parts[1].match(/^(\d{2}:\d{2})/);
-    return match ? match[1] : '';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
 }
 
 /**
- * 履歴を日付でグループ化（降順ソート済みMapを返す）
+ * 履歴を日本日日付でグループ化（降順ソート済みMapを返す）
  */
 function groupByDate(histories) {
     const grouped = new Map();
     for (const h of histories) {
         if (!h.date) continue;
-        const dateKey = h.date.split('T')[0];
+        const date = new Date(h.date);
+        if (isNaN(date.getTime())) continue;
+        // 日本時間の日付キーを取得
+        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
         if (!grouped.has(dateKey)) grouped.set(dateKey, []);
         grouped.get(dateKey).push(h);
     }
@@ -54,6 +58,7 @@ const typeLabels = {
     title: 'タイトル',
     label: 'ラベル',
     childtask: '子タスク',
+    'childtask-progress': '子タスク進捗',
     memo: 'メモ',
     'date-start': '開始日',
     'date-end': '終了日',
@@ -69,7 +74,21 @@ const historyDetailRenderers = {
     progress: (item) => {
         const prev = item.previousValue != null ? item.previousValue : '-';
         const next = item.value != null ? item.value : '-';
-        return `進捗を ${prev}% → ${next}% に変更`;
+        const childProgress = item.childTaskProgress != null ? ` (子タスク: ${item.childTaskProgress}%)` : '';
+        return `進捗を ${prev}% → ${next}% に変更${childProgress}`;
+    },
+
+    'childtask-progress': (item) => {
+        try {
+            const data = JSON.parse(item.value || '{}');
+            const prev = data.oldProgress != null ? data.oldProgress : '-';
+            const next = data.newProgress != null ? data.newProgress : '-';
+            const ticketOld = data.ticketOldProgress != null ? data.ticketOldProgress : '-';
+            const ticketNew = data.ticketNewProgress != null ? data.ticketNewProgress : '-';
+            return `子タスク進捗 ${prev}% → ${next}% (チケット: ${ticketOld}% → ${ticketNew}%)`;
+        } catch (e) {
+            return `子タスク進捗が変更されました`;
+        }
     },
 
     column: (item) => {
@@ -172,7 +191,7 @@ function renderHistoryList(historyListEl, grouped) {
             // 時刻表示
             const timeSpan = document.createElement('span');
             timeSpan.className = 'history-time';
-            const timeStr = extractTime(item.date);
+            const timeStr = extractTimeJST(item.date);
             if (timeStr) {
                 timeSpan.textContent = timeStr;
             }

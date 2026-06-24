@@ -55,13 +55,61 @@ function sanitizeNum(val, fallback = 0) {
 // ===== 個別チケット進捗グラフ =====
 
 /**
+ * 進捗履歴からグラフ用のポイントデータを抽出
+ * @param {Array} histories - 履歴リスト
+ * @returns {Array<{date: Date, progress: number}>} 日付順のポイントリスト
+ */
+function extractProgressPoints(histories) {
+    if (!histories || !Array.isArray(histories)) return [];
+    const points = [];
+    for (const h of histories) {
+        if (h.date && (h.type === 'progress' || h.type === 'childtask-progress')) {
+            const dateStr = h.date.split('T')[0];
+            const date = parseDate(dateStr);
+            if (!isNaN(date.getTime())) {
+                let progress = 0;
+                if (h.type === 'progress') {
+                    progress = sanitizeNum(h.value, 0);
+                } else {
+                    // childtask-progress: JSONからticketNewProgressを抽出
+                    try {
+                        const data = JSON.parse(h.value || '{}');
+                        progress = sanitizeNum(data.ticketNewProgress, 0);
+                    } catch (e) {
+                        progress = 0;
+                    }
+                }
+                points.push({ date, progress });
+            }
+        }
+    }
+    // 日付順にソート（同日の場合は進捗率の大きい方を残す）
+    points.sort((a, b) => a.date.getTime() - b.date.getTime());
+    // 同日の重複を除去（最後の値を保持）
+    const unique = [];
+    const seenDates = new Set();
+    for (const p of points) {
+        const key = p.date.toISOString().split('T')[0];
+        if (!seenDates.has(key)) {
+            seenDates.add(key);
+            unique.push(p);
+        } else {
+            // 同日の場合は最後の値で上書き
+            unique[unique.length - 1] = p;
+        }
+    }
+    return unique;
+}
+
+/**
  * 個別チケットの進捗予実グラフを描画
  * @param {HTMLElement} container - グラフ配置コンテナ
  * @param {string} startDate - 開始日 (YYYY-MM-DD)
  * @param {string} endDate - 終了日 (YYYY-MM-DD)
  * @param {number} currentProgress - 現在の進捗率（外部から渡す）
+ * @param {Array} histories - 進捗履歴リスト（オプション）
  */
-export function renderProgressChart(container, startDate, endDate, currentProgress = 0) {
+export function renderProgressChart(container, startDate, endDate, currentProgress = 0, histories = []) {
     const width = 260;
     const height = 50;
     const labelHeight = 18;
@@ -108,9 +156,34 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
         />
     `;
 
-    // 実績線: 開始日(0%) → 今日(現在の進捗率) — 赤実線
+    // 実績線: 履歴ベースの折れ線グラフ（履歴がない場合は従来の直線）
     let actualLine = '';
-    if (today >= start) {
+    const progressPoints = extractProgressPoints(histories);
+    if (progressPoints.length > 0 && today >= start) {
+        // 履歴データがある場合は折れ線グラフ
+        let pathD = '';
+        const circles = [];
+        for (let i = 0; i < progressPoints.length; i++) {
+            const p = progressPoints[i];
+            // 開始日以前のポイントはカット
+            if (p.date < start) continue;
+            // グラフ右端以降のポイントもカット
+            if (p.date > graphEnd) continue;
+            const x = xScale(p.date);
+            const y = yScale(p.progress);
+            if (pathD === '') {
+                pathD = `M ${x} ${y}`;
+            } else {
+                pathD += ` L ${x} ${y}`;
+            }
+            circles.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="#ef4444"/>`);
+        }
+        if (pathD) {
+            actualLine = `<path d="${pathD}" fill="none" stroke="#ef4444" stroke-width="1.5"/>${circles.join('')}`;
+        }
+    }
+    if (!actualLine && today >= start) {
+        // 履歴データがない場合は従来の直線
         const actualEndX = today > end ? width - padding.right : xScale(today);
         const actualEndY = yScale(currentProgress);
         actualLine = `

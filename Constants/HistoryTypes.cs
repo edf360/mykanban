@@ -14,4 +14,6 @@ public static class HistoryTypes
     public const string Effort = "effort";
     public const string Memo = "memo";
     public const string ChildTask = "childtask";
+    public const string Progress = "progress";
+    public const string ChildTaskProgress = "childtask-progress";
 }

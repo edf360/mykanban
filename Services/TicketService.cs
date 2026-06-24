@@ -102,7 +102,7 @@ public class TicketService
             Type = "created",
             Value = null,
             PreviousValue = null,
-            Date = DateTime.UtcNow
+            Date = DateTime.Now
         };
         _context.TicketHistories.Add(history);
 
@@ -378,10 +378,19 @@ public class TicketService
         var childTask = childTasks?.FirstOrDefault(ct => ct.Id == childId);
         if (childTask == null) return null;
 
+        var oldChildProgress = childTask.Progress;
+        var oldTicketProgress = ticket.Progress;
+
         childTask.Done = dto.Done;
+        bool childProgressChanged = false;
         if (dto.Progress.HasValue)
         {
-            childTask.Progress = Math.Max(0, Math.Min(100, dto.Progress.Value));
+            var newProgress = Math.Max(0, Math.Min(100, dto.Progress.Value));
+            if (newProgress != oldChildProgress)
+            {
+                childProgressChanged = true;
+            }
+            childTask.Progress = newProgress;
         }
         if (!string.IsNullOrEmpty(dto.ReviewState))
         {
@@ -393,6 +402,27 @@ public class TicketService
         if (childTasks != null && childTasks.Count > 0)
         {
             ticket.Progress = (int)Math.Round(childTasks.Average(ct => ct.Progress));
+        }
+
+        // 子タスクの進捗が変更された場合は履歴に記録
+        if (childProgressChanged)
+        {
+            // 子タスク進捗履歴（子タスク進捗とチケット進捗の両方を残す）
+            var childHistoryValue = System.Text.Json.JsonSerializer.Serialize(new {
+                childId,
+                childTask.Text,
+                oldProgress = oldChildProgress,
+                newProgress = childTask.Progress,
+                ticketOldProgress = oldTicketProgress,
+                ticketNewProgress = ticket.Progress
+            });
+            RecordHistory(ticketId, "childtask-progress", childHistoryValue, null);
+
+            // チケット全体の進捗が変更された場合は進捗履歴も記録
+            if (ticket.Progress != oldTicketProgress)
+            {
+                RecordHistory(ticketId, "progress", ticket.Progress.ToString(), oldTicketProgress.ToString());
+            }
         }
 
         await _context.SaveChangesAsync();
@@ -530,7 +560,7 @@ public class TicketService
                 Type = type,
                 Value = value,
                 PreviousValue = previousValue,
-                Date = DateTime.UtcNow
+                Date = DateTime.Now
             };
             _context.TicketHistories.Add(history);
         }

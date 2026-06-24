@@ -635,7 +635,7 @@ public class SettingsController : ControllerBase
             Type = type,
             Value = value,
             PreviousValue = previousValue,
-            Date = DateTime.UtcNow
+            Date = DateTime.Now
         });
     }
 

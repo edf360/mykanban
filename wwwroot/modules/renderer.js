@@ -354,10 +354,17 @@ export function createTicketElement(data) {
         openEditModal(ticket.dataset.id);
     });
 
-    // グラフを描画
+    // グラフを描画（履歴データを非同期で取得）
     const chartEl = ticket.querySelector('.ticket-chart');
     if (chartEl) {
-        renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0);
+        const ticketId = ticket.dataset.id;
+        apiRequest(`${API_BASE}/tickets/${encodeURIComponent(ticketId)}/history`)
+            .then(histories => {
+                renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, histories);
+            })
+            .catch(() => {
+                renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, []);
+            });
     }
     
     // 進捗テキストクリックでスライダーポップアップを表示（子タスクがある場合は無効）
@@ -420,7 +427,13 @@ export function createTicketElement(data) {
                         if (chartEl) {
                             const ticketData = getTicket(ticket.dataset.id);
                             if (ticketData && ticketData.startDate && ticketData.endDate) {
-                                renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0);
+                                apiRequest(`${API_BASE}/tickets/${encodeURIComponent(ticketData.id)}/history`)
+                                    .then(histories => {
+                                        renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0, histories);
+                                    })
+                                    .catch(() => {
+                                        renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0, []);
+                                    });
                             }
                         }
                         
@@ -504,7 +517,13 @@ export function createTicketElement(data) {
                     // 進捗グラフを更新
                     const chartEl = ticket.querySelector('.ticket-chart');
                     if (chartEl && updated.startDate && updated.endDate) {
-                        renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0);
+                        apiRequest(`${API_BASE}/tickets/${encodeURIComponent(updated.id)}/history`)
+                            .then(histories => {
+                                renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0, histories);
+                            })
+                            .catch(() => {
+                                renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0, []);
+                            });
                     }
                     
                     // 累積進捗グラフを更新
@@ -648,7 +667,13 @@ export function recreateTicket(ticketEl, data, column) {
     if (data.startDate && data.endDate) {
         const chartEl = newTicket.querySelector('.ticket-chart');
         if (chartEl) {
-            renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0);
+            apiRequest(`${API_BASE}/tickets/${encodeURIComponent(data.id)}/history`)
+                .then(histories => {
+                    renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, histories);
+                })
+                .catch(() => {
+                    renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, []);
+                });
         }
     }
     

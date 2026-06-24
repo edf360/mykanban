@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using System.Text.Json;
+using System.Globalization;
 using KanbanServer.Data;
 using KanbanServer.Hubs;
 using KanbanServer.Middleware;
@@ -44,10 +47,12 @@ builder.Services.AddCors(options =>
 });
 
 // コントローラーとJSONシリアライザー設定
+// DateTimeをオフセット付きでシリアライズ（JS側で正しくローカル時間に変換されるように）
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.WriteIndented = true;
+        options.JsonSerializerOptions.Converters.Add(new LocalDateTimeConverter());
     });
 
 // SignalR設定 - CORSを有効化
@@ -111,3 +116,15 @@ app.MapFallback(async context =>
 });
 
 app.Run();
+
+/// <summary>
+/// DateTimeをローカル時間のオフセット付きでシリアライズするコンバーター
+/// </summary>
+public class LocalDateTimeConverter : JsonConverter<DateTime>
+{
+    public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        => reader.GetDateTime();
+
+    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture));
+}
