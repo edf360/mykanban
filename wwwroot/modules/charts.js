@@ -86,10 +86,11 @@ function extractProgressPoints(histories) {
     // 日付順にソート（同日の場合は進捗率の大きい方を残す）
     points.sort((a, b) => a.date.getTime() - b.date.getTime());
     // 同日の重複を除去（最後の値を保持）
+    // toISOString() は UTC ベースなので日本時間でキーを生成
     const unique = [];
     const seenDates = new Set();
     for (const p of points) {
-        const key = p.date.toISOString().split('T')[0];
+        const key = `${p.date.getFullYear()}-${String(p.date.getMonth() + 1).padStart(2, '0')}-${String(p.date.getDate()).padStart(2, '0')}`;
         if (!seenDates.has(key)) {
             seenDates.add(key);
             unique.push(p);
@@ -159,16 +160,12 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
     // 実績線: 履歴ベースの折れ線グラフ（履歴がない場合は従来の直線）
     let actualLine = '';
     const progressPoints = extractProgressPoints(histories);
-    if (progressPoints.length > 0 && today >= start) {
+    if (progressPoints.length > 0) {
         // 履歴データがある場合は折れ線グラフ
         let pathD = '';
         const circles = [];
         for (let i = 0; i < progressPoints.length; i++) {
             const p = progressPoints[i];
-            // 開始日以前のポイントはカット
-            if (p.date < start) continue;
-            // グラフ右端以降のポイントもカット
-            if (p.date > graphEnd) continue;
             const x = xScale(p.date);
             const y = yScale(p.progress);
             if (pathD === '') {
