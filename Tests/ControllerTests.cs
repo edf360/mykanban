@@ -1,9 +1,11 @@
 using KanbanServer.Controllers;
 using KanbanServer.Data;
+using KanbanServer.Hubs;
 using KanbanServer.Models;
 using KanbanServer.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 
@@ -27,6 +29,37 @@ public class TestWebHostEnvironment : IWebHostEnvironment
 }
 
 /// <summary>
+/// IHubContext<TicketHub>のテスト用モック
+/// </summary>
+public class TestHubContext : IHubContext<TicketHub>
+{
+    public HubCallerContext? ClientContext => null;
+    public IHubClients Clients => new TestHubClients();
+    public IGroupManager Groups => throw new NotImplementedException();
+    public Task SendAsync(string methodName, params object?[] args) => Task.CompletedTask;
+}
+
+public class TestHubClients : IHubClients
+{
+    public bool ContainsId(string clientId) => false;
+    public IClientProxy All => new TestClientProxy();
+    public IClientProxy AllExcept(IReadOnlyList<string> excludedClientIds) => new TestClientProxy();
+    public IClientProxy Client(string clientId) => new TestClientProxy();
+    public IClientProxy Clients(IReadOnlyList<string> clientIds) => new TestClientProxy();
+    public IClientProxy Group(string groupName) => new TestClientProxy();
+    public IClientProxy Groups(IReadOnlyList<string> groupNames) => new TestClientProxy();
+    public IClientProxy GroupExcept(string groupName, IReadOnlyList<string> excludedClientIds) => new TestClientProxy();
+    public IClientProxy Others => new TestClientProxy();
+    public IClientProxy User(string userId) => new TestClientProxy();
+    public IClientProxy Users(IReadOnlyList<string> userIds) => new TestClientProxy();
+}
+
+public class TestClientProxy : IClientProxy
+{
+    public Task SendCoreAsync(string methodName, object?[] args, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+/// <summary>
 /// コントローラーのAPIロジックをユニットテストで検証
 /// </summary>
 public class ControllerTests : IDisposable
@@ -40,7 +73,8 @@ public class ControllerTests : IDisposable
         _context = TestDbContextFactory.Create();
         _ticketService = new TicketService(_context);
         var env = new TestWebHostEnvironment();
-        _controller = new TicketsController(_ticketService, _context, env);
+        var hub = new TestHubContext();
+        _controller = new TicketsController(_ticketService, _context, env, hub);
     }
 
     public void Dispose()
@@ -922,7 +956,8 @@ public class AdditionalControllerTests : IDisposable
         _context = TestDbContextFactory.Create();
         _ticketService = new TicketService(_context);
         var env = new TestWebHostEnvironment();
-        _controller = new TicketsController(_ticketService, _context, env);
+        var hub = new TestHubContext();
+        _controller = new TicketsController(_ticketService, _context, env, hub);
     }
 
     public void Dispose()

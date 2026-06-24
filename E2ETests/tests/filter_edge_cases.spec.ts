@@ -19,6 +19,12 @@ async function login(page: any, username: string = 'admin', password: string = '
   await page.fill('#loginPassword', password);
   await page.click('#loginBtn');
   await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
+  // localStorageをクリアしてフィルター設定をリセット
+  await page.evaluate(() => { window.localStorage.clear(); });
+  // ページをリロードしてクリーンな状態にする
+  await page.reload();
+  // #appContentが表示されるまで待つ（JavaScriptが完全にロードされるまで）
+  await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
 }
 
 // ユニークなチケット名を生成
