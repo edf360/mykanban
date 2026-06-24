@@ -1,4 +1,5 @@
 using KanbanServer.Data;
+using KanbanServer.Hubs;
 using KanbanServer.Middleware;
 using KanbanServer.Services;
 using Microsoft.EntityFrameworkCore;
@@ -31,28 +32,15 @@ builder.Services.AddSingleton<TokenStore>();
 // チケットサービス
 builder.Services.AddScoped<TicketService>();
 
-// CORS設定（開発環境のみ開放的設定）
+// CORS設定 - LAN内からのアクセスを許可するため常にAllowAnyOrigin
 builder.Services.AddCors(options =>
 {
-    if (builder.Environment.IsDevelopment())
+    options.AddPolicy("AllowAll", policy =>
     {
-        options.AddPolicy("AllowAll", policy =>
-        {
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
-        });
-    }
-    else
-    {
-        // 本番環境では同じオリジンのみ許可（SPAとAPIが同じドメインの場合）
-        options.AddPolicy("SameOrigin", policy =>
-        {
-            policy.WithOrigins(builder.Configuration.GetValue<string>("AllowedOrigin") ?? "")
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
-        });
-    }
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
 });
 
 // コントローラーとJSONシリアライザー設定
@@ -62,10 +50,16 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.WriteIndented = true;
     });
 
+// SignalR設定 - CORSを有効化
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = false;
+});
+
 var app = builder.Build();
 
-// 1. CORSを有効化
-app.UseCors(builder.Environment.IsDevelopment() ? "AllowAll" : "SameOrigin");
+// 1. CORSを有効化（常にAllowAll）
+app.UseCors("AllowAll");
 
 // 2. wwwrootからの静的ファイル配信（APIの前に配置）
 var wwwRootPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
@@ -74,7 +68,14 @@ if (Directory.Exists(wwwRootPath))
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new PhysicalFileProvider(wwwRootPath),
-        RequestPath = ""  // ルートから直接配信
+        RequestPath = "",  // ルートから直接配信
+        OnPrepareResponse = context =>
+        {
+            // キャッシュを無効化して、常に最新のファイルを取得する
+            context.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0";
+            context.Context.Response.Headers["Pragma"] = "no-cache";
+            context.Context.Response.Headers["Expires"] = "0";
+        }
     });
 }
 
@@ -91,7 +92,10 @@ using (var scope = app.Services.CreateScope())
 // 5. APIルートをマップ（/api/プレフィックスのみ）
 app.MapControllers();
 
-// 6. SPAフォールバック - API以外のすべてのリクエストでkanban.htmlを返す
+// 6. SignalR Hub をマップ（グローバルCORSが適用される）
+app.MapHub<TicketHub>("/ticketHub");
+
+// 7. SPAフォールバック - API以外のすべてのリクエストでkanban.htmlを返す
 app.MapFallback(async context =>
 {
     var filePath = Path.Combine(wwwRootPath, "kanban.html");

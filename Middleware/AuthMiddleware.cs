@@ -105,12 +105,6 @@ public class AuthMiddleware
             return false;
         }
 
-        // チケットの削除は管理者のみ（正確なパスマッチング）
-        if ((path.StartsWith("/api/tickets/") || path == "/api/tickets") && method == "DELETE")
-        {
-            return true;
-        }
-
         return false;
     }
 }

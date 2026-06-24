@@ -1,7 +1,9 @@
+using KanbanServer.Hubs;
 using KanbanServer.Models;
 using KanbanServer.Services;
 using KanbanServer.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace KanbanServer.Controllers;
@@ -13,12 +15,22 @@ public class TicketsController : ControllerBase
     private readonly TicketService _ticketService;
     private readonly KanbanDbContext _dbContext;
     private readonly IWebHostEnvironment _env;
+    private readonly IHubContext<TicketHub> _hubContext;
 
-    public TicketsController(TicketService ticketService, KanbanDbContext dbContext, IWebHostEnvironment env)
+    public TicketsController(TicketService ticketService, KanbanDbContext dbContext, IWebHostEnvironment env, IHubContext<TicketHub> hubContext)
     {
         _ticketService = ticketService;
         _dbContext = dbContext;
         _env = env;
+        _hubContext = hubContext;
+    }
+
+    /// <summary>
+    /// チケット変更を全クライアントに通知
+    /// </summary>
+    private async Task NotifyTicketChanged()
+    {
+        await _hubContext.Clients.All.SendAsync("TicketChanged");
     }
 
     /// <summary>
@@ -27,6 +39,11 @@ public class TicketsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<Ticket>>> GetAll()
     {
+        // キャッシュ無効化ヘッダーを追加（SignalRによるリアルタイム更新のため）
+        Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+        Response.Headers.Append("Pragma", "no-cache");
+        Response.Headers.Append("Expires", "0");
+        
         try
         {
             var tickets = await _ticketService.GetAllAsync();
@@ -53,6 +70,7 @@ public class TicketsController : ControllerBase
         try
         {
             var ticket = await _ticketService.CreateAsync(dto);
+            await NotifyTicketChanged();
             return CreatedAtAction(nameof(GetAll), new { id = ticket.TicketId }, ticket);
         }
         catch (ArgumentException ex)
@@ -74,6 +92,7 @@ public class TicketsController : ControllerBase
             var ticket = await _ticketService.UpdateAsync(id, dto);
             if (ticket == null)
                 return NotFound(new { error = "Ticket not found" });
+            await NotifyTicketChanged();
             return Ok(ticket);
         }
         catch (ArgumentException ex)
@@ -113,6 +132,7 @@ public class TicketsController : ControllerBase
             var result = await _ticketService.DeleteAsync(id);
             if (!result)
                 return NotFound(new { error = "Ticket not found" });
+            await NotifyTicketChanged();
             return NoContent();
         }
         else
@@ -121,6 +141,7 @@ public class TicketsController : ControllerBase
             var result = await _ticketService.ArchiveAsync(id);
             if (result == null)
                 return NotFound(new { error = "Ticket not found" });
+            await NotifyTicketChanged();
             return Ok(result);
         }
     }
@@ -134,6 +155,7 @@ public class TicketsController : ControllerBase
         var ticket = await _ticketService.RestoreAsync(id);
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
+        await NotifyTicketChanged();
         return Ok(ticket);
     }
 
@@ -154,6 +176,7 @@ public class TicketsController : ControllerBase
         var success = await _ticketService.UpdateColumnAsync(id, dto);
         if (!success)
             return BadRequest(new { error = "Failed to update column" });
+        await NotifyTicketChanged();
         return NoContent();
     }
 
@@ -168,6 +191,7 @@ public class TicketsController : ControllerBase
         var success = await _ticketService.UpdateProgressAsync(id, dto);
         if (!success)
             return NotFound(new { error = "Ticket not found" });
+        await NotifyTicketChanged();
         return NoContent();
     }
 
@@ -182,6 +206,7 @@ public class TicketsController : ControllerBase
         var ticket = await _ticketService.UpdateChildTaskAsync(id, childId, dto);
         if (ticket == null)
             return NotFound(new { error = "Ticket or child task not found" });
+        await NotifyTicketChanged();
         return Ok(ticket);
     }
 
@@ -247,6 +272,7 @@ public class TicketsController : ControllerBase
             // 更新
             existing.Hours = dto.Hours;
             await _dbContext.SaveChangesAsync();
+            await NotifyTicketChanged();
             return Ok(existing);
         }
 
@@ -259,6 +285,7 @@ public class TicketsController : ControllerBase
         };
         _dbContext.TicketActuals.Add(actual);
         await _dbContext.SaveChangesAsync();
+        await NotifyTicketChanged();
         return CreatedAtAction(nameof(GetActuals), new { id }, actual);
     }
 
@@ -290,6 +317,7 @@ public class TicketsController : ControllerBase
 
         actual.Hours = dto.Hours;
         await _dbContext.SaveChangesAsync();
+        await NotifyTicketChanged();
         return Ok(actual);
     }
 
@@ -316,6 +344,7 @@ public class TicketsController : ControllerBase
 
         _dbContext.TicketActuals.Remove(actual);
         await _dbContext.SaveChangesAsync();
+        await NotifyTicketChanged();
         return NoContent();
     }
 }

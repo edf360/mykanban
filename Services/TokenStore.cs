@@ -1,29 +1,99 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Timers;
 
 namespace KanbanServer.Services;
 
 /// <summary>
-/// 認証トークンの管理（メモリ上）
-/// サーバー再起動で全トークン失効
+/// 認証トークンの管理（ファイル持久化）
+/// サーバー再起動後もトークンを保持する
 /// </summary>
 public class TokenStore
 {
     private static readonly ConcurrentDictionary<string, TokenInfo> _tokens = new();
     private static readonly System.Timers.Timer _cleanupTimer;
+    private static readonly string _tokenFilePath;
+    private static readonly object _fileLock = new();
+
+    public record TokenInfo(string Username, bool IsAdmin, DateTimeOffset Expiry);
+    private record TokenData(string Token, string Username, bool IsAdmin, string Expiry);
 
     static TokenStore()
     {
+        _tokenFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tokens.json");
+        LoadTokens();
+
         // 1時間ごとに有効期限切れトークンをクリーンアップ
         _cleanupTimer = new System.Timers.Timer(3600_000);
-        _cleanupTimer.Elapsed += (_, _) => CleanupExpiredTokens();
+        _cleanupTimer.Elapsed += (_, _) =>
+        {
+            CleanupExpiredTokens();
+            SaveTokens();
+        };
         _cleanupTimer.AutoReset = true;
         _cleanupTimer.Start();
     }
 
-    public record TokenInfo(string Username, bool IsAdmin, DateTimeOffset Expiry);
+    /// <summary>
+    /// ファイルからトークンを読み込む
+    /// </summary>
+    private static void LoadTokens()
+    {
+        if (!File.Exists(_tokenFilePath))
+        {
+            return;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(_tokenFilePath);
+            var data = JsonSerializer.Deserialize<TokenData[]>(json) ?? Array.Empty<TokenData>();
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var item in data)
+            {
+                if (DateTimeOffset.TryParse(item.Expiry, out var expiry))
+                {
+                    if (now <= expiry)
+                    {
+                        _tokens[item.Token] = new TokenInfo(item.Username, item.IsAdmin, expiry);
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // ファイル読み込み失敗は無視（空の状態から開始）
+        }
+    }
+
+    /// <summary>
+    /// トークンをファイルに保存
+    /// </summary>
+    private static void SaveTokens()
+    {
+        lock (_fileLock)
+        {
+            try
+            {
+                var data = _tokens.Select(kvp => new TokenData(
+                    kvp.Key,
+                    kvp.Value.Username,
+                    kvp.Value.IsAdmin,
+                    kvp.Value.Expiry.ToString("o")
+                )).ToArray();
+
+                var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_tokenFilePath, json);
+            }
+            catch (Exception)
+            {
+                // ファイル保存失敗はログに出さない（重要ではない）
+            }
+        }
+    }
 
     /// <summary>
     /// 新しいトークンを生成して保存
@@ -36,6 +106,7 @@ public class TokenStore
             .Replace("+", "-").Replace("/", "_").Replace("=", "");
         var expiryTime = DateTimeOffset.UtcNow + (expiry ?? TimeSpan.FromHours(24));
         _tokens[token] = new TokenInfo(username, isAdmin, expiryTime);
+        SaveTokens();
         return token;
     }
 
@@ -51,6 +122,7 @@ public class TokenStore
             if (DateTimeOffset.UtcNow > info.Expiry)
             {
                 _tokens.TryRemove(token, out _);
+                SaveTokens();
                 return null;
             }
             return info;
@@ -64,6 +136,7 @@ public class TokenStore
     public void RevokeToken(string token)
     {
         _tokens.TryRemove(token, out _);
+        SaveTokens();
     }
 
     /// <summary>

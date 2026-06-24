@@ -221,6 +221,9 @@ export function initFilter() {
     // stateに反映
     setFilter({ assignee: f.assignee || '', keyword: f.keyword || '', label: f.label || '', mainOnly: f.mainOnly || false });
 
+    // 復元したフィルター値を初回描画時にも反映
+    triggerRender();
+
     // 初期調整（ページ読み込み時にフィルターが表示されている場合の対応）
     adjustBoardForFilter();
 

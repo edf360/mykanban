@@ -121,6 +121,7 @@ async function initApp() {
       logoutBtn.addEventListener('click', async () => {
         if (!confirm('ログアウトしますか？')) return;
         try {
+          stopSignalRConnection();
           await logout();
           location.reload();
         } catch (err) {
@@ -187,6 +188,9 @@ async function initApp() {
     
     // アプリ表示後にフィルター調整（フィルター高さが正しく取得できるように）
     adjustBoardForFilterOnInit();
+    
+    // SignalR 接続を開始
+    startSignalRConnection();
     
     logInfo('[app] Initialization complete');
   } catch (error) {
@@ -515,6 +519,9 @@ function initGraphPanelInternal() {
     }
   }
 
+  // 外部からグラフを再描画できるように参照を保持
+  refreshGraphPanel = updateGraphPanel;
+
   // bottomLeftButtons の bottom とカンバンボードの高さをグラフパネルの高さに合わせて更新
   function updatePanelLayout(panelHeight) {
     if (bottomLeftButtons) {
@@ -773,7 +780,69 @@ function initGraphPanelInternal() {
   }
 }
 
+// ===== SignalR 接続 =====
+let signalRConnection = null;
+let refreshGraphPanel = null;
+
+/**
+ * SignalR 接続を確立する
+ */
+function startSignalRConnection() {
+  const token = getToken();
+  if (!token) {
+    console.log('[SignalR] No token, skipping connection');
+    return;
+  }
+
+  // 既存接続があれば切断
+  if (signalRConnection) {
+    signalRConnection.stop();
+  }
+
+  signalRConnection = new signalR.HubConnectionBuilder()
+    .withUrl('/ticketHub', {
+      accessTokenFactory: () => token
+    })
+    .withAutomaticReconnect()
+    .build();
+
+  // チケット変更イベント受信時に画面を更新
+  signalRConnection.on('TicketChanged', async () => {
+    console.log('[SignalR] TicketChanged received, refreshing...');
+    try {
+      await loadTickets();
+      console.log('[SignalR] Tickets loaded successfully');
+      renderAllTickets();
+      console.log('[SignalR] Tickets rendered successfully');
+      // グラフパネルが開いている場合はグラフも更新
+      if (isGraphPanelOpen() && refreshGraphPanel !== null) {
+        refreshGraphPanel();
+        console.log('[SignalR] Graph panel refreshed');
+      }
+    } catch (error) {
+      console.error('[SignalR] Failed to refresh tickets:', error);
+      console.error('[SignalR] Error stack:', error.stack);
+    }
+  });
+
+  signalRConnection.start()
+    .then(() => console.log('[SignalR] Connected'))
+    .catch(err => console.error('[SignalR] Connection failed:', err));
+}
+
+/**
+ * SignalR 接続を停止する
+ */
+function stopSignalRConnection() {
+  if (signalRConnection) {
+    signalRConnection.stop();
+    signalRConnection = null;
+    console.log('[SignalR] Disconnected');
+  }
+}
+
 // ===== イベントコントローラーのクリーンアップ =====
 window.addEventListener('beforeunload', () => {
   eventController?.abort();
+  stopSignalRConnection();
 });

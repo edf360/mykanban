@@ -44,6 +44,9 @@ if %errorlevel% neq 0 (
     echo.
 )
 
+:: 開発環境として起動（CORS を開放的にして LAN 内アクセスを許可）
+set ASPNETCORE_ENVIRONMENT=Development
+
 :: サーバー起動
 dotnet run
 

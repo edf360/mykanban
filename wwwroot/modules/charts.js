@@ -779,9 +779,17 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
                 wasDragging = false;
                 return;
             }
-            const title = header.title.replace('（ドラッグで列入れ替え）', '');
-            const titleTickets = titleMap.get(title);
-            if (!titleTickets) return;
+//            const title = header.title.replace('（ドラッグで列入れ替え）', '');
+//            const titleTickets = titleMap.get(title);
+//            if (!titleTickets) return;
+
+            const title = header.dataset.columnTitle;
+            const titleTickets = title ? categoryMap.get(title) : null;
+            if (!title || !titleTickets) return;
+
+            const childTasks = categoryChildTasks.get(title) || [];
+            if (childTasks.length === 0) return;
+
             const visibilityKey = `${title}::${titleTickets.length}`;
             const isVisible = childTaskVisibility.get(visibilityKey) || false;
             childTaskVisibility.set(visibilityKey, !isVisible);
