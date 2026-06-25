@@ -21,7 +21,7 @@ function getKey() {
  */
 export function getDefaultSettings() {
   return {
-    filter: { visible: false, assignee: '', keyword: '', label: '', mainOnly: false },
+    filter: { visible: true, assignee: '', keyword: '', label: '', mainOnly: false },
     graph: { visible: false, label: '', viewType: 'matrix', excludedTicketIds: [], height: null },
     archive: { visible: false },
     memo: { visible: false },

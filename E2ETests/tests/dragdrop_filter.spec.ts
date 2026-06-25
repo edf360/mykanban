@@ -20,6 +20,14 @@ async function login(page: any) {
   await page.fill('#loginPassword', 'clsw');
   await page.click('#loginBtn');
   await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
+  // localStorageをクリアしてフィルター設定をリセット
+  await page.evaluate(() => { window.localStorage.clear(); });
+  // ページをリロードしてクリーンな状態にする
+  await page.reload();
+  // #appContentが表示されるまで待つ（JavaScriptが完全にロードされるまで）
+  await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
+  // フィルターエリアが表示されるまで待つ
+  await page.waitForSelector('#filterArea:not(.hidden)', { timeout: 10000 }).catch(() => {});
 }
 
 // ユニークなチケット名を生成
@@ -61,7 +69,17 @@ test.describe('ドラッグ＆ドロップ', () => {
     await createTicket(page, name, 'doing');
     
     const ticket = page.locator('.column[data-column="doing"] .ticket:has-text("' + name + '")').first();
-    await ticket.dragTo(page.locator('.column[data-column="done"] .ticket-list'));
+    // ドラッグ前にチケットが表示されていることを確認
+    await expect(ticket).toBeVisible();
+    
+    // ドラッグ＆ドロップ実行（API応答を待つ）
+    await Promise.all([
+      page.waitForResponse(response => response.url().includes('/api/tickets') && (response.status() === 200 || response.status() === 204), { timeout: 10000 }),
+      ticket.dragTo(page.locator('.column[data-column="done"] .ticket-list'))
+    ]);
+    
+    // ドロップ後の再描画が完了するまで待つ
+    await page.waitForTimeout(2000);
 
     await expect(page.locator('.column[data-column="done"] .ticket:has-text("' + name + '")').first()).toBeVisible();
   });
@@ -224,18 +242,72 @@ test.describe('担当者メモ', () => {
   });
 
   test('担当者フィルター選択时memoカラムが表示される', async ({ page }) => {
-    // 担当者フィルターを選択
-    const select = page.locator('#assigneeFilterSelect');
-    // オプションが存在することを確認
-    const options = select.locator('option');
-    const count = await options.count();
-    
-    // 担当者がある場合、memoカラムが表示される
-    if (count > 1) {
-      await select.selectOption({ index: 1 });
+    // 設定に「admin」が担当者にいることを確認して追加
+    await page.click('#settingsBtn');
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+    const hasAdmin = await page.locator('#usersList:has-text("admin")').count();
+    if (hasAdmin === 0) {
+      await page.fill('#newUserInput', 'admin');
+      await page.click('#addUserBtn');
       await page.waitForTimeout(500);
-      await expect(page.locator('#memoColumn')).toBeVisible();
     }
+    await page.click('#settingsBtn');  // 設定を閉じる
+    await page.waitForTimeout(500);
+    
+    // ページをリロードしてフィルターに反映
+    await page.reload();
+    await page.waitForTimeout(2000);
+    const loginVisible = await page.locator('#loginScreen').isVisible();
+    if (loginVisible) {
+      await login(page);
+      await page.waitForTimeout(2000);
+    }
+    
+    // フィルターエリアを表示（デフォルトで非表示の場合）
+    const filterArea = page.locator('#filterArea');
+    if (await filterArea.isHidden()) {
+      await page.click('#filterToggleBtn');
+      await page.waitForTimeout(1000);
+    }
+    
+    // 担当者的下拉框是否有adminオプション
+    const adminOptionExists = await page.locator('#assigneeFilterSelect option[value="admin"]').count();
+    if (adminOptionExists === 0) {
+      // オプションがない場合はページを再度リロード
+      await page.reload();
+      await page.waitForTimeout(3000);
+      const loginVisible2 = await page.locator('#loginScreen').isVisible();
+      if (loginVisible2) {
+        await login(page);
+        await page.waitForTimeout(2000);
+      }
+      if (await filterArea.isHidden()) {
+        await page.click('#filterToggleBtn');
+        await page.waitForTimeout(1000);
+      }
+    }
+    
+    // 担当者フィルターセレクトボックスが存在するのを待機
+    await page.waitForSelector('#assigneeFilterSelect', { timeout: 10000 });
+    
+    // 担当者フィルターを選択（selectOption + 明示的なchangeイベント発火）
+    await page.selectOption('#assigneeFilterSelect', 'admin');
+    // changeイベントを明示的に発火
+    await page.evaluate(() => {
+      const select = document.getElementById('assigneeFilterSelect');
+      if (select) {
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    await page.waitForTimeout(3000);
+    
+    // memoカラムのクラスを確認
+    const memoColumn = page.locator('#memoColumn');
+    const classes = await memoColumn.getAttribute('class');
+    console.log('Memo column classes:', classes);
+    
+    // hiddenクラスが付いていないことを確認
+    expect(classes).not.toMatch(/hidden/);
   });
 
   test('メモカラムにメモを入力して保存', async ({ page }) => {
@@ -246,20 +318,60 @@ test.describe('担当者メモ', () => {
     if (hasAdmin === 0) {
       await page.fill('#newUserInput', 'admin');
       await page.click('#addUserBtn');
+      await page.waitForTimeout(500);
     }
     await page.click('#settingsBtn');  // 設定を閉じる
+    await page.waitForTimeout(500);
     
     // ページをリロードしてフィルターに反映
     await page.reload();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
     const loginVisible = await page.locator('#loginScreen').isVisible();
     if (loginVisible) {
       await login(page);
+      await page.waitForTimeout(2000);
     }
     
-    // 担当者フィルターで「admin」を選択
-    await page.selectOption('#assigneeFilterSelect', 'admin');
-    await page.waitForTimeout(500);
+    // フィルターエリアを表示（デフォルトで非表示の場合）
+    const filterArea2 = page.locator('#filterArea');
+    if (await filterArea2.isHidden()) {
+      await page.click('#filterToggleBtn');
+      await page.waitForTimeout(1000);
+    }
+    
+    // 担当者的下拉框是否有adminオプション
+    const adminOptionExists = await page.locator('#assigneeFilterSelect option[value="admin"]').count();
+    if (adminOptionExists === 0) {
+      // オプションがない場合はページを再度リロード
+      await page.reload();
+      await page.waitForTimeout(3000);
+      const loginVisible2 = await page.locator('#loginScreen').isVisible();
+      if (loginVisible2) {
+        await login(page);
+        await page.waitForTimeout(2000);
+      }
+      if (await filterArea2.isHidden()) {
+        await page.click('#filterToggleBtn');
+        await page.waitForTimeout(1000);
+      }
+    }
+    
+    // 担当者フィルターセレクトボックスが存在するのを待機
+    await page.waitForSelector('#assigneeFilterSelect', { timeout: 10000 });
+    
+    // 担当者フィルターを選択（evaluateで直接変更してchangeイベントを発火）
+    await page.evaluate(() => {
+        const select = document.getElementById('assigneeFilterSelect') as HTMLSelectElement;
+        if (select) {
+            select.value = 'admin';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    await page.waitForTimeout(2000);
+    
+    // メモカラムが表示されることを確認（hiddenクラスが付いていない）
+    const memoColumn = page.locator('#memoColumn');
+    await expect(memoColumn).not.toHaveClass(/hidden/);
     
     // メモ入力フィールドが編集可能であることを確認
     const memoText = page.locator('#assigneeMemoText');

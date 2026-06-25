@@ -40,9 +40,12 @@ public class TicketsController : ControllerBase
     public async Task<ActionResult<List<Ticket>>> GetAll()
     {
         // キャッシュ無効化ヘッダーを追加（SignalRによるリアルタイム更新のため）
-        Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
-        Response.Headers.Append("Pragma", "no-cache");
-        Response.Headers.Append("Expires", "0");
+        if (Response != null)
+        {
+            Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+            Response.Headers.Append("Pragma", "no-cache");
+            Response.Headers.Append("Expires", "0");
+        }
         
         try
         {

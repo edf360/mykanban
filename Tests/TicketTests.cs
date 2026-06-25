@@ -1,8 +1,12 @@
 using System.Text.Json;
 using KanbanServer.Controllers;
 using KanbanServer.Data;
+using KanbanServer.Hubs;
 using KanbanServer.Models;
+using KanbanServer.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -404,7 +408,8 @@ public class TicketTests : IDisposable
         // Act: そのチケットをdoingカラムのPosition 0に移動（コントローラー経由）
         var service = new KanbanServer.Services.TicketService(_context);
         var env = new Tests.TestWebHostEnvironment();
-        var controller = new KanbanServer.Controllers.TicketsController(service, _context, env);
+        var hub = new Tests.TestHubContext();
+        var controller = new KanbanServer.Controllers.TicketsController(service, _context, env, hub);
         var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
         var result = await controller.UpdateColumn("single-a", dto);
 
@@ -454,7 +459,8 @@ public class TicketTests : IDisposable
         // Arrange: コントローラーを使用して複数チケットを連続作成
         var service = new KanbanServer.Services.TicketService(_context);
         var env = new Tests.TestWebHostEnvironment();
-        var controller = new KanbanServer.Controllers.TicketsController(service, _context, env);
+        var hub = new Tests.TestHubContext();
+        var controller = new KanbanServer.Controllers.TicketsController(service, _context, env, hub);
 
         // Act: 5つのチケットをtodoカラムに連続作成
         var createdTickets = new List<Ticket>();

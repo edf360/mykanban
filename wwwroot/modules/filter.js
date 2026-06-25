@@ -68,6 +68,14 @@ function onAssigneeChange() {
     const selectedAssignee = elements.assigneeSelect?.value || '';
     setFilter({ assignee: selectedAssignee });
     syncMainAssigneeCheckbox();
+    // 担当者が選択されている場合、memoカラムを表示
+    if (selectedAssignee) {
+        const memoColumn = document.getElementById('memoColumn');
+        if (memoColumn) {
+            memoColumn.classList.remove('hidden');
+        }
+        updateMemoColumn();
+    }
     // 担当者「すべて」を選択した場合はメモ列を閉じる
     if (!selectedAssignee) {
         hideMemoColumn();
@@ -224,14 +232,15 @@ export function initFilter() {
     const settings = loadUserSettings();
     const f = settings.filter;
 
-    // フィルター表示/非表示を復元
+    // フィルター表示/非表示を復元（デフォルトは表示）
     if (elements.filterArea) {
-        if (f.visible === true) {
-            elements.filterArea.classList.remove('hidden');
-            if (elements.filterToggleBtn) elements.filterToggleBtn.classList.add('active');
-        } else {
+        // visible が明示的に false の場合のみ非表示（デフォルトは表示）
+        if (f.visible === false) {
             elements.filterArea.classList.add('hidden');
             if (elements.filterToggleBtn) elements.filterToggleBtn.classList.remove('active');
+        } else {
+            elements.filterArea.classList.remove('hidden');
+            if (elements.filterToggleBtn) elements.filterToggleBtn.classList.add('active');
         }
     }
 
@@ -243,6 +252,14 @@ export function initFilter() {
 
     // stateに反映
     setFilter({ assignee: f.assignee || '', keyword: f.keyword || '', label: f.label || '', mainOnly: f.mainOnly || false });
+
+    // 担当者が選択されている場合、memoカラムを表示
+    if (f.assignee) {
+        const memoColumn = document.getElementById('memoColumn');
+        if (memoColumn) {
+            memoColumn.classList.remove('hidden');
+        }
+    }
 
     // 復元したフィルター値を初回描画時にも反映
     triggerRender();
