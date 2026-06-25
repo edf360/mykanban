@@ -170,7 +170,8 @@ public class TicketService
                     Text = ct.Text,
                     Done = ct.Done,
                     Progress = ct.Progress,
-                    Category = ct.Category
+                    Category = ct.Category,
+                    ReviewState = ct.ReviewState ?? "none"
                 })
                 .ToList();
         }

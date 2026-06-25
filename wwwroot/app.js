@@ -3,7 +3,7 @@
  * 各モジュールを統合して初期化
  */
 
-import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks } from './modules/state.js';
+import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback } from './modules/state.js';
 import { loadUserSettings, saveUserSettings } from './modules/userSettings.js';
 import { loadTickets, loadSuggestions } from './modules/api.js';
 import { renderAllTickets } from './modules/renderer.js';
@@ -332,6 +332,7 @@ function initLogsPanelInternal() {
   if (logsBtn) {
     logsBtn.addEventListener('click', () => {
       logsPanel.classList.toggle('active');
+      logsBtn.classList.toggle('active');
       if (logsPanel.classList.contains('active')) {
         renderLogEntries();
       }
@@ -577,13 +578,45 @@ function initGraphPanelInternal() {
     saveUserSettings(settings);
   }
 
+  // グラフパネルを閉じる関数（他のモジュールから呼び出し可能）
+  function closeGraphPanelInternal() {
+    if (!isGraphPanelOpen()) return;
+    setGraphPanelOpen(false);
+    if (graphToggleBtn) graphToggleBtn.classList.remove('active');
+    graphPanel.classList.add('hidden');
+    graphPanel.style.display = 'none';
+    if (graphPanelBody) {
+      graphPanelBody.classList.add('hidden');
+      graphPanelBody.style.display = 'none';
+    }
+    if (mainContainer) mainContainer.classList.remove('graph-panel-open');
+    if (bottomLeftButtons) {
+      bottomLeftButtons.classList.remove('graph-panel-open');
+      bottomLeftButtons.style.bottom = '';
+    }
+    const kanbanMain = document.querySelector('.kanban-main');
+    const kanbanBoard = document.querySelector('.kanban-board');
+    if (kanbanMain) {
+      kanbanMain.style.height = '';
+    }
+    if (kanbanBoard) {
+      kanbanBoard.style.height = '';
+    }
+    graphPanel.style.height = '20vh';
+    saveGraphSettings();
+  }
+
+  // 外部からグラフパネルを閉じるためのコールバックを登録
+  setCloseGraphPanelCallback(closeGraphPanelInternal);
+
   // グラフトグルボタン
   if (graphToggleBtn) {
     graphToggleBtn.addEventListener('click', () => {
-      const isOpen = !isGraphPanelOpen();
-      setGraphPanelOpen(isOpen);
-      
-      if (isOpen) {
+      if (isGraphPanelOpen()) {
+        closeGraphPanelInternal();
+      } else {
+        setGraphPanelOpen(true);
+        graphToggleBtn.classList.add('active');
         // パネル表示
         graphPanel.classList.remove('hidden');
         graphPanel.style.display = 'flex';
@@ -611,33 +644,18 @@ function initGraphPanelInternal() {
         populateGraphLabelSelect();
         const labels = getLabelSuggestions();
         if (graphLabelSelect && labels && labels.length > 0) {
-          graphLabelSelect.value = labels[0];
+          // 保存されたラベルを復元（なければ最初のラベルを選択）
+          const savedSettings = loadUserSettings();
+          const savedLabel = savedSettings?.graph?.label || '';
+          if (savedLabel && labels.includes(savedLabel)) {
+            graphLabelSelect.value = savedLabel;
+          } else {
+            graphLabelSelect.value = labels[0];
+          }
           updateGraphPanel();
         }
-      } else {
-        // パネル非表示
-        graphPanel.classList.add('hidden');
-        graphPanel.style.display = 'none';
-        if (graphPanelBody) {
-          graphPanelBody.classList.add('hidden');
-          graphPanelBody.style.display = 'none';
-        }
-        if (mainContainer) mainContainer.classList.remove('graph-panel-open');
-        if (bottomLeftButtons) {
-          bottomLeftButtons.classList.remove('graph-panel-open');
-          bottomLeftButtons.style.bottom = '';
-        }
-        const kanbanMain = document.querySelector('.kanban-main');
-        const kanbanBoard = document.querySelector('.kanban-board');
-        if (kanbanMain) {
-          kanbanMain.style.height = '';
-        }
-        if (kanbanBoard) {
-          kanbanBoard.style.height = '';
-        }
-        graphPanel.style.height = '20vh';
+        saveGraphSettings();
       }
-      saveGraphSettings();
     });
   }
 
@@ -717,6 +735,7 @@ function initGraphPanelInternal() {
     // グラフパネル表示/非表示を復元
     if (g.visible) {
       setGraphPanelOpen(true);
+      graphToggleBtn.classList.add('active');
       graphPanel.classList.remove('hidden');
       graphPanel.style.display = 'flex';
       if (graphPanelBody) {

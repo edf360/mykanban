@@ -5,7 +5,7 @@
 // モーダルアニメーション完了までの待機時間（ms）
 export const MODAL_ANIMATION_DURATION = 350;
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on, closeGraphPanel } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks } from './childtasks.js';
@@ -57,6 +57,9 @@ function cacheElements() {
  */
 function _openModal(options) {
     // options: { mode: 'new'|'edit', column?: string, ticketId?: string }
+    
+    // グラフパネルが開いている場合は閉じる
+    closeGraphPanel();
     
     if (options.mode === 'new') {
         // 新規チケット状態
@@ -589,6 +592,9 @@ export function initModal() {
         if (tagName === 'TEXTAREA') return;
         
         if (e.key === 'Escape') {
+            // 履歴モーダルがアクティブな場合はチケット編集モーダルを閉じない
+            const historyModal = document.getElementById('historyModal');
+            if (historyModal && historyModal.classList.contains('active')) return;
             e.preventDefault();
             closeModal();
         } else if (e.key === 'Enter') {

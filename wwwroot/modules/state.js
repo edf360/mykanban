@@ -404,6 +404,25 @@ export function setGraphPanelOpen(open) {
     emit('ui-changed', internal.ui);
 }
 
+// グラフパネルを閉じるためのコールバック（app.jsから登録）
+let closeGraphPanelCallback = null;
+
+/**
+ * グラフパネル閉じるコールバックを登録（app.jsから呼び出し）
+ */
+export function setCloseGraphPanelCallback(fn) {
+    closeGraphPanelCallback = fn;
+}
+
+/**
+ * グラフパネルを閉じる（他のモジュールから呼び出し）
+ */
+export function closeGraphPanel() {
+    if (closeGraphPanelCallback) {
+        closeGraphPanelCallback();
+    }
+}
+
 /**
  * チケットロック状態を取得
  */

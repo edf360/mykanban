@@ -2,7 +2,7 @@
 import { apiRequest, loadSuggestions } from './api.js';
 import { isAdmin, getToken } from './auth.js';
 import { renderAllTickets } from './renderer.js';
-import { invalidateLabelColorCache } from './state.js';
+import { invalidateLabelColorCache, closeGraphPanel } from './state.js';
 
 // ローカルID生成（HTTP環境でも動作）
 let localIdCounter = 0;
@@ -101,6 +101,8 @@ export function getSettings() {
  */
 export async function open() {
     console.log('[Settings] open called');
+    // グラフパネルが開いている場合は閉じる
+    closeGraphPanel();
     await load();
     currentAdminState = isAdmin();
     renderUsers(currentAdminState);

@@ -284,6 +284,13 @@ export function initHistory() {
         }
     });
 
+    historyModal.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            historyModal.classList.remove('active');
+        }
+    });
+
     // モーダル状態変更時にボタンの有効/無効を更新
     on('modal-changed', () => {
         updateHistoryButton();

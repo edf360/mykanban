@@ -65,10 +65,33 @@ function syncMainAssigneeCheckbox() {
 
 // ===== 担当者フィルター変更ハンドラー =====
 function onAssigneeChange() {
-    setFilter({ assignee: elements.assigneeSelect?.value || '' });
+    const selectedAssignee = elements.assigneeSelect?.value || '';
+    setFilter({ assignee: selectedAssignee });
     syncMainAssigneeCheckbox();
+    // 担当者「すべて」を選択した場合はメモ列を閉じる
+    if (!selectedAssignee) {
+        hideMemoColumn();
+    }
     triggerRender();
     saveFilterState();
+}
+
+// ===== メモ列を非表示にする =====
+function hideMemoColumn() {
+    const memoColumn = document.getElementById('memoColumn');
+    const memoToggleBtn = document.getElementById('memoToggleBtn');
+    if (memoColumn) {
+        memoColumn.classList.add('hidden');
+    }
+    if (memoToggleBtn) {
+        memoToggleBtn.classList.remove('active');
+    }
+    // 保存された設定も更新
+    const settings = loadUserSettings();
+    if (settings.memo) {
+        settings.memo.visible = false;
+        saveUserSettings(settings);
+    }
 }
 
 // ===== 検索入力ハンドラー（debounce適用） =====
