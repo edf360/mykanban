@@ -29,6 +29,7 @@ const el = {
     hamburgerBtn: null,
     savePerAssigneeBtn: null,
     viewActualBtn: null,
+    ticketCategoryDisplay: null,
 };
 
 /**
@@ -50,6 +51,20 @@ function cacheElements() {
     el.hamburgerBtn = document.getElementById('modalHamburgerBtn');
     el.savePerAssigneeBtn = document.getElementById('savePerAssigneeBtn');
     el.viewActualBtn = document.getElementById('viewActualBtn');
+    el.ticketCategoryDisplay = document.getElementById('ticketCategoryDisplay');
+}
+
+/**
+ * 集計カテゴリ表示を更新
+ */
+function updateCategoryDisplay() {
+    if (!el.ticketCategoryDisplay) return;
+    const category = getCurrentCategory();
+    if (category) {
+        el.ticketCategoryDisplay.textContent = `集計カテゴリ: [${category}]`;
+    } else {
+        el.ticketCategoryDisplay.textContent = '';
+    }
 }
 
 /**
@@ -113,6 +128,9 @@ function _openModal(options) {
         if (el.effort) el.effort.value = data.effort || '';
         if (el.memo) el.memo.value = data.memo || '';
     }
+    
+    // 集計カテゴリ表示を更新
+    updateCategoryDisplay();
     
     // ロックUI更新
     updateHamburgerMenu();
@@ -231,6 +249,7 @@ export function openCategoryDialog() {
     const input = prompt('集計カテゴリを入力してください', current);
     if (input !== null) {
         setModalState({ currentCategory: input.trim() });
+        updateCategoryDisplay();
     }
 }
 

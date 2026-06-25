@@ -119,6 +119,15 @@ function addChildTaskToDom(task) {
 
     div.appendChild(dragHandle);
     div.appendChild(textInput);
+
+    // 集計カテゴリ表示
+    const categorySpan = document.createElement('span');
+    categorySpan.className = 'child-task-category';
+    if (task.category) {
+        categorySpan.textContent = `[${task.category}]`;
+    }
+    div.appendChild(categorySpan);
+
     div.appendChild(menuBtn);
     childTasksEl.appendChild(div);
 
