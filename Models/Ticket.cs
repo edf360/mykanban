@@ -112,6 +112,9 @@ public class ChildTask
     [JsonPropertyName("category")]
     public string? Category { get; set; }
 
+    [JsonPropertyName("memo")]
+    public string? Memo { get; set; }
+
     [JsonPropertyName("reviewState")]
     public string ReviewState { get; set; } = "none";
 }

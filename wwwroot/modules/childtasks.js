@@ -56,13 +56,18 @@ function getReviewStateInfo(state) {
 /**
  * 子タスクを追加
  */
-export function addChildTask(text, done = false, id = null, progress = 0, category = '', reviewState = 'none') {
+export function addChildTask(text, done = false, id = null, progress = 0, category = '', memo = '', reviewState = 'none') {
+    let taskText = text.trim();
+    if (!taskText) {
+        taskText = '（未設定）';
+    }
     const task = {
         id: id || generateLocalId(),
-        text: text.trim(),
+        text: taskText,
         done,
         progress: progress || 0,
         category: category || '',
+        memo: memo || '',
         reviewState: reviewState || 'none'
     };
     addChildTaskToState(task);
@@ -86,6 +91,7 @@ export function removeChildTask(id) {
 
 /**
  * 子タスクをDOMに追加
+ * レイアウト: ドラッグハンドル → 子タスク名 → 子タスクメモ → 集計カテゴリ → 進捗率 → アイコン → 隠すチェック → 削除ボタン
  */
 function addChildTaskToDom(task) {
     const childTasksEl = document.getElementById('childTasks');
@@ -94,62 +100,141 @@ function addChildTaskToDom(task) {
     const div = document.createElement('div');
     div.className = 'child-task-item' + (task.done ? ' done' : '');
     div.dataset.childId = task.id;
-    div.draggable = true;
 
-    // ドラッグハンドル（🔸）- 左側配置
+    // 選択関数（ドラッグハンドル・名前入力から共通）
+    const selectChildTask = () => {
+        // 現在のメモパネルの値を保存
+        saveChildTaskMemoFromPanel();
+        // 他の行の selected クラスを削除
+        document.querySelectorAll('.child-task-item.selected').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+        updateChildTaskMemoPanel(task);
+    };
+
+    // 1. ドラッグハンドル（🔸）- クリックで選択 / ドラッグで順番入れ替え
     const dragHandle = document.createElement('span');
     dragHandle.className = 'child-task-drag-handle';
     dragHandle.textContent = '🔸';
-    dragHandle.title = 'ドラッグして順番を入れ替え';
+    dragHandle.title = 'クリックで選択 / ドラッグして順番を入れ替え';
+    dragHandle.draggable = true;
+    dragHandle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectChildTask();
+    });
 
+    // 2. 子タスク名（フォーカスで右パネルのメモを更新）
     const textInput = document.createElement('input');
     textInput.type = 'text';
     textInput.value = task.text;
     textInput.placeholder = '子タスク名';
+    textInput.className = 'child-task-name';
+    textInput.addEventListener('focus', selectChildTask);
 
-    // ハンバーガーメニュー（☰）- 右側配置
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'child-task-settings-btn';
-    menuBtn.textContent = '\u2630'; // ☰
-    menuBtn.title = '設定';
-    menuBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showChildTaskMenu(menuBtn, task, div);
-    });
-
-    div.appendChild(dragHandle);
-    div.appendChild(textInput);
-
-    // 集計カテゴリ表示
+    // 3. 集計カテゴリ（マウスオーバーで表示、クリックでモーダル）
     const categorySpan = document.createElement('span');
     categorySpan.className = 'child-task-category';
-    if (task.category) {
-        categorySpan.textContent = `[${task.category}]`;
-    }
-    div.appendChild(categorySpan);
-
-    div.appendChild(menuBtn);
-    childTasksEl.appendChild(div);
-
-
-    textInput.addEventListener('input', () => {
-        updateChildTask(task.id, { text: textInput.value });
+    const categoryDisplay = task.category ? `[${task.category}]` : 'カテゴリ...';
+    categorySpan.textContent = categoryDisplay;
+    categorySpan.title = task.category ? task.category : 'クリックしてカテゴリを編集';
+    categorySpan.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isTicketLocked()) return;
+        showChildTaskCategoryModal(task, div);
     });
 
-    // ドラッグ＆ドロップイベント
-    div.addEventListener('dragstart', (e) => {
+    // 5. 進捗率（クリックで編集）
+    const progressSpan = document.createElement('span');
+    progressSpan.className = 'child-task-progress';
+    progressSpan.textContent = `${task.progress || 0}%`;
+    progressSpan.title = 'クリックして進捗率を変更';
+    progressSpan.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isTicketLocked()) return;
+        showChildTaskProgressModal(task, div);
+    });
+
+    // 6. 子タスクアイコン（レビュー状態）
+    const reviewIcon = document.createElement('span');
+    reviewIcon.className = 'child-task-review-icon';
+    const { icon } = getReviewStateInfo(task.reviewState || 'none');
+    reviewIcon.textContent = icon;
+    reviewIcon.title = 'クリックしてアイコンを選択';
+    reviewIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isTicketLocked()) return;
+        showChildTaskReviewModal(task, div);
+    });
+
+    // 7. 隠すチェックボックス
+    const hideCheckbox = document.createElement('input');
+    hideCheckbox.type = 'checkbox';
+    hideCheckbox.className = 'child-task-hide-checkbox';
+    hideCheckbox.checked = task.done;
+    hideCheckbox.title = '隠す';
+    hideCheckbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        updateChildTask(task.id, { done: e.target.checked });
+        div.classList.toggle('done', e.target.checked);
+    });
+
+    // 8. 削除ボタン
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'remove-child-task';
+    deleteBtn.textContent = '✕';
+    deleteBtn.title = '削除';
+    deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isTicketLocked()) return;
+        removeChildTask(task.id);
+    });
+
+    // 要素を順に追加
+    div.appendChild(dragHandle);
+    div.appendChild(textInput);
+    div.appendChild(categorySpan);
+    div.appendChild(progressSpan);
+    div.appendChild(reviewIcon);
+    div.appendChild(hideCheckbox);
+    div.appendChild(deleteBtn);
+    childTasksEl.appendChild(div);
+
+    textInput.addEventListener('input', () => {
+        const newText = textInput.value.trim() || '（未設定）';
+        updateChildTask(task.id, { text: newText });
+    });
+    textInput.addEventListener('blur', () => {
+        if (!textInput.value.trim()) {
+            textInput.value = '（未設定）';
+            updateChildTask(task.id, { text: '（未設定）' });
+        }
+    });
+    textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            addChildTask('', false);
+            // 新しく作成された子タスクのinputにフォーカス
+            setTimeout(() => {
+                const inputs = childTasksEl.querySelectorAll('input.child-task-name');
+                if (inputs.length > 0) {
+                    const lastInput = inputs[inputs.length - 1];
+                    lastInput.focus();
+                }
+            }, 50);
+        }
+    });
+
+    // ドラッグ＆ドロップイベント（ドラッグハンドルからのみ有効）
+    dragHandle.addEventListener('dragstart', (e) => {
         resetDragState();
         draggedChildId = task.id;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.dropEffect = 'move';
-        // 遅延してクラスを追加（ドラッグゴースト生成後）
         setTimeout(() => div.classList.add('dragging'), 0);
     });
 
-    div.addEventListener('dragend', () => {
+    dragHandle.addEventListener('dragend', () => {
         div.classList.remove('dragging');
-        // drop が発生しなくても dragend で移動確定
-        // resetDragState 前に移動処理を実行（状態が有効なうちに）
         if (draggedChildId && pendingDropTargetId) {
             performChildTaskMove();
         }
@@ -163,17 +248,14 @@ function addChildTaskToDom(task) {
 
         if (draggedChildId === task.id) return;
 
-        // マウス位置でインジケーターを要素の上/下に配置
         const rect = div.getBoundingClientRect();
         const midY = rect.top + rect.height / 2;
 
         if (e.clientY < midY) {
-            // 要素の上に挿入
             placeIndicatorBefore(div);
             pendingDropTargetId = task.id;
             pendingDropBefore = true;
         } else {
-            // 要素の下に挿入
             placeIndicatorAfter(div);
             pendingDropTargetId = task.id;
             pendingDropBefore = false;
@@ -181,105 +263,54 @@ function addChildTaskToDom(task) {
     });
 }
 
-let activeChildTaskMenu = null;
-
 /**
- * 子タスクの設定メニューを隠す
+ * 子タスク集計カテゴリ編集モーダル
  */
-function hideChildTaskMenu() {
-    if (activeChildTaskMenu) {
-        activeChildTaskMenu.remove();
-        activeChildTaskMenu = null;
+function showChildTaskCategoryModal(task, itemDiv) {
+    const current = task.category || '';
+    const input = prompt('集計カテゴリを入力してください', current);
+    if (input !== null) {
+        const category = input.trim();
+        updateChildTask(task.id, { category });
+        renderChildTasks();
     }
 }
 
 /**
- * 子タスクの設定メニューを表示
+ * 子タスク進捗率編集モーダル
  */
-function showChildTaskMenu(button, task, itemDiv) {
-    // 既存のメニューを閉じる
-    hideChildTaskMenu();
-
-    const menu = document.createElement('div');
-    menu.className = 'child-task-settings-menu';
-
-    const locked = isTicketLocked();
-
-    // 「隠す」メニュー項目（ロック時でも有効）
-    const hideItem = document.createElement('div');
-    hideItem.className = 'child-task-menu-item';
-
-    const toggleHide = () => {
-        const newDone = !task.done;
-        updateChildTask(task.id, { done: newDone });
-        itemDiv.classList.toggle('done', newDone);
-        hideChildTaskMenu();
-    };
-
-    hideItem.textContent = task.done ? '✓ 隠す' : '隠す';
-    hideItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleHide();
-    });
-
-    menu.appendChild(hideItem);
-
-    // 「集計カテゴリ編集」メニュー項目（ロック時は無効）
-    const categoryItem = document.createElement('div');
-    categoryItem.className = 'child-task-menu-item';
-    if (locked) {
-        categoryItem.classList.add('disabled');
+function showChildTaskProgressModal(task, itemDiv) {
+    const current = task.progress || 0;
+    const input = prompt('進捗率を入力してください（0-100）', current);
+    if (input !== null) {
+        const progress = Math.max(0, Math.min(100, parseInt(input) || 0));
+        updateChildTask(task.id, { progress });
+        renderChildTasks();
     }
-    const categoryName = task.category || '(未設定)';
-    categoryItem.textContent = `集計カテゴリ: ${categoryName}`;
-    categoryItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (locked) return;
-        hideChildTaskMenu();
-        const current = task.category || '';
-        const input = prompt('子タスクのカテゴリを入力してください', current);
-        if (input !== null) {
-            updateChildTask(task.id, { category: input.trim() });
-            renderChildTasks();
-        }
-    });
-    menu.appendChild(categoryItem);
+}
 
-    // 「削除」メニュー項目（ロック時は無効）
-    const deleteItem = document.createElement('div');
-    deleteItem.className = 'child-task-menu-item child-task-menu-item-delete';
-    if (locked) {
-        deleteItem.classList.add('disabled');
+/**
+ * 子タスクレビューアイコン選択モーダル
+ */
+function showChildTaskReviewModal(task, itemDiv) {
+    const states = [
+        { key: 'none', label: '📄 未設定' },
+        { key: 'editing', label: '📝 編集中' },
+        { key: 'requested', label: '📑 リクエスト済' },
+        { key: 'completed', label: '✅ 完了' },
+        { key: 'thumbsup', label: '👍 承認' },
+        { key: 'happy', label: '😄 満足' },
+        { key: 'sad', label: '😥 不満' },
+        { key: 'shock', label: '😱 驚き' }
+    ];
+    const current = task.reviewState || 'none';
+    const choices = states.map((s, i) => `${i + 1}. ${s.label}${s.key === current ? ' (現在)' : ''}`).join('\n');
+    const input = prompt(`${choices}\n\n番号を入力:`, '');
+    const num = parseInt(input);
+    if (!isNaN(num) && num >= 1 && num <= states.length) {
+        updateChildTask(task.id, { reviewState: states[num - 1].key });
+        renderChildTasks();
     }
-    deleteItem.textContent = '削除';
-    deleteItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (locked) return;
-        hideChildTaskMenu();
-        removeChildTask(task.id);
-    });
-    menu.appendChild(deleteItem);
-
-    // bodyに追加（position: fixed で配置）
-    document.body.appendChild(menu);
-    activeChildTaskMenu = menu;
-
-    // メニュー位置設定
-    const btnRect = button.getBoundingClientRect();
-    menu.style.position = 'fixed';
-    menu.style.top = `${btnRect.bottom}px`;
-    menu.style.right = `${window.innerWidth - btnRect.right}px`;
-    menu.style.left = 'auto';
-
-    // 外クリックで閉じる（一度だけ）
-    const clickHandler = (e) => {
-        if (!menu.contains(e.target) && !button.contains(e.target)) {
-            hideChildTaskMenu();
-            document.removeEventListener('click', clickHandler);
-        }
-    };
-    // 現在のクリックイベントが終わってからリスナーを追加
-    setTimeout(() => document.addEventListener('click', clickHandler), 0);
 }
 
 /**
@@ -380,4 +411,63 @@ export function renderChildTasks() {
 
         containerListenersInitialized = true;
     }
+}
+
+/**
+ * 右パネルの子タスクメモを更新
+ */
+export function updateChildTaskMemoPanel(task) {
+    const childTaskMemo = document.getElementById('childTaskMemoGroup');
+    const memoTextarea = document.getElementById('childTaskMemo');
+    if (memoTextarea) {
+        memoTextarea.value = task.memo || '';
+        memoTextarea.dataset.childTaskId = task.id;
+    }
+    // 子タスク名を表示
+    const nameSpan = document.getElementById('childTaskMemoName');
+    if (nameSpan) {
+        nameSpan.textContent = task.text ? `- ${task.text}` : '';
+    }
+    // 子タスクメモ領域を表示
+    if (childTaskMemo) {
+        childTaskMemo.style.display = '';
+    }
+}
+
+export function clearChildTaskMemoPanel() {
+    const childTaskMemo = document.getElementById('childTaskMemoGroup');
+    const memoTextarea = document.getElementById('childTaskMemo');
+    
+    // 現在のメモ内容を保存（次に選択したときに復帰するため）
+    if (memoTextarea) {
+        const childTaskId = memoTextarea.dataset.childTaskId;
+        if (childTaskId) {
+            updateChildTaskInState(childTaskId, { memo: memoTextarea.value });
+        }
+        memoTextarea.value = '';
+        delete memoTextarea.dataset.childTaskId;
+    }
+    
+    const nameSpan = document.getElementById('childTaskMemoName');
+    if (nameSpan) {
+        nameSpan.textContent = '';
+    }
+    // 子タスクメモ領域を非表示
+    if (childTaskMemo) {
+        childTaskMemo.style.display = 'none';
+    }
+    // 子タスクの選択状態を解除
+    document.querySelectorAll('.child-task-item.selected').forEach(el => el.classList.remove('selected'));
+}
+
+/**
+ * 右パネルから子タスクのメモを保存
+ */
+export function saveChildTaskMemoFromPanel() {
+    const memoTextarea = document.getElementById('childTaskMemo');
+    if (!memoTextarea) return;
+    const childTaskId = memoTextarea.dataset.childTaskId;
+    if (!childTaskId) return;
+    const memo = memoTextarea.value;
+    updateChildTaskInState(childTaskId, { memo });
 }

@@ -8,7 +8,7 @@ export const MODAL_ANIMATION_DURATION = 350;
 import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on, closeGraphPanel } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
-import { renderChildTasks } from './childtasks.js';
+import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
 import { createTicket, updateTicket, createTicketsPerAssignee } from './ticketService.js';
 import { openActualModal } from './actual.js';
 
@@ -152,6 +152,9 @@ function _openModal(options) {
         renderChildTasks();
     }
     
+    // 子タスクメモパネルをクリア・無効化
+    clearChildTaskMemoPanel();
+
     // モーダル表示
     if (el.modal) {
         el.modal.classList.add('active');
@@ -422,10 +425,9 @@ function closeHamburgerMenu() {
  */
 function collectFormData() {
     if (!el.ticketTitle) return null;
-    const title = el.ticketTitle.value.trim();
+    let title = el.ticketTitle.value.trim();
     if (!title) {
-        alert('タイトルを入力してください');
-        return null;
+        title = '（未設定）';
     }
     
     const startDateVal = el.startDate ? el.startDate.value : '';
@@ -460,6 +462,8 @@ function collectFormData() {
  * チケットを保存
  */
 export async function saveTicket() {
+    // 子タスクメモパネルの値を保存
+    saveChildTaskMemoFromPanel();
     let data = collectFormData();
     if (!data) return;
     
@@ -523,6 +527,8 @@ export async function saveTicketsPerAssignee() {
     const assignees = getCurrentAssignees();
     if (isEdit || assignees.length < 2) return;
     
+    // 子タスクメモパネルの値を保存
+    saveChildTaskMemoFromPanel();
     let data = collectFormData();
     if (!data) return;
     
@@ -594,6 +600,26 @@ export function initModal() {
                 openActualModal(ticketId);
             }
         });
+    }
+    
+    // 各フィールドにフォーカスしたときに子タスクメモを非表示
+    const clearChildTaskFocusFields = [
+        el.ticketTitle, el.memo, el.startDate, el.endDate, el.effort
+    ];
+    clearChildTaskFocusFields.forEach(field => {
+        if (field) {
+            field.addEventListener('focus', () => clearChildTaskMemoPanel());
+        }
+    });
+    
+    // 担当者/ラベルのクリック時に子タスクメモを非表示
+    const assigneeDropdown = document.getElementById('assigneeDropdown');
+    const labelDropdown = document.getElementById('labelDropdown');
+    if (assigneeDropdown) {
+        assigneeDropdown.addEventListener('click', () => clearChildTaskMemoPanel());
+    }
+    if (labelDropdown) {
+        labelDropdown.addEventListener('click', () => clearChildTaskMemoPanel());
     }
     
     // 担当者変更時にボタンの状態を更新

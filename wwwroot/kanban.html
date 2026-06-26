@@ -296,9 +296,13 @@
                 </div>
                 
                 <div class="modal-right-column">
-                    <div class="form-group memo-full-height">
-                        <label for="memo">メモ</label>
+                    <div class="form-group memo-ticket">
+                        <label for="memo">チケットメモ</label>
                         <textarea id="memo" placeholder="詳細な説明やメモ..."></textarea>
+                    </div>
+                    <div id="childTaskMemoGroup" class="form-group memo-child-task" style="display:none;">
+                        <label for="childTaskMemo">子タスクメモ <span id="childTaskMemoName"></span></label>
+                        <textarea id="childTaskMemo" placeholder="メモを入力..."></textarea>
                     </div>
                 </div>
             </div>
