@@ -796,7 +796,7 @@ body {
     /* 編集可能なので opacity/pointer-events なし */
 }
 
-/* ロック時は子タスク設定ボタンをグレー（メニューは開けるが、集計カテゴリ編集/削除は無効） */
+/* ロック時は子タスク設定ボタンをグレー（メニューは開けるが、集計ID編集/削除は無効） */
 .modal.locked .child-task-settings-btn {
     opacity: 0.5;
 }
@@ -1085,6 +1085,15 @@ body {
     color: #9ca3af;
 }
 
+.child-task-drag-handle {
+    font-size: 12px;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+}
+
 .remove-child-task {
     background: none;
     border: none;
@@ -1092,6 +1101,9 @@ body {
     cursor: pointer;
     font-size: 16px;
     padding: 2px 6px;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
 }
 
 .add-child-task-btn {
@@ -1109,7 +1121,7 @@ body {
 
 .add-child-task-btn:hover { border-color: #4b5563; color: #4b5563; }
 
-/* チケット集計カテゴリ表示 */
+/* チケット集計ID表示 */
 .category-display {
     font-size: 11px;
     color: #6b7280;
@@ -1118,7 +1130,7 @@ body {
     line-height: 1.3;
 }
 
-/* 子タスク集計カテゴリ表示 */
+/* 子タスク集計ID表示 */
 .child-task-category {
     font-size: 11px;
     color: #9ca3af;
@@ -1129,8 +1141,10 @@ body {
     border-radius: 3px;
     transition: background 0.15s ease;
     width: 70px;
+    min-width: 70px;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: left;
 }
 
 .child-task-category:hover {
@@ -1150,6 +1164,8 @@ body {
     cursor: pointer;
     border-radius: 4px;
     transition: background 0.15s ease;
+    width: 28px;
+    text-align: center;
 }
 
 .child-task-review-icon:hover {
@@ -1378,7 +1394,9 @@ body {
     background: rgba(0, 0, 0, 0.05);
     transition: all 0.2s ease;
     user-select: none;
-    margin-left: 8px;
+    flex-shrink: 0;
+    width: 45px;
+    text-align: center;
 }
 
 .child-task-progress:hover {

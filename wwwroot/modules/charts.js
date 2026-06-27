@@ -516,7 +516,8 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     // カテゴリでグループ化（カテゴリ未設定の場合はチケットタイトルを使用）
     const categoryMap = new Map();
     tickets.forEach(t => {
-        const category = t.category || (t.title || '無題');
+        if (!t.category || t.category.trim() === '') return;
+        const category = t.category;
         if (!categoryMap.has(category)) {
             categoryMap.set(category, []);
         }
@@ -568,7 +569,8 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
         categoryTickets.forEach(t => {
             if (t.childTasks && Array.isArray(t.childTasks)) {
                 t.childTasks.forEach(ct => {
-                    const ctCategory = ct.category || category;
+                    if (!ct.category || ct.category.trim() === '') return;
+                    const ctCategory = ct.category;
                     const key = `${ctCategory}::${ct.text || '無題'}`;
                     if (!ct.done && !childSet.has(key)) {
                         childSet.set(key, ct);
@@ -641,7 +643,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
             childTh.className = 'child-task-header';
             childTh.dataset.parentTitle = category;
             const ctCategory = ct.category || category;
-            childTh.textContent = ctCategory ? `[${ctCategory}] ${ct.text || '無題'}` : (ct.text || '無題');
+            childTh.textContent = ctCategory ? `${ctCategory} ${ct.text || '無題'}` : (ct.text || '無題');
             childTh.title = ct.text || '無題';
             if (!childTaskVisibility.get(visibilityKey)) {
                 childTh.style.display = 'none';

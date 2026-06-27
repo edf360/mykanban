@@ -60,9 +60,8 @@ function getReviewStateInfo(state) {
  */
 export function addChildTask(text, done = false, id = null, progress = 0, category = '', memo = '', reviewState = 'none') {
     let taskText = text.trim();
-    if (!taskText) {
-        taskText = '（未設定）';
-    }
+    // 空文字の場合は空のまま保存（DOM側でプレースホルダー表示）
+    // blur時に空なら（未設定）になる
     const task = {
         id: id || generateLocalId(),
         text: taskText,
@@ -93,7 +92,7 @@ export function removeChildTask(id) {
 
 /**
  * 子タスクをDOMに追加
- * レイアウト: ドラッグハンドル → 子タスク名 → 子タスクメモ → 集計カテゴリ → 進捗率 → アイコン → 隠すチェック → 削除ボタン
+ * レイアウト: ドラッグハンドル → 子タスク名 → 子タスクメモ → 集計ID → 進捗率 → アイコン → 隠すチェック → 削除ボタン
  */
 function addChildTaskToDom(task) {
     const childTasksEl = document.getElementById('childTasks');
@@ -127,17 +126,18 @@ function addChildTaskToDom(task) {
     // 2. 子タスク名（フォーカスで右パネルのメモを更新）
     const textInput = document.createElement('input');
     textInput.type = 'text';
-    textInput.value = task.text;
-    textInput.placeholder = '子タスク名';
+    // 空文字または（未設定）の場合は空文字で表示（プレースホルダー表示）
+    textInput.value = (task.text && task.text !== '（未設定）') ? task.text : '';
+    textInput.placeholder = '子タスクのタイトル';
     textInput.className = 'child-task-name';
     textInput.addEventListener('focus', selectChildTask);
 
-    // 3. 集計カテゴリ（マウスオーバーで表示、クリックでモーダル）
+    // 3. 集計ID（マウスオーバーで表示、クリックでモーダル）
     const categorySpan = document.createElement('span');
     categorySpan.className = 'child-task-category';
-    const categoryDisplay = task.category ? `[${task.category}]` : 'カテゴリ...';
+    const categoryDisplay = task.category ? task.category : '集計IDなし';
     categorySpan.textContent = categoryDisplay;
-    categorySpan.title = task.category ? task.category : 'クリックしてカテゴリを編集';
+    categorySpan.title = '集計時に同じIDのチケットをまとめて表示します';
     categorySpan.addEventListener('click', (e) => {
         e.stopPropagation();
         if (isTicketLocked()) return;
@@ -201,7 +201,8 @@ function addChildTaskToDom(task) {
     childTasksEl.appendChild(div);
 
     textInput.addEventListener('input', () => {
-        const newText = textInput.value.trim() || '（未設定）';
+        // 入力中は空文字のまま保存（blur時に（未設定）になる）
+        const newText = textInput.value.trim();
         updateChildTask(task.id, { text: newText });
     });
     textInput.addEventListener('blur', () => {
@@ -266,11 +267,11 @@ function addChildTaskToDom(task) {
 }
 
 /**
- * 子タスク集計カテゴリ編集モーダル
+ * 子タスク集計ID編集モーダル
  */
 function showChildTaskCategoryModal(task, itemDiv) {
     const current = task.category || '';
-    const input = prompt('集計カテゴリを入力してください', current);
+    const input = prompt('集計IDを入力してください', current);
     if (input !== null) {
         const category = input.trim();
         updateChildTask(task.id, { category });

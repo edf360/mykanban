@@ -33,7 +33,7 @@ const internal = {
         mainAssignee: null,
         currentChildTasks: [],
         newTicketColumn: 'todo',
-        currentCategory: ''  // 集計カテゴリ（チケットレベル）
+        currentCategory: ''  // 集計ID（チケットレベル）
     },
     suggestions: {
         labels: [],

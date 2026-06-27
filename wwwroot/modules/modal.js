@@ -32,6 +32,9 @@ const el = {
     ticketCategoryDisplay: null,
 };
 
+// 集計ID表示のクリックリスナー（重複登録防止）
+let categoryClickHandler = null;
+
 /**
  * DOM要素をキャッシュ
  */
@@ -55,15 +58,22 @@ function cacheElements() {
 }
 
 /**
- * 集計カテゴリ表示を更新
+ * 集計ID表示を更新
  */
 function updateCategoryDisplay() {
     if (!el.ticketCategoryDisplay) return;
     const category = getCurrentCategory();
     if (category) {
-        el.ticketCategoryDisplay.textContent = `集計カテゴリ: [${category}]`;
+        el.ticketCategoryDisplay.textContent = `集計ID: ${category}`;
     } else {
-        el.ticketCategoryDisplay.textContent = '';
+        el.ticketCategoryDisplay.textContent = '集計IDなし';
+    }
+    el.ticketCategoryDisplay.title = '集計時に同じIDのチケットをまとめて表示します';
+    el.ticketCategoryDisplay.style.cursor = 'pointer';
+    // 初回のみクリックリスナーを設定（重複登録防止）
+    if (!categoryClickHandler) {
+        categoryClickHandler = () => openCategoryDialog();
+        el.ticketCategoryDisplay.addEventListener('click', categoryClickHandler);
     }
 }
 
@@ -129,7 +139,7 @@ function _openModal(options) {
         if (el.memo) el.memo.value = data.memo || '';
     }
     
-    // 集計カテゴリ表示を更新
+    // 集計ID表示を更新
     updateCategoryDisplay();
     
     // ロックUI更新
@@ -249,7 +259,7 @@ function applyEmergencyToModal() {
  */
 export function openCategoryDialog() {
     const current = getCurrentCategory() || '';
-    const input = prompt('集計カテゴリを入力してください', current);
+    const input = prompt('集計IDを入力してください', current);
     if (input !== null) {
         setModalState({ currentCategory: input.trim() });
         updateCategoryDisplay();
@@ -295,7 +305,7 @@ function openHamburgerMenu() {
         </div>
         <div class="modal-menu-item${locked ? ' disabled' : ''}" data-action="category">
             <span class="menu-icon">🏷️</span>
-            <span class="menu-label">集計カテゴリ: ${category}</span>
+            <span class="menu-label">集計ID: ${category}</span>
             <span class="menu-check"></span>
         </div>
         ${isEdit ? `
@@ -467,19 +477,6 @@ export async function saveTicket() {
     let data = collectFormData();
     if (!data) return;
     
-    // 集計カテゴリが空だったらタイトルをそのまま使用
-    if (!data.category || data.category.trim() === '') {
-        data.category = data.title;
-    }
-
-    // 子タスクの集計カテゴリが空だったら子タスク名をコピー
-    data.childTasks = data.childTasks.map(task => {
-        if (!task.category || task.category.trim() === '') {
-            return { ...task, category: task.text };
-        }
-        return task;
-    });
-    
     try {
         const editingId = getEditingTicketId();
         if (editingId) {
@@ -531,19 +528,6 @@ export async function saveTicketsPerAssignee() {
     saveChildTaskMemoFromPanel();
     let data = collectFormData();
     if (!data) return;
-    
-    // 集計カテゴリが空だったらタイトルをそのまま使用
-    if (!data.category || data.category.trim() === '') {
-        data.category = data.title;
-    }
-
-    // 子タスクの集計カテゴリが空だったら子タスク名をコピー
-    data.childTasks = data.childTasks.map(task => {
-        if (!task.category || task.category.trim() === '') {
-            return { ...task, category: task.text };
-        }
-        return task;
-    });
     
     try {
         const column = getNewTicketColumn() || 'todo';

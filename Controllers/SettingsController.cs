@@ -387,7 +387,7 @@ public class SettingsController : ControllerBase
             var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
             
             ticket.Title = title;
-            // CSVインポート時はタイトルを集計カテゴリに設定
+            // CSVインポート時はタイトルを集計IDに設定
             ticket.Category = title;
             // バケット進捗は一時的に保持（子タスクから計算があれば上書き）
             var bucketProgress = ParseProgress(csv.GetField(columnIndexes["バケット"]) ?? "");

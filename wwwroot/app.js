@@ -109,6 +109,17 @@ async function initApp() {
     if (addChildTaskBtn) {
       addChildTaskBtn.addEventListener('click', () => {
         addChildTask('', false);
+        // 新しく作成された子タスクのinputにフォーカス
+        setTimeout(() => {
+          const childTasksEl = document.getElementById('childTasks');
+          if (childTasksEl) {
+            const inputs = childTasksEl.querySelectorAll('input.child-task-name');
+            if (inputs.length > 0) {
+              const lastInput = inputs[inputs.length - 1];
+              lastInput.focus();
+            }
+          }
+        }, 50);
       });
     } else {
       logError('[app] addChildTaskBtn not found in DOM');
