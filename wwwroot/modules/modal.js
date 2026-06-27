@@ -133,7 +133,7 @@ function _openModal(options) {
         
         // DOM更新
         if (el.modalTitle) el.modalTitle.textContent = 'チケットを編集';
-        if (el.ticketTitle) el.ticketTitle.value = data.title || '';
+        if (el.ticketTitle) el.ticketTitle.value = (data.title && data.title !== '（未設定）') ? data.title : '';
         if (el.startDate) el.startDate.value = data.startDate ? data.startDate.substring(0, 10) : '';
         if (el.endDate) el.endDate.value = data.endDate ? data.endDate.substring(0, 10) : '';
         if (el.effort) el.effort.value = data.effort || '';
@@ -436,9 +436,6 @@ function closeHamburgerMenu() {
 function collectFormData() {
     if (!el.ticketTitle) return null;
     let title = el.ticketTitle.value.trim();
-    if (!title) {
-        title = '（未設定）';
-    }
     
     const startDateVal = el.startDate ? el.startDate.value : '';
     const endDateVal = el.endDate ? el.endDate.value : '';

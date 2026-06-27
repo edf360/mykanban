@@ -36,12 +36,6 @@ public class TicketService
 
     public async Task<Ticket> CreateAsync(TicketDto dto)
     {
-        // タイトル検証
-        if (string.IsNullOrWhiteSpace(dto.Title))
-        {
-            throw new ArgumentException("Title is required.", nameof(dto));
-        }
-
         var validChildTasks = dto.ChildTasks
             .Where(ct => !string.IsNullOrWhiteSpace(ct.Text))
             .Select(ct => new ChildTask
@@ -128,12 +122,6 @@ public class TicketService
         var oldEffort = ticket.Effort;
         var oldIsLocked = ticket.IsLocked;
         var oldColumn = ticket.Column;
-
-        // タイトル検証
-        if (string.IsNullOrWhiteSpace(dto.Title))
-        {
-            throw new ArgumentException("Title is required.", nameof(dto));
-        }
 
         ticket.Title = dto.Title;
         if (!string.IsNullOrEmpty(dto.Column))

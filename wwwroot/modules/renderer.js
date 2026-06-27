@@ -223,7 +223,7 @@ export function createTicketElement(data) {
         ticket.classList.add('blocked');
     }
 
-    const titleHtml = data.title ? escapeHtml(data.title) : '(タイトルなし)';
+    const titleHtml = data.title ? escapeHtml(data.title) : '（未設定）';
     
     // 上部にラベルと担当者を表示
     let topInfoHtml = '';
