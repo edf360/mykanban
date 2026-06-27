@@ -5,6 +5,8 @@
  */
 
 import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked } from './state.js';
+import { showProgressSlider } from './progressSliderPopup.js';
+import { showReviewIconPopup } from './reviewIconPopup.js';
 
 // ローカルID生成（HTTP環境でも動作）
 let childTaskIdCounter = 0;
@@ -281,36 +283,27 @@ function showChildTaskCategoryModal(task, itemDiv) {
  */
 function showChildTaskProgressModal(task, itemDiv) {
     const current = task.progress || 0;
-    const input = prompt('進捗率を入力してください（0-100）', current);
-    if (input !== null) {
-        const progress = Math.max(0, Math.min(100, parseInt(input) || 0));
-        updateChildTask(task.id, { progress });
+    const progressSpan = itemDiv.querySelector('.child-task-progress');
+    if (!progressSpan) return;
+    
+    showProgressSlider(progressSpan, current, (newProgress) => {
+        updateChildTask(task.id, { progress: newProgress });
         renderChildTasks();
-    }
+    });
 }
 
 /**
  * 子タスクレビューアイコン選択モーダル
  */
 function showChildTaskReviewModal(task, itemDiv) {
-    const states = [
-        { key: 'none', label: '📄 未設定' },
-        { key: 'editing', label: '📝 編集中' },
-        { key: 'requested', label: '📑 リクエスト済' },
-        { key: 'completed', label: '✅ 完了' },
-        { key: 'thumbsup', label: '👍 承認' },
-        { key: 'happy', label: '😄 満足' },
-        { key: 'sad', label: '😥 不満' },
-        { key: 'shock', label: '😱 驚き' }
-    ];
     const current = task.reviewState || 'none';
-    const choices = states.map((s, i) => `${i + 1}. ${s.label}${s.key === current ? ' (現在)' : ''}`).join('\n');
-    const input = prompt(`${choices}\n\n番号を入力:`, '');
-    const num = parseInt(input);
-    if (!isNaN(num) && num >= 1 && num <= states.length) {
-        updateChildTask(task.id, { reviewState: states[num - 1].key });
+    const reviewIcon = itemDiv.querySelector('.child-task-review-icon');
+    if (!reviewIcon) return;
+    
+    showReviewIconPopup(reviewIcon, current, (newState) => {
+        updateChildTask(task.id, { reviewState: newState });
         renderChildTasks();
-    }
+    });
 }
 
 /**
