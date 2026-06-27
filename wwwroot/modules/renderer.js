@@ -268,9 +268,10 @@ export function createTicketElement(data) {
                 'shock': '😱'
             };
             const reviewIcon = reviewIcons[reviewState] || '📄';
+            const memoTooltip = task.memo ? ` title="${escapeHtml(task.memo)}"` : '';
             childTasksHtml += `
                 <div class="ticket-child-task-item" data-child-id="${childId}">
-                    <span class="ticket-child-task-text">${escapeHtml(task.text)}</span>
+                    <span class="ticket-child-task-text"${memoTooltip}>${escapeHtml(task.text)}</span>
                     <span class="ticket-child-task-progress" data-child-progress="${childId}" title="クリックして進捗率を変更">${progress}%</span>
                     <button class="ticket-child-task-review-btn ${reviewState !== 'none' && reviewState !== 'document' ? 'review-' + reviewState : ''}" data-review-id="${childId}" title="クリックしてアイコンを選択">${reviewIcon}</button>
                 </div>`;
@@ -298,11 +299,12 @@ export function createTicketElement(data) {
     // 折り畳みボタンを表示するかどうか（子タスクまたは期限日・終了日が設定されている場合のみ）
     const showCollapseBtn = (data.childTasks && data.childTasks.length > 0) || (data.startDate && data.endDate);
 
+    const ticketMemoTitle = data.memo ? ` title="${escapeHtml(data.memo)}"` : '';
     ticket.innerHTML = `
         ${topInfoHtml}
         <div class="ticket-title-row">
             ${showCollapseBtn ? '<button class="ticket-collapse-btn" title="折り畳む/展開">▼</button>' : ''}
-            <div class="ticket-content">${titleHtml}</div>
+            <div class="ticket-content"${ticketMemoTitle}>${titleHtml}</div>
             <span class="progress-text" title="${(data.childTasks && data.childTasks.length > 0) ? '子タスクがあるため直接編集できません' : 'クリックして進捗率を変更'}">${data.progress || 0}%</span>
             ${effortBadge}
         </div>

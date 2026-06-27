@@ -50,7 +50,9 @@ public class TicketService
                 Text = ct.Text,
                 Done = ct.Done,
                 Progress = ct.Progress,
-                Category = ct.Category
+                Category = ct.Category,
+                Memo = ct.Memo,
+                ReviewState = ct.ReviewState ?? "none"
             })
             .ToList();
 
@@ -171,6 +173,7 @@ public class TicketService
                     Done = ct.Done,
                     Progress = ct.Progress,
                     Category = ct.Category,
+                    Memo = ct.Memo,
                     ReviewState = ct.ReviewState ?? "none"
                 })
                 .ToList();
