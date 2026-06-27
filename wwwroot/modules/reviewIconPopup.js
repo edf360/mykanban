@@ -3,6 +3,8 @@
  * メイン画面・編集画面で共通使用
  */
 
+import { showPopupOverlay, hidePopupOverlay } from './popupOverlay.js';
+
 /**
  * レビューアイコンの定義
  */
@@ -42,6 +44,7 @@ export function showReviewIconPopup(anchorElement, currentState, onSelect) {
         item.addEventListener('click', (e) => {
             e.stopPropagation();
             popup.remove();
+            hidePopupOverlay();
             document.removeEventListener('click', onClickOutside);
             onSelect(state);
         });
@@ -53,16 +56,23 @@ export function showReviewIconPopup(anchorElement, currentState, onSelect) {
     popup.style.position = 'fixed';
     popup.style.top = `${rect.bottom + 5}px`;
     popup.style.left = `${rect.left}px`;
-    popup.style.zIndex = '1000';
+    popup.style.zIndex = '10003';
     
     document.body.appendChild(popup);
     
     const onClickOutside = (e) => {
         if (!popup.contains(e.target)) {
             popup.remove();
+            hidePopupOverlay();
             document.removeEventListener('click', onClickOutside);
         }
     };
     
     setTimeout(() => document.addEventListener('click', onClickOutside), 0);
+    
+    // オーバーレイを表示
+    showPopupOverlay(() => {
+        popup.remove();
+        hidePopupOverlay();
+    });
 }

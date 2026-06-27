@@ -3,6 +3,8 @@
  * メイン画面・編集画面で共通使用
  */
 
+import { showPopupOverlay, hidePopupOverlay } from './popupOverlay.js';
+
 /**
  * 進捗率スライダーポップアップを表示
  * @param {HTMLElement} anchorElement - ポップアップの基準となる要素
@@ -26,7 +28,7 @@ export function showProgressSlider(anchorElement, currentValue, onSave) {
     popup.style.position = 'fixed';
     popup.style.top = `${rect.top + window.scrollY - 60}px`;
     popup.style.left = `${rect.left + window.scrollX}px`;
-    popup.style.zIndex = '1000';
+    popup.style.zIndex = '10003';
     
     document.body.appendChild(popup);
     
@@ -40,6 +42,7 @@ export function showProgressSlider(anchorElement, currentValue, onSave) {
     const closePopup = async () => {
         const newValue = parseInt(slider.value);
         popup.remove();
+        hidePopupOverlay();
         document.removeEventListener('click', onClickOutside);
         if (newValue !== currentValue && onSave) {
             await onSave(newValue);
@@ -53,4 +56,7 @@ export function showProgressSlider(anchorElement, currentValue, onSave) {
     };
     
     setTimeout(() => document.addEventListener('click', onClickOutside), 0);
+    
+    // オーバーレイを表示
+    showPopupOverlay(closePopup);
 }
