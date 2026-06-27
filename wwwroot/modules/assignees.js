@@ -3,7 +3,7 @@
  */
 
 import { getCurrentAssignees, getMainAssignee, setMainAssignee, getAssigneeSuggestions,
-         addAssigneeToState, removeAssigneeFromState, escapeHtml, setModalState } from './state.js';
+         addAssigneeToState, removeAssigneeFromState, escapeHtml, setModalState, state } from './state.js';
 
 /**
  * 担当者を追加
@@ -233,4 +233,112 @@ function handleMainCheck(assignee, checked) {
  */
 export function syncAssigneesFromSelect() {
     // カスタムドロップダウンでは直接使用しないが、後方互換のため残す
+}
+
+/**
+ * グラフパネル用担当者ドロップダウンを描画（トグルスイッチ付き、メインチェックなし）
+ */
+export function renderGraphAssigneeSelect() {
+    const listEl = document.getElementById('graphAssigneeList');
+    const toggleBtn = document.getElementById('graphAssigneeToggleBtn');
+    if (!listEl || !toggleBtn) return;
+
+    listEl.innerHTML = '';
+
+    const allAssignees = getAssigneeSuggestions();
+    const selectedAssignees = state?.graphAssignees || [];
+
+    // ボタンのテキストを更新
+    if (selectedAssignees.length === 0) {
+        toggleBtn.textContent = '全担当者';
+    } else if (selectedAssignees.length === 1) {
+        toggleBtn.textContent = selectedAssignees[0] + ' ▼';
+    } else {
+        toggleBtn.textContent = `${selectedAssignees.length}人選択 ▼`;
+    }
+
+    allAssignees.forEach(assignee => {
+        const isEnabled = selectedAssignees.includes(assignee);
+
+        const item = document.createElement('div');
+        item.className = 'assignee-list-item';
+
+        item.innerHTML = `
+            <span class="assignee-item-name">${escapeHtml(assignee)}</span>
+            <div class="assignee-controls">
+                <label class="assignee-switch" title="表示/非表示">
+                    <input type="checkbox"
+                           class="graph-assignee-toggle"
+                           data-assignee="${escapeHtml(assignee)}"
+                           ${isEnabled ? 'checked' : ''}>
+                    <span class="assignee-slider"></span>
+                </label>
+            </div>
+        `;
+
+        listEl.appendChild(item);
+    });
+
+    // トグルスイッチのイベント（イベント委譲）
+    listEl.addEventListener('change', (e) => {
+        if (e.target.classList.contains('graph-assignee-toggle')) {
+            const assignee = e.target.dataset.assignee;
+            const isEnabled = e.target.checked;
+            handleGraphAssigneeToggle(assignee, isEnabled);
+        }
+    });
+
+    // ボタンクリックでドロップダウン表示/非表示
+    toggleBtn.onclick = (e) => {
+        e.stopPropagation();
+        listEl.classList.toggle('active');
+    };
+
+    // ドロップダウン外クリックで閉じる（1回だけ設定）
+    if (!toggleBtn.dataset.graphListenerAttached) {
+        toggleBtn.dataset.graphListenerAttached = 'true';
+        document.addEventListener('click', (event) => {
+            const dropdown = document.getElementById('graphAssigneeDropdown');
+            if (dropdown && !dropdown.contains(event.target)) {
+                listEl.classList.remove('active');
+            }
+        });
+    }
+}
+
+/**
+ * グラフ用担当者トグルの処理
+ */
+function handleGraphAssigneeToggle(assignee, isEnabled) {
+    let selected = state?.graphAssignees || [];
+    if (isEnabled) {
+        if (!selected.includes(assignee)) {
+            selected = [...selected, assignee];
+        }
+    } else {
+        selected = selected.filter(a => a !== assignee);
+    }
+    // 直接internalに書き込む（state.graphAssignees setter使用）
+    if (state) {
+        state.graphAssignees = selected;
+    }
+    // ボタンテキストを更新
+    const toggleBtn = document.getElementById('graphAssigneeToggleBtn');
+    if (toggleBtn) {
+        if (selected.length === 0) {
+            toggleBtn.textContent = '全担当者';
+        } else if (selected.length === 1) {
+            toggleBtn.textContent = selected[0] + ' ▼';
+        } else {
+            toggleBtn.textContent = `${selected.length}人選択 ▼`;
+        }
+    }
+    // グラフ再描画（外部関数）
+    if (window.refreshGraphPanel) {
+        window.refreshGraphPanel();
+    }
+    // 設定保存（外部関数）
+    if (window.saveGraphSettings) {
+        window.saveGraphSettings();
+    }
 }

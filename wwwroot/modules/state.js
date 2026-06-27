@@ -24,7 +24,8 @@ const internal = {
         graphPanelOpen: false,
         ticketLocked: false,
         ticketEmergency: false,
-        hiddenChildTasks: new Set()  // "ticketId:childId"形式で非表示の子タスクを管理
+        hiddenChildTasks: new Set(),  // "ticketId:childId"形式で非表示の子タスクを管理
+        graphAssignees: []            // グラフパネルで選択中の担当者配列
     },
     modal: {
         editingTicketId: null,
@@ -612,7 +613,9 @@ const backwardCompatState = {
     get graphPanelOpen() { return internal.ui.graphPanelOpen; },
     set graphPanelOpen(v) { internal.ui.graphPanelOpen = v; },
     get ticketLocked() { return internal.ui.ticketLocked; },
-    set ticketLocked(v) { internal.ui.ticketLocked = v; }
+    set ticketLocked(v) { internal.ui.ticketLocked = v; },
+    get graphAssignees() { return [...internal.ui.graphAssignees]; },
+    set graphAssignees(v) { internal.ui.graphAssignees = [...v]; }
 };
 
 export const state = backwardCompatState;

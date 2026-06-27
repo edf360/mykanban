@@ -10,7 +10,7 @@ import { renderAllTickets } from './modules/renderer.js';
 import { setupDropZones } from './modules/dragdrop.js';
 import { initModal, openNewModal } from './modules/modal.js';
 import { renderLabelSelect } from './modules/labels.js';
-import { renderAssigneeSelect } from './modules/assignees.js';
+import { renderAssigneeSelect, renderGraphAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
 import { initActual } from './modules/actual.js';
@@ -441,7 +441,6 @@ function initGraphPanelInternal() {
   const graphPanel = document.getElementById('graphPanel');
   const graphPanelBody = document.getElementById('graphPanelBody');
   const graphPanelResizeHandle = document.getElementById('graphPanelResizeHandle');
-  const graphAssigneeFilter = document.getElementById('graphAssigneeFilter');
   const graphLabelSelect = document.getElementById('graphLabelFilter');
   const graphViewSelect = document.getElementById('graphViewSelect');
   const excludeToggleBtn = document.getElementById('graphExcludeToggleBtn');
@@ -456,17 +455,9 @@ function initGraphPanelInternal() {
     return;
   }
 
-  // 担当者リストをドロップダウンに設定
+  // 担当者リストをカスタムドロップダウンに設定
   function populateGraphAssigneeFilter() {
-    if (!graphAssigneeFilter) return;
-    const assignees = state.assigneeSuggestions || [];
-    graphAssigneeFilter.innerHTML = '<option value="">全担当者</option>';
-    assignees.forEach(assignee => {
-      const option = document.createElement('option');
-      option.value = assignee;
-      option.textContent = assignee;
-      graphAssigneeFilter.appendChild(option);
-    });
+    renderGraphAssigneeSelect();
   }
 
   // ラベルリストをドロップダウンに設定
@@ -531,7 +522,7 @@ function initGraphPanelInternal() {
     if (!graphLabelSelect) return;
     const labelName = graphLabelSelect.value;
     const viewType = graphViewSelect?.value || 'matrix';
-    const assigneeFilter = graphAssigneeFilter?.value || '';
+    const assigneeFilter = state.graphAssignees || [];
     if (!labelName) {
       if (matrixContainer) matrixContainer.innerHTML = '';
       if (excludeTicketsList) excludeTicketsList.innerHTML = '';
@@ -548,6 +539,7 @@ function initGraphPanelInternal() {
 
   // 外部からグラフを再描画できるように参照を保持
   refreshGraphPanel = updateGraphPanel;
+  window.refreshGraphPanel = updateGraphPanel;
 
   // bottomLeftButtons の bottom とカンバンボードの高さをグラフパネルの高さに合わせて更新
   function updatePanelLayout(panelHeight) {
@@ -572,11 +564,12 @@ function initGraphPanelInternal() {
     updatePanelLayout(panelHeight);
     if (graphLabelSelect && graphLabelSelect.value) {
       const excludedIds = getExcludedTicketIds();
+      const assigneeFilter = state.graphAssignees || [];
       // 現在のビュータイプに応じて適切な関数を呼び出す
       if (graphViewSelect && graphViewSelect.value === 'timeline') {
-        renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds);
+        renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
       } else {
-        renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds);
+        renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
       }
     }
   };
@@ -592,18 +585,20 @@ function initGraphPanelInternal() {
   }
 
   // グラフ設定を保存
-  function saveGraphSettings() {
+  let saveGraphSettings = function() {
     const settings = loadUserSettings();
     settings.graph = {
       visible: isGraphPanelOpen(),
       label: graphLabelSelect?.value || '',
       viewType: graphViewSelect?.value || 'matrix',
-      assignee: graphAssigneeFilter?.value || '',
+      assignees: state.graphAssignees || [],
       excludedTicketIds: Array.from(excludedTicketSet),
       height: graphPanel?.style.height || '20vh'
     };
     saveUserSettings(settings);
-  }
+  };
+  // 外部から呼び出せるように公開
+  window.saveGraphSettings = saveGraphSettings;
 
   // グラフパネルを閉じる関数（他のモジュールから呼び出し可能）
   function closeGraphPanelInternal() {
@@ -675,18 +670,19 @@ function initGraphPanelInternal() {
           // 保存された設定を復元
           const savedSettings = loadUserSettings();
           const savedLabel = savedSettings?.graph?.label || '';
-          const savedAssignee = savedSettings?.graph?.assignee || '';
+          // 後方互換: 旧単一文字列形式 (assignee) も対応
+          const savedAssignees = Array.isArray(savedSettings?.graph?.assignees)
+            ? savedSettings.graph.assignees
+            : (savedSettings?.graph?.assignee ? [savedSettings.graph.assignee] : []);
           if (savedLabel && labels.includes(savedLabel)) {
             graphLabelSelect.value = savedLabel;
           } else {
             graphLabelSelect.value = labels[0];
           }
-          if (graphAssigneeFilter && savedAssignee) {
-            const assignees = state.assigneeSuggestions || [];
-            if (assignees.includes(savedAssignee)) {
-              graphAssigneeFilter.value = savedAssignee;
-            }
-          }
+          // 担当者フィルタを復元
+          const validAssignees = savedAssignees.filter(a => (state.assigneeSuggestions || []).includes(a));
+          state.graphAssignees = validAssignees;
+          renderGraphAssigneeSelect();
           updateGraphPanel();
         }
         saveGraphSettings();
@@ -702,13 +698,7 @@ function initGraphPanelInternal() {
     });
   }
 
-  // 担当者フィルタ変更イベント
-  if (graphAssigneeFilter) {
-    graphAssigneeFilter.addEventListener('change', () => {
-      updateGraphPanel();
-      saveGraphSettings();
-    });
-  }
+  // 担当者フィルタ変更イベントは assignees.js の renderGraphAssigneeSelect 内で処理
 
   // ビュー切替イベント
   if (graphViewSelect) {
