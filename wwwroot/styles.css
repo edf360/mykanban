@@ -1220,16 +1220,6 @@ body {
 
 .modal-btn.save:hover { background: rgb(76, 112, 166); }
 
-.modal-btn.save-multi { background: rgb(88, 124, 179); color: #fff; }
-
-.modal-btn.save-multi:hover { background: rgb(76, 112, 166); }
-
-.modal-btn.save-multi:disabled {
-    background: #d1d5db;
-    color: #9ca3af;
-    cursor: not-allowed;
-}
-
 .ticket-details {
     margin-top: 10px;
     padding-top: 10px;

@@ -9,7 +9,7 @@ import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked,
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
-import { createTicket, updateTicket, createTicketsPerAssignee } from './ticketService.js';
+import { createTicket, updateTicket } from './ticketService.js';
 import { renderAllTickets } from './renderer.js';
 import { openActualModal } from './actual.js';
 
@@ -28,7 +28,6 @@ const el = {
     cancelBtn: null,
     saveBtn: null,
     hamburgerBtn: null,
-    savePerAssigneeBtn: null,
     viewActualBtn: null,
     ticketCategoryDisplay: null,
 };
@@ -53,7 +52,6 @@ function cacheElements() {
     el.cancelBtn = document.getElementById('cancelBtn');
     el.saveBtn = document.getElementById('saveBtn');
     el.hamburgerBtn = document.getElementById('modalHamburgerBtn');
-    el.savePerAssigneeBtn = document.getElementById('savePerAssigneeBtn');
     el.viewActualBtn = document.getElementById('viewActualBtn');
     el.ticketCategoryDisplay = document.getElementById('ticketCategoryDisplay');
 }
@@ -147,9 +145,6 @@ function _openModal(options) {
     updateHamburgerMenu();
     applyEmergencyToModal();
     applyLockToModal();
-    
-    // 担当者ごとに生成ボタンの表示/非表示（新規作成時のみ表示）
-    updateSavePerAssigneeButton();
     
     // 実績登録ボタンの有効/無効（新規チケット時は無効）
     updateActualButton();
@@ -553,18 +548,6 @@ export async function copyTicket() {
 }
 
 /**
- * 担当者ごとに生成ボタンを更新
- * 新規作成時 + 担当者が2人以上の場合のみ有効
- */
-function updateSavePerAssigneeButton() {
-    if (!el.savePerAssigneeBtn) return;
-    const isEdit = !!getEditingTicketId();
-    const assignees = getCurrentAssignees();
-    const canCreate = !isEdit && assignees.length >= 2;
-    el.savePerAssigneeBtn.disabled = !canCreate;
-}
-
-/**
  * 実績登録ボタンの有効/無効を更新
  * 新規チケット時は無効、既存チケット編集時は有効
  */
@@ -572,44 +555,6 @@ function updateActualButton() {
     if (!el.viewActualBtn) return;
     const isEdit = !!getEditingTicketId();
     el.viewActualBtn.disabled = !isEdit;
-}
-
-/**
- * 担当者ごとにチケットを生成
- */
-export async function saveTicketsPerAssignee() {
-    const isEdit = !!getEditingTicketId();
-    const assignees = getCurrentAssignees();
-    if (isEdit || assignees.length < 2) return;
-    
-    // 子タスクメモパネルの値を保存
-    saveChildTaskMemoFromPanel();
-    let data = collectFormData();
-    if (!data) return;
-    
-    try {
-        const column = getNewTicketColumn() || 'todo';
-        const baseData = {
-            title: data.title,
-            startDate: data.startDate,
-            endDate: data.endDate,
-            effort: data.effort,
-            labels: data.labels,
-            memo: data.memo,
-            childTasks: data.childTasks,
-            isLocked: data.isLocked,
-            isEmergency: data.isEmergency,
-            category: data.category,
-            column,
-        };
-        await createTicketsPerAssignee(baseData, assignees);
-    } catch (error) {
-        console.error('Failed to create tickets per assignee:', error);
-        alert('保存に失敗しました: ' + error.message);
-        return;
-    }
-    
-    closeModal();
 }
 
 /**
@@ -631,9 +576,6 @@ export function initModal() {
             e.stopPropagation();
             toggleHamburgerMenu();
         });
-    }
-    if (el.savePerAssigneeBtn) {
-        el.savePerAssigneeBtn.addEventListener('click', saveTicketsPerAssignee);
     }
     if (el.viewActualBtn) {
         el.viewActualBtn.addEventListener('click', () => {
@@ -663,11 +605,6 @@ export function initModal() {
     if (labelDropdown) {
         labelDropdown.addEventListener('click', () => clearChildTaskMemoPanel());
     }
-    
-    // 担当者変更時にボタンの状態を更新
-    on('modal-changed', () => {
-        updateSavePerAssigneeButton();
-    });
     
     // キーボードショートカット（ESC=キャンセル、Enter=保存）- ドキュメントレベルで処理
     const handleDocumentKeydown = (e) => {

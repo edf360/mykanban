@@ -26,24 +26,3 @@ export async function updateTicket(ticketId, data) {
     // 描画はSignalR通知に任せる
     return updated;
 }
-
-/**
- * 担当者ごとに複数のチケットを生成
- * baseData: 共通のチケットデータ（assignees/mainAssigneeは含まない、isLockedは継承）
- */
-export async function createTicketsPerAssignee(baseData, assignees) {
-    const created = [];
-    for (const assignee of assignees) {
-        const ticketData = {
-            ...baseData,
-            assignees: [assignee],
-            mainAssignee: assignee,
-            column: baseData.column || 'todo',
-        };
-        const result = await apiRequest('POST', API_BASE, ticketData);
-        addTicket(result);
-        created.push(result);
-    }
-    // 描画はSignalR通知に任せる
-    return created;
-}
