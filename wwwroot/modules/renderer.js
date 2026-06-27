@@ -4,6 +4,7 @@
  */
 
 import { API_BASE, state, escapeHtml, labelColorCacheInvalidated, getSettings, getAllTickets, getTicket, setTicket, removeTicket, updateTicketField } from './state.js';
+import { loadUserSettings, saveUserSettings } from './userSettings.js';
 import { apiRequest, loadTickets } from './api.js';
 import { renderProgressChart } from './charts.js';
 import { openEditModal } from './modal.js';
@@ -194,8 +195,9 @@ export function createTicketElement(data) {
     ticket.dataset.id = data.ticketId;
     setTicket(data.ticketId, data);
     
-    // 折り畳み状態の復元
-    if (data.isCollapsed) {
+    // 折り畳み状態の復元（ユーザー設定から）
+    const userSettings = loadUserSettings();
+    if (userSettings.collapsedTickets && userSettings.collapsedTickets.includes(data.ticketId)) {
         ticket.classList.add('collapsed');
     }
 
@@ -323,8 +325,21 @@ export function createTicketElement(data) {
         collapseBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             ticket.classList.toggle('collapsed');
-            // 折り畳み状態を保存
-            updateTicketField(ticket.dataset.id, 'isCollapsed', ticket.classList.contains('collapsed'));
+            // 折り畳み状態をユーザー設定に保存
+            const userSettings = loadUserSettings();
+            if (!userSettings.collapsedTickets) {
+                userSettings.collapsedTickets = [];
+            }
+            const ticketId = ticket.dataset.id;
+            const isCollapsed = ticket.classList.contains('collapsed');
+            if (isCollapsed) {
+                if (!userSettings.collapsedTickets.includes(ticketId)) {
+                    userSettings.collapsedTickets.push(ticketId);
+                }
+            } else {
+                userSettings.collapsedTickets = userSettings.collapsedTickets.filter(id => id !== ticketId);
+            }
+            saveUserSettings(userSettings);
         });
     }
     
@@ -461,7 +476,7 @@ export function createTicketElement(data) {
                 const archivedTicket = result;
                 setTicket(ticket.dataset.id, archivedTicket);
             }
-            renderAllTickets();
+            // 描画はSignalR通知に任せる
         } catch (error) {
             console.error('Failed to delete ticket:', error);
         }
@@ -490,7 +505,7 @@ export function createTicketElement(data) {
                         reviewState: state
                     });
                     setTicket(ticketId, updated);
-                    renderAllTickets();
+                    // 描画はSignalR通知に任せる
                 } catch (error) {
                     console.error('Failed to update review icon:', error);
                 }

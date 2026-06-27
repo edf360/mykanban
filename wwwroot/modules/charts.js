@@ -494,7 +494,7 @@ let progressMatrixColumnOrder = null;
  * 行: 担当者（設定画面の順番）
  * メインタスクヘッダークリックで子タスク列の表示/非表示をトグル
  */
-export function renderProgressMatrix(container, labelName, excludedTicketIds = []) {
+export function renderProgressMatrix(container, labelName, excludedTicketIds = [], assigneeFilter = '') {
     if (!container) {
         console.warn('renderProgressMatrix: container is null');
         return;
@@ -505,6 +505,10 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
     if (excludedTicketIds.length > 0) {
         const excludedNumIds = excludedTicketIds.map(id => Number(id));
         tickets = tickets.filter(t => !excludedNumIds.includes(Number(t.id)));
+    }
+    // 担当者フィルタ
+    if (assigneeFilter) {
+        tickets = tickets.filter(t => t.assignees && t.assignees.includes(assigneeFilter));
     }
     if (tickets.length === 0) {
         container.innerHTML = '<p class="graph-placeholder">該当するチケットがありません</p>';
@@ -888,13 +892,17 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
  * 縦軸: 担当者（設定画面の順番）
  * 横軸: 作業日（土日・休日除外）
  */
-export function renderTimelineView(container, labelName, excludedTicketIds = []) {
+export function renderTimelineView(container, labelName, excludedTicketIds = [], assigneeFilter = '') {
     if (!container) return;
 
     let tickets = getTicketsByLabel(labelName);
     if (excludedTicketIds.length > 0) {
         const excludedNumIds = excludedTicketIds.map(id => Number(id));
         tickets = tickets.filter(t => !excludedNumIds.includes(Number(t.id)));
+    }
+    // 担当者フィルタ
+    if (assigneeFilter) {
+        tickets = tickets.filter(t => t.assignees && t.assignees.includes(assigneeFilter));
     }
 
     if (tickets.length === 0) {

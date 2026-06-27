@@ -10,6 +10,7 @@ import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
 import { createTicket, updateTicket, createTicketsPerAssignee } from './ticketService.js';
+import { renderAllTickets } from './renderer.js';
 import { openActualModal } from './actual.js';
 
 // ===== DOM要素キャッシュ =====
@@ -290,7 +291,6 @@ function openHamburgerMenu() {
     // ロック状態を取得
     const locked = isTicketLocked();
     const isEdit = !!getEditingTicketId();
-    const category = getCurrentCategory() || '(未設定)';
     
     menu.innerHTML = `
         <div class="modal-menu-item" data-action="lock">
@@ -303,12 +303,12 @@ function openHamburgerMenu() {
             <span class="menu-label">緊急チケット</span>
             <span class="menu-check">${isTicketEmergency() ? '✓' : ''}</span>
         </div>
-        <div class="modal-menu-item${locked ? ' disabled' : ''}" data-action="category">
-            <span class="menu-icon">🏷️</span>
-            <span class="menu-label">集計ID: ${category}</span>
+        ${isEdit ? `
+        <div class="modal-menu-item" data-action="copy">
+            <span class="menu-icon">📄</span>
+            <span class="menu-label">チケットコピー</span>
             <span class="menu-check"></span>
         </div>
-        ${isEdit ? `
         <div class="modal-menu-item" data-action="details">
             <span class="menu-icon">📋</span>
             <span class="menu-label">詳細</span>
@@ -339,9 +339,9 @@ function openHamburgerMenu() {
                 case 'emergency':
                     toggleEmergency();
                     break;
-                case 'category':
-                    openCategoryDialog();
-                    break;
+                case 'copy':
+                    copyTicket();
+                    return; // closeHamburgerMenu()はcopyTicket内で処理
             }
             closeHamburgerMenu();
         });
@@ -495,6 +495,67 @@ export async function saveTicket() {
 }
 
 /**
+ * チケットをコピーして新チケットを作成
+ */
+export async function copyTicket() {
+    const editingId = getEditingTicketId();
+    if (!editingId) return;
+    
+    const sourceTicket = getTicket(editingId);
+    if (!sourceTicket) return;
+    
+    // 子タスクメモパネルの値を保存
+    saveChildTaskMemoFromPanel();
+    
+    // 現在のフォームデータを収集（最新の変更を反映）
+    let formData = collectFormData();
+    if (!formData) return;
+    
+    try {
+        // 新チケットとして作成（ticketId/positionはサーバーで新規生成）
+        // コピー元のチケットと同じカラムに配置
+        const column = sourceTicket.column || 'todo';
+        // 現在のチケットを保存
+        await updateTicket(editingId, formData);
+        const newData = {
+            title: formData.title,
+            startDate: formData.startDate,
+            endDate: formData.endDate,
+            effort: formData.effort,
+            assignees: formData.assignees,
+            mainAssignee: formData.mainAssignee,
+            labels: formData.labels,
+            memo: formData.memo,
+            childTasks: formData.childTasks,
+            isLocked: formData.isLocked,
+            isEmergency: formData.isEmergency,
+            category: formData.category,
+            column,
+        };
+        
+        closeHamburgerMenu();
+        
+        // 現在のチケットをOKとして閉じる
+        closeModal();
+        
+        // 新チケットを作成
+        await createTicket(newData);
+        
+        // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
+        renderAllTickets();
+        
+        // 新チケット編集画面を開く
+        setTimeout(() => {
+            openEditModal(newData.ticketId);
+        }, MODAL_ANIMATION_DURATION);
+        
+    } catch (error) {
+        console.error('Failed to copy ticket:', error);
+        alert('コピーに失敗しました: ' + error.message);
+    }
+}
+
+/**
  * 担当者ごとに生成ボタンを更新
  * 新規作成時 + 担当者が2人以上の場合のみ有効
  */
@@ -611,8 +672,8 @@ export function initModal() {
         updateSavePerAssigneeButton();
     });
     
-    // キーボードショートカット（ESC=キャンセル、Enter=保存）
-    el.modal.addEventListener('keydown', (e) => {
+    // キーボードショートカット（ESC=キャンセル、Enter=保存）- ドキュメントレベルで処理
+    const handleDocumentKeydown = (e) => {
         // モーダルがアクティブな時のみ有効
         if (!el.modal.classList.contains('active')) return;
         
@@ -630,7 +691,8 @@ export function initModal() {
             e.preventDefault();
             saveTicket();
         }
-    });
+    };
+    document.addEventListener('keydown', handleDocumentKeydown);
     
     // モーダル外クリックで保存
     // テキスト選択ドラッグによる誤判定を防ぐため、mousedown/mouseup で判断

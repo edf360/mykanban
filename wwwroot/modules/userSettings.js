@@ -22,10 +22,11 @@ function getKey() {
 export function getDefaultSettings() {
   return {
     filter: { visible: true, assignee: '', keyword: '', label: '', mainOnly: false },
-    graph: { visible: false, label: '', viewType: 'matrix', excludedTicketIds: [], height: null },
+    graph: { visible: false, label: '', viewType: 'matrix', excludedTicketIds: [], height: null, assignee: '' },
     archive: { visible: false },
     memo: { visible: false },
-    childTasks: { hidden: [] }
+    childTasks: { hidden: [] },
+    collapsedTickets: []
   };
 }
 
@@ -47,7 +48,8 @@ export function loadUserSettings() {
       graph: { ...defaults.graph, ...(parsed.graph || {}) },
       archive: { ...defaults.archive, ...(parsed.archive || {}) },
       memo: { ...defaults.memo, ...(parsed.memo || {}) },
-      childTasks: { ...defaults.childTasks, ...(parsed.childTasks || {}) }
+      childTasks: { ...defaults.childTasks, ...(parsed.childTasks || {}) },
+      collapsedTickets: parsed.collapsedTickets || defaults.collapsedTickets
     };
   } catch {
     return getDefaultSettings();

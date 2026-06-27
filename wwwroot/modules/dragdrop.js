@@ -4,7 +4,7 @@
 
 import { API_BASE, state, getAllTickets, getTicket, updateTicketField } from './state.js';
 import { apiRequest, loadTickets } from './api.js';
-import { draggedTicket, removeDropIndicators, renderAllTickets, ticketMatchesFilter } from './renderer.js';
+import { draggedTicket, removeDropIndicators, ticketMatchesFilter } from './renderer.js';
 
 /**
  * ドロップゾーンを設定
@@ -150,14 +150,11 @@ export function setupDropZones() {
                 
                 // サーバー側で中間値を計算してもらうためにインデックスを送信
                 await apiRequest('PATCH', `${API_BASE}/${ticketId}/column`, { column: newColumn, insertIndex: insertIdx });
-                
-                // サーバーから最新のチケットデータを取得してから再描画（isArchived/column/Position 全て最新化）
-                await loadTickets();
-                renderAllTickets();
+                // 描画はSignalR通知に任せる
             } catch (error) {
                 console.error('Failed to update column:', error);
+                // エラー時はサーバー状態を復元（描画はSignalR通知に任せる）
                 await loadTickets();
-                renderAllTickets();
             }
         });
     });

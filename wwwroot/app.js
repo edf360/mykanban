@@ -441,6 +441,7 @@ function initGraphPanelInternal() {
   const graphPanel = document.getElementById('graphPanel');
   const graphPanelBody = document.getElementById('graphPanelBody');
   const graphPanelResizeHandle = document.getElementById('graphPanelResizeHandle');
+  const graphAssigneeFilter = document.getElementById('graphAssigneeFilter');
   const graphLabelSelect = document.getElementById('graphLabelFilter');
   const graphViewSelect = document.getElementById('graphViewSelect');
   const excludeToggleBtn = document.getElementById('graphExcludeToggleBtn');
@@ -453,6 +454,19 @@ function initGraphPanelInternal() {
   if (!graphPanel) {
     logError('[app] graphPanel not found in DOM');
     return;
+  }
+
+  // 担当者リストをドロップダウンに設定
+  function populateGraphAssigneeFilter() {
+    if (!graphAssigneeFilter) return;
+    const assignees = state.assigneeSuggestions || [];
+    graphAssigneeFilter.innerHTML = '<option value="">全担当者</option>';
+    assignees.forEach(assignee => {
+      const option = document.createElement('option');
+      option.value = assignee;
+      option.textContent = assignee;
+      graphAssigneeFilter.appendChild(option);
+    });
   }
 
   // ラベルリストをドロップダウンに設定
@@ -517,6 +531,7 @@ function initGraphPanelInternal() {
     if (!graphLabelSelect) return;
     const labelName = graphLabelSelect.value;
     const viewType = graphViewSelect?.value || 'matrix';
+    const assigneeFilter = graphAssigneeFilter?.value || '';
     if (!labelName) {
       if (matrixContainer) matrixContainer.innerHTML = '';
       if (excludeTicketsList) excludeTicketsList.innerHTML = '';
@@ -525,9 +540,9 @@ function initGraphPanelInternal() {
     populateExcludeTicketsSelect(labelName);
     const excludedIds = getExcludedTicketIds();
     if (viewType === 'timeline') {
-      renderTimelineView(matrixContainer, labelName, excludedIds);
+      renderTimelineView(matrixContainer, labelName, excludedIds, assigneeFilter);
     } else {
-      renderProgressMatrix(matrixContainer, labelName, excludedIds);
+      renderProgressMatrix(matrixContainer, labelName, excludedIds, assigneeFilter);
     }
   }
 
@@ -583,6 +598,7 @@ function initGraphPanelInternal() {
       visible: isGraphPanelOpen(),
       label: graphLabelSelect?.value || '',
       viewType: graphViewSelect?.value || 'matrix',
+      assignee: graphAssigneeFilter?.value || '',
       excludedTicketIds: Array.from(excludedTicketSet),
       height: graphPanel?.style.height || '20vh'
     };
@@ -653,15 +669,23 @@ function initGraphPanelInternal() {
           bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
         }
         populateGraphLabelSelect();
+        populateGraphAssigneeFilter();
         const labels = getLabelSuggestions();
         if (graphLabelSelect && labels && labels.length > 0) {
-          // 保存されたラベルを復元（なければ最初のラベルを選択）
+          // 保存された設定を復元
           const savedSettings = loadUserSettings();
           const savedLabel = savedSettings?.graph?.label || '';
+          const savedAssignee = savedSettings?.graph?.assignee || '';
           if (savedLabel && labels.includes(savedLabel)) {
             graphLabelSelect.value = savedLabel;
           } else {
             graphLabelSelect.value = labels[0];
+          }
+          if (graphAssigneeFilter && savedAssignee) {
+            const assignees = state.assigneeSuggestions || [];
+            if (assignees.includes(savedAssignee)) {
+              graphAssigneeFilter.value = savedAssignee;
+            }
           }
           updateGraphPanel();
         }
@@ -673,6 +697,14 @@ function initGraphPanelInternal() {
   // ラベル変更イベント
   if (graphLabelSelect) {
     graphLabelSelect.addEventListener('change', () => {
+      updateGraphPanel();
+      saveGraphSettings();
+    });
+  }
+
+  // 担当者フィルタ変更イベント
+  if (graphAssigneeFilter) {
+    graphAssigneeFilter.addEventListener('change', () => {
       updateGraphPanel();
       saveGraphSettings();
     });
@@ -836,8 +868,20 @@ function startSignalRConnection() {
     .withAutomaticReconnect()
     .build();
 
-  // チケット変更イベント受信時に画面を更新
+  // チケット変更イベント受信時に画面を更新（デバウンス付き）
+  let ticketChangedTimeout = null;
   signalRConnection.on('TicketChanged', async () => {
+    // 短時間内の重複通知を無視（ローカル操作後のSignalR通知と重複防止）
+    if (ticketChangedTimeout !== null) {
+      console.log('[SignalR] TicketChanged ignored (debounce)');
+      clearTimeout(ticketChangedTimeout);
+      ticketChangedTimeout = null;
+      return;
+    }
+    ticketChangedTimeout = setTimeout(() => {
+      ticketChangedTimeout = null;
+    }, 500);
+    
     console.log('[SignalR] TicketChanged received, refreshing...');
     try {
       await loadTickets();
