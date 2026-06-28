@@ -26,7 +26,8 @@ export function getDefaultSettings() {
     archive: { visible: false },
     memo: { visible: false },
     childTasks: { hidden: [] },
-    collapsedTickets: []
+    collapsedTickets: [],
+    actual: { visible: false, assignee: '', columns: ['todo', 'doing', 'done'], month: '' }
   };
 }
 
@@ -49,7 +50,8 @@ export function loadUserSettings() {
       archive: { ...defaults.archive, ...(parsed.archive || {}) },
       memo: { ...defaults.memo, ...(parsed.memo || {}) },
       childTasks: { ...defaults.childTasks, ...(parsed.childTasks || {}) },
-      collapsedTickets: parsed.collapsedTickets || defaults.collapsedTickets
+      collapsedTickets: parsed.collapsedTickets || defaults.collapsedTickets,
+      actual: { ...defaults.actual, ...(parsed.actual || {}) }
     };
   } catch {
     return getDefaultSettings();

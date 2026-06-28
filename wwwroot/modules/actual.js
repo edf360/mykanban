@@ -174,6 +174,14 @@ function renderActualList() {
         dateSpan.className = 'actual-date';
         dateSpan.textContent = formatDate(new Date(actual.date));
 
+        // 子タスクインデックスがある場合は表示
+        if (actual.childTaskIndex !== null && actual.childTaskIndex !== undefined) {
+            const childSpan = document.createElement('span');
+            childSpan.className = 'actual-child-label';
+            childSpan.textContent = `子タスク#${actual.childTaskIndex}`;
+            row.appendChild(childSpan);
+        }
+
         const hoursSpan = document.createElement('span');
         hoursSpan.className = 'actual-hours';
         hoursSpan.textContent = `${Math.round(actual.hours)}h`;
@@ -183,7 +191,7 @@ function renderActualList() {
         deleteBtn.textContent = '削除';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            deleteActual(actual.date);
+            deleteActual(actual.date, actual.childTaskIndex);
         });
 
         // 行クリックで編集モードに
@@ -295,13 +303,18 @@ async function saveActual() {
 /**
  * 実績を削除
  */
-async function deleteActual(date) {
+async function deleteActual(date, childTaskIndex) {
     if (!currentTicketId) return;
 
     const dateStr = date.split('T')[0];
 
+    let url = `${API_BASE}/${currentTicketId}/actuals/${dateStr}`;
+    if (childTaskIndex !== null && childTaskIndex !== undefined) {
+        url += `?childTaskIndex=${childTaskIndex}`;
+    }
+
     try {
-        const response = await fetch(`${API_BASE}/${currentTicketId}/actuals/${dateStr}`, {
+        const response = await fetch(url, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${getToken()}`
@@ -318,8 +331,12 @@ async function deleteActual(date) {
             throw new Error(errorMessage);
         }
 
-        // 一覧を更新
-        actuals = actuals.filter(a => a.date.split('T')[0] !== dateStr);
+        // 一覧を更新（TicketId + Date + ChildTaskIndexで一致するものを削除）
+        actuals = actuals.filter(a => {
+            const sameDate = a.date.split('T')[0] === dateStr;
+            const sameChild = a.childTaskIndex === childTaskIndex;
+            return !(sameDate && sameChild);
+        });
 
         // UIを更新
         renderActualList();
@@ -383,4 +400,12 @@ export function initActual() {
             }
         });
     }
+    
+    // ESCキーで閉じる
+    el.actualModal.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeActualModal();
+        }
+    });
 }

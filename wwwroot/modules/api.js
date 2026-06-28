@@ -179,3 +179,15 @@ export async function loadHistory(ticketId) {
         throw error;
     }
 }
+
+/**
+ * 簡易APIクライアントオブジェクト
+ * GET/POST/PUT/PATCH/DELETEメソッドを提供
+ */
+export const api = {
+    get: (url) => apiRequest('GET', url, null),
+    post: (url, body) => apiRequest('POST', url, body),
+    put: (url, body) => apiRequest('PUT', url, body),
+    patch: (url, body) => apiRequest('PATCH', url, body),
+    delete: (url) => apiRequest('DELETE', url, null),
+};

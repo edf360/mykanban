@@ -180,6 +180,7 @@
         <button class="floating-icon-btn archive-toggle-bottom-btn" id="archiveToggleBtn" title="アーカイブを表示/非表示">📦</button>
         <button class="floating-icon-btn memo-toggle-bottom-btn hidden" id="memoToggleBtn" title="メモを表示/非表示">📝</button>
         <button class="floating-icon-btn logs-btn" id="logsBtn" title="ログ">📋</button>
+        <button class="floating-icon-btn actual-input-btn" id="actualInputBtn" title="実績入力">⏱</button>
         <button class="floating-icon-btn logout-btn hidden" id="logoutBtn" title="ログアウト">🚪</button>
     </div>
 
@@ -363,6 +364,42 @@
             </div>
             <div class="actual-list-header">過去の実績</div>
             <div class="actual-list" id="actualList"></div>
+        </div>
+    </div>
+
+    <!-- 実績入力ウィンドウ（初期非表示） -->
+    <div class="modal-overlay" id="actualModalOverlay">
+        <div class="modal actual-table-modal">
+            <div class="modal-header">
+                <div class="modal-title">⏱ 実績入力</div>
+            </div>
+            <div class="actual-panel-controls">
+                <div class="actual-control-group">
+                    <label for="actualTableMonthInput">対象月:</label>
+                    <input type="month" id="actualTableMonthInput">
+                </div>
+                <div class="actual-control-group">
+                    <label>対象:</label>
+                    <div class="custom-dropdown" id="actualColumnDropdown">
+                        <button type="button" class="dropdown-toggle-btn" id="actualColumnToggleBtn">対象を選択 ▼</button>
+                        <div class="dropdown-list" id="actualColumnList"></div>
+                    </div>
+                </div>
+                <div class="actual-control-group">
+                    <label for="actualTableAssigneeSelect">担当者:</label>
+                    <select id="actualTableAssigneeSelect">
+                        <option value="">すべて</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actual-table-container" id="actualTableContainer">
+                <div class="actual-table-wrapper">
+                    <div class="actual-table-loading" id="actualTableLoading">
+                        <div class="spinner"></div>
+                        <span>読み込み中...</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

@@ -14,6 +14,7 @@ import { renderAssigneeSelect, renderGraphAssigneeSelect } from './modules/assig
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
 import { initActual } from './modules/actual.js';
+import { initActualTable, saveActualState } from './modules/actualTable.js';
 import { populateAssigneeFilter, populateLabelFilter, initFilter, adjustBoardForFilterOnInit } from './modules/filter.js';
 import { initArchive } from './modules/archive.js';
 import { initMemo, updateMemoColumn } from './modules/memo.js';
@@ -193,6 +194,9 @@ async function initApp() {
 
     // 13. グラフパネル初期化（DOM準備後）
     initGraphPanelInternal();
+    
+    // 14. 実績入力パネル初期化
+    initActualTablePanel();
 
     // アプリ画面を表示
     showAppScreen();
@@ -891,6 +895,62 @@ function initGraphPanelInternal() {
         g.excludedTicketIds.forEach(id => excludedTicketSet.add(id));
       }
     }
+  }
+}
+
+// ===== 実績入力ウィンドウ =====
+function initActualTablePanel() {
+  const actualToggleBtn = document.getElementById('actualInputBtn');
+  const actualModalOverlay = document.getElementById('actualModalOverlay');
+  const assigneeSelect = document.getElementById('actualTableAssigneeSelect');
+
+  if (!actualModalOverlay) {
+    logError('[app] actualModalOverlay not found in DOM');
+    return;
+  }
+
+  // 担当者フィルタを初期化（検索ウィンドウの担当者と同じ）
+  const assignees = state.assigneeSuggestions || [];
+  if (assigneeSelect) {
+    assigneeSelect.innerHTML = '<option value="">全担当者</option>';
+    assignees.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a;
+      opt.textContent = a;
+      assigneeSelect.appendChild(opt);
+    });
+    // 保存された担当者を復元（なければフィルタの担当者を使用）
+    const savedSettings = loadUserSettings();
+    const savedAssignee = savedSettings?.actual?.assignee || '';
+    if (savedAssignee) {
+      assigneeSelect.value = savedAssignee;
+    } else {
+      const filterAssignee = document.getElementById('filterAssignee');
+      if (filterAssignee && filterAssignee.value) {
+        assigneeSelect.value = filterAssignee.value;
+      }
+    }
+  }
+
+  // トグルボタン
+  if (actualToggleBtn) {
+    actualToggleBtn.addEventListener('click', () => {
+      if (actualModalOverlay.classList.contains('active')) {
+        actualModalOverlay.classList.remove('active');
+        saveActualState();
+      } else {
+        actualModalOverlay.classList.add('active');
+        // 表を初期描画
+        initActualTable();
+      }
+    });
+  }
+
+  // F5後に実績入力画面を復元
+  const savedSettings = loadUserSettings();
+  if (savedSettings?.actual?.visible) {
+    actualModalOverlay.classList.add('active');
+    initActualTable();
   }
 }
 

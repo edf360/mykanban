@@ -28,4 +28,9 @@ public class TicketActual
     /// 作業時間（時間単位、小数点1桁）
     /// </summary>
     public double Hours { get; set; }
+    
+    /// <summary>
+    /// 子タスクインデックス（null=親チケット自身）
+    /// </summary>
+    public int? ChildTaskIndex { get; set; }
 }

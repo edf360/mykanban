@@ -1553,6 +1553,13 @@ body {
 
 .floating-icon-btn.active { background: rgb(88, 124, 179); }
 
+/* 実績モーダル表示中は左下ボタンを無効化 */
+body:has(#actualModal.active) .bottom-left-buttons .floating-icon-btn,
+body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
+    pointer-events: none;
+    opacity: 0.4;
+}
+
 .archive-toggle-bottom-btn {
     position: static;
     z-index: 10000;
@@ -2988,3 +2995,218 @@ body {
     max-width: 200px;
 }
 
+/* ===== 実績入力ウィンドウ ===== */
+
+.actual-table-modal {
+    width: 95vw;
+    height: 95vh;
+    max-width: 95vw;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.actual-panel-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    position: relative;
+    z-index: 10;
+    border-bottom: 1px solid var(--panel-border);
+    flex-wrap: nowrap;
+}
+
+.actual-control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.actual-panel-controls .custom-dropdown {
+    width: auto;
+    flex-shrink: 0;
+}
+
+.actual-panel-controls .dropdown-toggle-btn {
+    width: auto;
+    white-space: nowrap;
+}
+
+.actual-panel-controls label {
+    font-size: 13px;
+    color: var(--gray-600);
+    font-weight: 500;
+}
+
+.actual-panel-controls select {
+    padding: 4px 8px;
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+}
+
+.actual-panel-controls input[type="month"] {
+    padding: 4px 8px;
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.actual-table-container {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+}
+
+.actual-table-wrapper {
+    padding: 8px;
+}
+
+.actual-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+}
+
+.actual-table th,
+.actual-table td {
+    border: 1px solid var(--gray-200);
+    padding: 4px 6px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.actual-table thead th {
+    font-weight: 600;
+    color: var(--gray-700);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--panel-bg);
+}
+
+.actual-table .row-header {
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 2;
+    text-align: left;
+    min-width: 200px;
+    font-weight: 500;
+}
+
+.actual-table th.row-header {
+    background: var(--panel-header-bg);
+    z-index: 6;
+}
+
+.actual-table .ticket-header {
+    background: var(--primary-light);
+    font-weight: 600;
+}
+
+.actual-table tr.ticket-header .editable-cell {
+    background: var(--primary-light);
+    font-weight: 600;
+}
+
+.actual-table tr.ticket-header .editable-cell:focus {
+    background: var(--primary-light);
+}
+
+.actual-table .child-task-row .row-header {
+    padding-left: 20px;
+    font-weight: 400;
+    color: var(--gray-600);
+}
+
+.actual-table .friday-border {
+    border-right: 3px solid var(--gray-400);
+}
+
+.actual-table .monday-indent {
+    padding-left: 10px;
+}
+
+.actual-table .editable-cell {
+    outline: none;
+    text-align: right;
+    font-size: 12px;
+    min-width: 50px;
+    cursor: text;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.actual-table .editable-cell:hover {
+    background: var(--gray-50);
+}
+
+.actual-table .editable-cell:focus {
+    background: white;
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+.actual-table .child-task-cell {
+    background: var(--gray-50);
+}
+
+.actual-table .child-task-cell:focus {
+    background: white;
+}
+
+.actual-table .day-header {
+    min-width: 55px;
+}
+
+.actual-table .day-name {
+    display: block;
+    font-size: 10px;
+    color: var(--gray-500);
+    font-weight: 400;
+}
+
+/* 実績入力表 ローディングオーバーレイ */
+.actual-table-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.85);
+    z-index: 10;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--gray-600);
+}
+
+.actual-table-loading.hidden {
+    display: none;
+}
+
+.actual-table-container {
+    position: relative;
+}
+
+.spinner {
+    width: 36px;
+    height: 36px;
+    border: 4px solid var(--gray-200);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

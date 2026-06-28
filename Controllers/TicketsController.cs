@@ -236,6 +236,20 @@ public class TicketsController : ControllerBase
     // ===== 実績（TicketActual）CRUD =====
 
     /// <summary>
+    /// 複数のチケットの実績をバッチで取得
+    /// </summary>
+    [HttpGet("actuals/batch")]
+    public async Task<ActionResult<List<TicketActual>>> GetActualsBatch([FromQuery] List<string> ticketIds)
+    {
+        if (ticketIds == null || ticketIds.Count == 0)
+            return Ok(new List<TicketActual>());
+        var actuals = await _dbContext.TicketActuals
+            .Where(a => ticketIds.Contains(a.TicketId))
+            .ToListAsync();
+        return Ok(actuals);
+    }
+
+    /// <summary>
     /// チケットの実績一覧を取得（日付降順）
     /// </summary>
     [HttpGet("{id}/actuals")]
@@ -266,9 +280,9 @@ public class TicketsController : ControllerBase
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
 
-        // 既存の実績を確認
+        // 既存の実績を確認（TicketId + Date + ChildTaskIndexで一意）
         var existing = await _dbContext.TicketActuals
-            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date);
+            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == dto.ChildTaskIndex);
 
         if (existing != null)
         {
@@ -284,7 +298,8 @@ public class TicketsController : ControllerBase
         {
             TicketId = id,
             Date = dto.Date.Date,
-            Hours = dto.Hours
+            Hours = dto.Hours,
+            ChildTaskIndex = dto.ChildTaskIndex
         };
         _dbContext.TicketActuals.Add(actual);
         await _dbContext.SaveChangesAsync();
@@ -296,7 +311,7 @@ public class TicketsController : ControllerBase
     /// 実績を更新
     /// </summary>
     [HttpPut("{id}/actuals/{date}")]
-    public async Task<ActionResult<TicketActual>> UpdateActual(string id, string date, [FromBody] ActualDto? dto)
+    public async Task<ActionResult<TicketActual>> UpdateActual(string id, string date, [FromQuery] int? childTaskIndex, [FromBody] ActualDto? dto)
     {
         if (dto is null)
             return BadRequest(new { error = "Request body is required" });
@@ -314,7 +329,7 @@ public class TicketsController : ControllerBase
         }
 
         var actual = await _dbContext.TicketActuals
-            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date);
+            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == childTaskIndex);
         if (actual == null)
             return NotFound(new { error = "Actual not found" });
 
@@ -328,7 +343,7 @@ public class TicketsController : ControllerBase
     /// 実績を削除
     /// </summary>
     [HttpDelete("{id}/actuals/{date}")]
-    public async Task<IActionResult> DeleteActual(string id, string date)
+    public async Task<IActionResult> DeleteActual(string id, string date, [FromQuery] int? childTaskIndex = null)
     {
         var ticket = await _ticketService.GetAsync(id);
         if (ticket == null)
@@ -341,7 +356,7 @@ public class TicketsController : ControllerBase
         }
 
         var actual = await _dbContext.TicketActuals
-            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date);
+            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == childTaskIndex);
         if (actual == null)
             return NotFound(new { error = "Actual not found" });
 
@@ -359,4 +374,5 @@ public class ActualDto
 {
     public DateTime Date { get; set; }
     public double Hours { get; set; }
+    public int? ChildTaskIndex { get; set; }
 }
