@@ -1231,3 +1231,302 @@ function escapeHtml(str) {
         .replace(/"/g, '"')
         .replace(/'/g, "\u0026#39;");
 }
+
+// チケットプログレス表の列順序（カスタム並び替え用）
+let ticketProgressColumnOrder = null;
+
+/**
+ * チケットプログレス表を描画
+ * 縦軸: チケット（各行=1チケット）
+ * 横軸: 進捗率（クリックで子タスク展開）/ 担当者 / 期限 / 最終更新日 / 予定工数 / 実績工数
+ */
+export function renderTicketProgress(container, labelName, excludedTicketIds = [], assigneeFilter = []) {
+    if (!container) {
+        console.warn('renderTicketProgress: container is null');
+        return;
+    }
+    
+    let tickets = getTicketsByLabel(labelName);
+    if (excludedTicketIds.length > 0) {
+        const excludedNumIds = excludedTicketIds.map(id => Number(id));
+        tickets = tickets.filter(t => !excludedNumIds.includes(Number(t.id)));
+    }
+    if (Array.isArray(assigneeFilter) && assigneeFilter.length > 0) {
+        tickets = tickets.filter(t => t.assignees && t.assignees.some(a => assigneeFilter.includes(a)));
+    }
+    if (tickets.length === 0) {
+        container.innerHTML = '<p class="graph-placeholder">該当するチケットがありません</p>';
+        return;
+    }
+    
+    // 各チケットの子タスクを収集（done=false のみ）
+    const ticketChildTasks = new Map();
+    tickets.forEach(t => {
+        const childSet = [];
+        if (t.childTasks && Array.isArray(t.childTasks)) {
+            t.childTasks.forEach(ct => {
+                if (!ct.done) {
+                    childSet.push(ct);
+                }
+            });
+        }
+        ticketChildTasks.set(t.id, childSet);
+    });
+    
+    // チケットをソート（進捗率降順、同率ならカラム順）
+    const sortedTickets = [...tickets].sort((a, b) => {
+        const aProgress = sanitizeNum(a.progress, 0);
+        const bProgress = sanitizeNum(b.progress, 0);
+        if (Math.abs(aProgress - bProgress) > 0.01) {
+            return bProgress - aProgress;
+        }
+        const aCol = COLUMN_ORDER.indexOf(a.column || 'todo');
+        const bCol = COLUMN_ORDER.indexOf(b.column || 'todo');
+        return aCol - bCol;
+    });
+    
+    const table = document.createElement('table');
+    table.className = 'ticket-progress-table';
+    
+    // ヘッダー
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    
+    // チケット名列
+    const thTicket = document.createElement('th');
+    thTicket.textContent = 'チケット';
+    headerRow.appendChild(thTicket);
+    
+    // 進捗率列（クリックで子タスク展開可能）
+    const hasAnyChildren = sortedTickets.some(t => (ticketChildTasks.get(t.id) || []).length > 0);
+    const thProgress = document.createElement('th');
+    thProgress.className = hasAnyChildren ? 'main-task-header clickable' : 'main-task-header';
+    thProgress.textContent = '進捗率';
+    thProgress.dataset.columnTitle = 'progress';
+    if (hasAnyChildren) {
+        const prefixSpan = document.createElement('span');
+        prefixSpan.className = 'child-toggle-icon';
+        const visible = childTaskVisibility.get('ticketProgress::progress') || false;
+        prefixSpan.textContent = visible ? '▾' : '▸';
+        prefixSpan.title = visible ? '子タスクを非表示' : '子タスクを表示';
+        thProgress.prepend(prefixSpan);
+    }
+    headerRow.appendChild(thProgress);
+    
+    // 子タスクヘッダー（デフォルト非表示）
+    // 全チケットの子タスクを収集して列を生成
+    const allChildTasks = new Map(); // key -> childTask
+    sortedTickets.forEach(t => {
+        const children = ticketChildTasks.get(t.id) || [];
+        children.forEach(ct => {
+            const key = `${t.id}::${ct.text || '無題'}`;
+            if (!allChildTasks.has(key)) {
+                allChildTasks.set(key, { ticketId: t.id, childTask: ct });
+            }
+        });
+    });
+    
+    allChildTasks.forEach((value, key) => {
+        const childTh = document.createElement('th');
+        childTh.className = 'child-task-header';
+        childTh.dataset.parentTitle = 'progress';
+        const ctCat = value.childTask.category || '';
+        childTh.textContent = ctCat ? `${ctCat} ${value.childTask.text || '無題'}` : (value.childTask.text || '無題');
+        childTh.title = value.childTask.text || '無題';
+        childTh.style.display = 'none';
+        headerRow.appendChild(childTh);
+    });
+    
+    // 属性列ヘッダー
+    const attrColumns = [
+        { key: 'assignees', label: '担当者' },
+        { key: 'deadline', label: '期限' },
+        { key: 'lastUpdated', label: '最終更新日' },
+        { key: 'effort', label: '予定工数' },
+        { key: 'actualEffort', label: '実績工数' }
+    ];
+    attrColumns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col.label;
+        th.className = 'attr-header';
+        headerRow.appendChild(th);
+    });
+    
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // 本文 - 各行=1チケット
+    const tbody = document.createElement('tbody');
+    sortedTickets.forEach(ticket => {
+        const tr = document.createElement('tr');
+        
+        // チケット名列
+        const tdName = document.createElement('td');
+        tdName.textContent = ticket.title || '無題';
+        tdName.title = ticket.title || '無題';
+        tdName.className = 'ticket-name-cell';
+        tr.appendChild(tdName);
+        
+        // 進捗率セル
+        const tdProgress = document.createElement('td');
+        const progress = sanitizeNum(ticket.progress, 0);
+        const color = getProgressColor(progress);
+        
+        const cellDiv = document.createElement('div');
+        cellDiv.className = 'progress-bar-cell';
+        
+        const barDiv = document.createElement('div');
+        barDiv.className = 'progress-bar-mini';
+        const fillDiv = document.createElement('div');
+        fillDiv.className = 'progress-bar-mini-fill';
+        fillDiv.style.width = progress + '%';
+        fillDiv.style.background = color;
+        barDiv.appendChild(fillDiv);
+        
+        const textSpan = document.createElement('span');
+        textSpan.className = 'progress-bar-text';
+        textSpan.textContent = Math.round(progress) + '%';
+        
+        cellDiv.appendChild(barDiv);
+        cellDiv.appendChild(textSpan);
+        tdProgress.appendChild(cellDiv);
+        tr.appendChild(tdProgress);
+        
+        // 子タスクセル
+        const children = ticketChildTasks.get(ticket.id) || [];
+        allChildTasks.forEach((value, key) => {
+            const childTd = document.createElement('td');
+            childTd.className = 'child-task-cell';
+            childTd.dataset.parentTitle = 'progress';
+            childTd.style.display = 'none';
+            
+            if (value.ticketId === ticket.id) {
+                const ct = value.childTask;
+                const ctProgress = sanitizeNum(ct.progress, 0);
+                const cColor = getProgressColor(ctProgress);
+                const cDiv = document.createElement('div');
+                cDiv.className = 'progress-bar-cell';
+                
+                const cBar = document.createElement('div');
+                cBar.className = 'progress-bar-mini';
+                const cFill = document.createElement('div');
+                cFill.className = 'progress-bar-mini-fill';
+                cFill.style.width = ctProgress + '%';
+                cFill.style.background = cColor;
+                cBar.appendChild(cFill);
+                
+                const cText = document.createElement('span');
+                cText.className = 'progress-bar-text';
+                cText.textContent = Math.round(ctProgress) + '%';
+                
+                cDiv.appendChild(cBar);
+                cDiv.appendChild(cText);
+                childTd.appendChild(cDiv);
+            } else {
+                const span = document.createElement('span');
+                span.style.color = '#d1d5db';
+                span.textContent = '—';
+                childTd.appendChild(span);
+            }
+            
+            tr.appendChild(childTd);
+        });
+        
+        // 担当者
+        const tdAssignees = document.createElement('td');
+        tdAssignees.textContent = ticket.assignees && ticket.assignees.length > 0 ? ticket.assignees.join(', ') : '—';
+        tr.appendChild(tdAssignees);
+        
+        // 期限
+        const tdDeadline = document.createElement('td');
+        tdDeadline.textContent = ticket.dueDate ? ticket.dueDate.split('T')[0] : '—';
+        tr.appendChild(tdDeadline);
+        
+        // 最終更新日（非同期で更新）
+        const tdLastUpdated = document.createElement('td');
+        tdLastUpdated.textContent = '—';
+        tdLastUpdated.dataset.ticketId = ticket.id;
+        tdLastUpdated.className = 'last-updated-cell';
+        tr.appendChild(tdLastUpdated);
+        
+        // 予定工数
+        const tdEffort = document.createElement('td');
+        const effort = sanitizeNum(ticket.effort, 0);
+        tdEffort.textContent = effort > 0 ? effort.toFixed(1) + 'h' : '—';
+        tr.appendChild(tdEffort);
+        
+        // 実績工数（effort × progress / 100）
+        const tdActualEffort = document.createElement('td');
+        if (effort > 0) {
+            const actual = effort * progress / 100;
+            tdActualEffort.textContent = actual.toFixed(1) + 'h';
+        } else {
+            tdActualEffort.textContent = '—';
+        }
+        tr.appendChild(tdActualEffort);
+        
+        tbody.appendChild(tr);
+    });
+    
+    table.appendChild(tbody);
+    
+    // 進捗率ヘッダーのクリックで子タスク展開/折りたたみ
+    if (hasAnyChildren) {
+        thProgress.addEventListener('click', () => {
+            const isVisible = childTaskVisibility.get('ticketProgress::progress') || false;
+            childTaskVisibility.set('ticketProgress::progress', !isVisible);
+            
+            const icon = thProgress.querySelector('.child-toggle-icon');
+            if (icon) {
+                icon.textContent = !isVisible ? '▾' : '▸';
+                icon.title = !isVisible ? '子タスクを非表示' : '子タスクを表示';
+            }
+            
+            table.querySelectorAll('[data-parent-title="progress"]').forEach(cell => {
+                cell.style.display = !isVisible ? '' : 'none';
+            });
+        });
+    }
+    
+    container.innerHTML = '';
+    container.appendChild(table);
+    
+    // 非同期: 各チケットの最終更新日を取得
+    updateTicketProgressLastUpdatedPerTicket(container, sortedTickets);
+}
+
+/**
+ * 各チケットの最終更新日を非同期で更新
+ */
+async function updateTicketProgressLastUpdatedPerTicket(container, tickets) {
+    const cells = container.querySelectorAll('.last-updated-cell');
+    const cellMap = new Map();
+    cells.forEach(cell => {
+        cellMap.set(cell.dataset.ticketId, cell);
+    });
+    
+    const promises = [];
+    tickets.forEach(ticket => {
+        promises.push((async () => {
+            try {
+                const response = await fetch(`/api/tickets/${ticket.id}/history`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+                });
+                if (response.ok) {
+                    const histories = await response.json();
+                    if (histories && histories.length > 0) {
+                        const date = new Date(histories[0].date);
+                        const cell = cellMap.get(String(ticket.id));
+                        if (cell) {
+                            cell.textContent = date.toISOString().split('T')[0];
+                        }
+                    }
+                }
+            } catch (e) {
+                // スキップ
+            }
+        })());
+    });
+    
+    await Promise.all(promises);
+}

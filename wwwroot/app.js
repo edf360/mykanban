@@ -20,7 +20,7 @@ import { initMemo, updateMemoColumn } from './modules/memo.js';
 import { init as initSettings, load as loadSettings } from './modules/settings.js';
 import { getToken, login, logout, showLoginScreen, showAppScreen, getUsername, isAdmin } from './modules/auth.js';
 import { logInfo, logError, copyToClipboard, exportAsText, getLogBuffer, onUIUpdate } from './modules/logger.js';
-import { renderProgressMatrix, renderTimelineView, getTicketsByLabel } from './modules/charts.js';
+import { renderProgressMatrix, renderTimelineView, renderTicketProgress, getTicketsByLabel } from './modules/charts.js';
 
 // ===== 初期化ガード（= new Set(['initialized']);にするとログインできなくなる =====
 const initGuard = new Set();
@@ -532,6 +532,8 @@ function initGraphPanelInternal() {
     const excludedIds = getExcludedTicketIds();
     if (viewType === 'timeline') {
       renderTimelineView(matrixContainer, labelName, excludedIds, assigneeFilter);
+    } else if (viewType === 'ticketProgress') {
+      renderTicketProgress(matrixContainer, labelName, excludedIds, assigneeFilter);
     } else {
       renderProgressMatrix(matrixContainer, labelName, excludedIds, assigneeFilter);
     }
@@ -566,10 +568,14 @@ function initGraphPanelInternal() {
       const excludedIds = getExcludedTicketIds();
       const assigneeFilter = state.graphAssignees || [];
       // 現在のビュータイプに応じて適切な関数を呼び出す
-      if (graphViewSelect && graphViewSelect.value === 'timeline') {
-        renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
-      } else {
-        renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
+      if (graphViewSelect) {
+        if (graphViewSelect.value === 'timeline') {
+          renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
+        } else if (graphViewSelect.value === 'ticketProgress') {
+          renderTicketProgress(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
+        } else {
+          renderProgressMatrix(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
+        }
       }
     }
   };
@@ -631,63 +637,119 @@ function initGraphPanelInternal() {
   // 外部からグラフパネルを閉じるためのコールバックを登録
   setCloseGraphPanelCallback(closeGraphPanelInternal);
 
+  // グラフパネルを開く共通処理（保存設定復元含む）
+  function openGraphPanelWithRestore() {
+    setGraphPanelOpen(true);
+    if (graphToggleBtn) graphToggleBtn.classList.add('active');
+    // パネル表示
+    graphPanel.classList.remove('hidden');
+    graphPanel.style.display = 'flex';
+    if (graphPanelBody) {
+      graphPanelBody.classList.remove('hidden');
+      graphPanelBody.style.display = 'block';
+    }
+    if (mainContainer) mainContainer.classList.add('graph-panel-open');
+    if (bottomLeftButtons) {
+      bottomLeftButtons.classList.add('graph-panel-open');
+    }
+    const kanbanMain = document.querySelector('.kanban-main');
+    const kanbanBoard = document.querySelector('.kanban-board');
+    const panelHeight = graphPanel.offsetHeight;
+    const remainingHeight = window.innerHeight - panelHeight;
+    if (kanbanMain) {
+      kanbanMain.style.height = `${remainingHeight}px`;
+    }
+    if (kanbanBoard) {
+      kanbanBoard.style.height = `${remainingHeight}px`;
+    }
+    if (bottomLeftButtons) {
+      bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
+    }
+    // ラベルリストを設定
+    populateGraphLabelSelect();
+    // 保存された設定を復元
+    const savedSettings = loadUserSettings();
+    const savedLabel = savedSettings?.graph?.label || '';
+    const savedViewType = savedSettings?.graph?.viewType || 'matrix';
+    // 後方互換: 旧単一文字列形式 (assignee) も対応
+    const savedAssignees = Array.isArray(savedSettings?.graph?.assignees)
+      ? savedSettings.graph.assignees
+      : (savedSettings?.graph?.assignee ? [savedSettings.graph.assignee] : []);
+    const savedExcludedIds = savedSettings?.graph?.excludedTicketIds || [];
+    const savedHeight = savedSettings?.graph?.height || '20vh';
+    
+    const labels = getLabelSuggestions();
+    if (graphLabelSelect && labels && labels.length > 0) {
+      if (savedLabel && labels.includes(savedLabel)) {
+        graphLabelSelect.value = savedLabel;
+      } else {
+        graphLabelSelect.value = labels[0];
+      }
+    }
+    // ビュータイプを復元
+    if (graphViewSelect) {
+      graphViewSelect.value = savedViewType;
+    }
+    // 高さを復元
+    graphPanel.style.height = savedHeight;
+    // 除外チケットセットを復元
+    excludedTicketSet.clear();
+    savedExcludedIds.forEach(id => excludedTicketSet.add(id));
+    updateExcludeButtonLabel();
+    // 担当者フィルタを復元
+    const validAssignees = savedAssignees.filter(a => (state.assigneeSuggestions || []).includes(a));
+    state.graphAssignees = validAssignees;
+    // 担当者ドロップダウンを初期化
+    renderGraphAssigneeSelect();
+    // グラフを更新
+    updateGraphPanel();
+    saveGraphSettings();
+  }
+
   // グラフトグルボタン
   if (graphToggleBtn) {
     graphToggleBtn.addEventListener('click', () => {
       if (isGraphPanelOpen()) {
         closeGraphPanelInternal();
       } else {
-        setGraphPanelOpen(true);
-        graphToggleBtn.classList.add('active');
-        // パネル表示
-        graphPanel.classList.remove('hidden');
-        graphPanel.style.display = 'flex';
-        if (graphPanelBody) {
-          graphPanelBody.classList.remove('hidden');
-          graphPanelBody.style.display = 'block';
-        }
-        if (mainContainer) mainContainer.classList.add('graph-panel-open');
-        if (bottomLeftButtons) {
-          bottomLeftButtons.classList.add('graph-panel-open');
-        }
-        const kanbanMain = document.querySelector('.kanban-main');
-        const kanbanBoard = document.querySelector('.kanban-board');
-        const panelHeight = graphPanel.offsetHeight;
-        const remainingHeight = window.innerHeight - panelHeight;
-        if (kanbanMain) {
-          kanbanMain.style.height = `${remainingHeight}px`;
-        }
-        if (kanbanBoard) {
-          kanbanBoard.style.height = `${remainingHeight}px`;
-        }
-        if (bottomLeftButtons) {
-          bottomLeftButtons.style.bottom = `${panelHeight + 32}px`;
-        }
-        populateGraphLabelSelect();
-        populateGraphAssigneeFilter();
-        const labels = getLabelSuggestions();
-        if (graphLabelSelect && labels && labels.length > 0) {
-          // 保存された設定を復元
-          const savedSettings = loadUserSettings();
-          const savedLabel = savedSettings?.graph?.label || '';
-          // 後方互換: 旧単一文字列形式 (assignee) も対応
-          const savedAssignees = Array.isArray(savedSettings?.graph?.assignees)
-            ? savedSettings.graph.assignees
-            : (savedSettings?.graph?.assignee ? [savedSettings.graph.assignee] : []);
-          if (savedLabel && labels.includes(savedLabel)) {
-            graphLabelSelect.value = savedLabel;
-          } else {
-            graphLabelSelect.value = labels[0];
-          }
-          // 担当者フィルタを復元
-          const validAssignees = savedAssignees.filter(a => (state.assigneeSuggestions || []).includes(a));
-          state.graphAssignees = validAssignees;
-          renderGraphAssigneeSelect();
-          updateGraphPanel();
-        }
-        saveGraphSettings();
+        openGraphPanelWithRestore();
       }
     });
+  }
+
+  // 初期化: 保存設定を復元して担当者ドロップダウンを初期化
+  // グラフパネルが表示されている場合は自動復元
+  const initSavedSettings = loadUserSettings();
+  const initSavedAssignees = Array.isArray(initSavedSettings?.graph?.assignees)
+    ? initSavedSettings.graph.assignees
+    : (initSavedSettings?.graph?.assignee ? [initSavedSettings.graph.assignee] : []);
+  const initValidAssignees = initSavedAssignees.filter(a => (state.assigneeSuggestions || []).includes(a));
+  state.graphAssignees = initValidAssignees;
+  // ラベルリストを設定
+  populateGraphLabelSelect();
+  // 担当者ドロップダウンを初期化（F5後もクリック可能に）
+  renderGraphAssigneeSelect();
+  // 除外チケットセットを復元
+  const initSavedExcludedIds = initSavedSettings?.graph?.excludedTicketIds || [];
+  initSavedExcludedIds.forEach(id => excludedTicketSet.add(id));
+  updateExcludeButtonLabel();
+  // ビュータイプを復元
+  if (graphViewSelect && initSavedSettings?.graph?.viewType) {
+    graphViewSelect.value = initSavedSettings.graph.viewType;
+  }
+  // 保存されたラベルを復元
+  const initLabels = getLabelSuggestions();
+  if (graphLabelSelect && initLabels && initLabels.length > 0) {
+    const initSavedLabel = initSavedSettings?.graph?.label || '';
+    if (initSavedLabel && initLabels.includes(initSavedLabel)) {
+      graphLabelSelect.value = initSavedLabel;
+    } else {
+      graphLabelSelect.value = initLabels[0];
+    }
+  }
+  // グラフパネルが保存されている場合は自動表示
+  if (initSavedSettings?.graph?.visible === true) {
+    openGraphPanelWithRestore();
   }
 
   // ラベル変更イベント

@@ -2927,3 +2927,64 @@ body {
     font-weight: 600;
 }
 
+/* チケットプログレス表 */
+.ticket-progress-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+}
+
+.ticket-progress-table th {
+    background: rgba(0, 0, 0, 0.04);
+    padding: 6px 8px;
+    text-align: center;
+    font-weight: 600;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ticket-progress-table th:first-child {
+    text-align: left;
+    min-width: 120px;
+    max-width: 200px;
+}
+
+.ticket-progress-table td {
+    padding: 4px 8px;
+    border: 1px solid #e5e7eb;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.ticket-progress-table td:first-child {
+    text-align: left;
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ticket-progress-table .attr-header {
+    background: rgba(59, 130, 246, 0.08);
+    min-width: 80px;
+}
+
+.ticket-progress-table .category-cell {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.ticket-progress-table .ticket-name-cell {
+    font-weight: 500;
+    color: #1f2937;
+    max-width: 200px;
+}
+

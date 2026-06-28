@@ -241,7 +241,11 @@ export function syncAssigneesFromSelect() {
 export function renderGraphAssigneeSelect() {
     const listEl = document.getElementById('graphAssigneeList');
     const toggleBtn = document.getElementById('graphAssigneeToggleBtn');
-    if (!listEl || !toggleBtn) return;
+    console.log('[DEBUG] renderGraphAssigneeSelect: listEl=', !!listEl, 'toggleBtn=', !!toggleBtn);
+    if (!listEl || !toggleBtn) {
+        console.warn('[DEBUG] renderGraphAssigneeSelect: 要素が見つかりません');
+        return;
+    }
 
     listEl.innerHTML = '';
 
