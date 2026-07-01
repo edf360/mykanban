@@ -3,8 +3,27 @@
 import { getAllTickets, getSettings } from './state.js';
 import { api } from './api.js';
 import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { showActualProgressPopup } from './progressSliderPopup.js';
 
 const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+
+/**
+ * 日本時間に基づいた今日の日付を取得（9時を境目）
+ * 9時以降は当日、9時前は前日
+ */
+function getJapanDateWithCutoff() {
+    // 日本時間 (UTC+9)
+    const now = new Date();
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    
+    // 9時を境目
+    const hours = jst.getUTCHours();
+    const date = new Date(jst);
+    if (hours < 9) {
+        date.setDate(date.getDate() - 1);
+    }
+    return date;
+}
 
 /**
  * 設定から休日セットを取得（yyyyMMdd形式）
@@ -262,13 +281,13 @@ async function renderTable() {
         for (const day of workDays) {
             const dateStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const key = `${ticket.ticketId}_${dateStr}`;
-            const rawValue = actualDataCache[key];
-            const value = (rawValue !== undefined && rawValue !== 0) ? rawValue : '';
+            const data = actualDataCache[key];
+            const display = formatCellDisplay(data?.progressRate, data?.hours);
             const cellDate = new Date(year, monthNum - 1, day);
             const cellDayOfWeek = cellDate.getDay();
-            let cellClasses = 'editable-cell';
+            let cellClasses = 'actual-cell';
             if (cellDayOfWeek === 5) cellClasses += ' friday-border';
-            html += `<td class="${cellClasses}" contenteditable="true" data-ticket-id="${ticket.ticketId}" data-date="${dateStr}">${value}</td>`;
+            html += `<td class="${cellClasses}" data-ticket-id="${ticket.ticketId}" data-date="${dateStr}">${display}</td>`;
         }
         html += '</tr>';
 
@@ -280,13 +299,13 @@ async function renderTable() {
             for (const day of workDays) {
                 const dateStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const key = `${ticket.ticketId}_${childIndex}_${dateStr}`;
-                const rawValue = actualDataCache[key];
-                const value = (rawValue !== undefined && rawValue !== 0) ? rawValue : '';
+                const data = actualDataCache[key];
+                const display = formatCellDisplay(data?.progressRate, data?.hours);
                 const cellDate = new Date(year, monthNum - 1, day);
                 const cellDayOfWeek = cellDate.getDay();
-                let cellClasses = 'editable-cell child-task-cell';
+                let cellClasses = 'actual-cell child-task-cell';
                 if (cellDayOfWeek === 5) cellClasses += ' friday-border';
-                html += `<td class="${cellClasses}" contenteditable="true" data-ticket-id="${ticket.ticketId}" data-child-index="${childIndex}" data-date="${dateStr}">${value}</td>`;
+                html += `<td class="${cellClasses}" data-ticket-id="${ticket.ticketId}" data-child-index="${childIndex}" data-date="${dateStr}">${display}</td>`;
             }
             html += '</tr>';
         }
@@ -298,19 +317,9 @@ async function renderTable() {
     // ローディング非表示
     if (loadingEl) loadingEl.classList.add('hidden');
 
-    // contenteditable セルのイベント設定
-    container.querySelectorAll('.editable-cell').forEach(cell => {
-        // 元の値を保持（Escapeでキャンセル用）
-        cell._originalValue = cell.textContent;
-
-        // 入力イベント - 数値バリデーション
-        cell.addEventListener('input', handleCellInput);
-
-        // blurイベント - 保存
-        cell.addEventListener('blur', handleCellBlur);
-
-        // キーボードナビゲーション
-        cell.addEventListener('keydown', handleCellKeydown);
+    // 実績セルのクリックイベント設定
+    container.querySelectorAll('.actual-cell').forEach(cell => {
+        cell.addEventListener('click', handleCellClick);
     });
 }
 
@@ -330,10 +339,16 @@ async function fetchAllActualsForMonth(year, month, days, tickets) {
                 const dateStr = a.date.split('T')[0]; // yyyy-MM-dd形式
                 if (a.childTaskIndex !== null && a.childTaskIndex !== undefined) {
                     // 子タスクの実績
-                    actualDataCache[`${a.ticketId}_${a.childTaskIndex}_${dateStr}`] = a.hours;
+                    actualDataCache[`${a.ticketId}_${a.childTaskIndex}_${dateStr}`] = {
+                        hours: a.hours,
+                        progressRate: a.progressRate
+                    };
                 } else {
                     // 親チケットの実績
-                    actualDataCache[`${a.ticketId}_${dateStr}`] = a.hours;
+                    actualDataCache[`${a.ticketId}_${dateStr}`] = {
+                        hours: a.hours,
+                        progressRate: a.progressRate
+                    };
                 }
             });
         }
@@ -342,103 +357,35 @@ async function fetchAllActualsForMonth(year, month, days, tickets) {
     }
 }
 
-// contenteditable セルの入力バリデーション
-function handleCellInput(e) {
-    const cell = e.target;
-    let text = cell.textContent;
-
-    // 数値と小数点、ハイフンのみ許可
-    text = text.replace(/[^0-9.\-]/g, '');
-    
-    // 小数点は1つのみ
-    const parts = text.split('.');
-    if (parts.length > 2) {
-        text = parts[0] + '.' + parts.slice(1).join('');
-    }
-
-    // 変更があった場合は更新
-    if (cell.textContent !== text) {
-        // カーソル位置を保存
-        const sel = window.getSelection();
-        const cursorPos = sel.rangeCount > 0 ? sel.getRangeAt(0).startOffset : 0;
-        cell.textContent = text;
-        // カーソル位置を復元（可能な限り）
-        if (sel.rangeCount > 0) {
-            const newCursor = Math.min(cursorPos, text.length);
-            const range = document.createRange();
-            range.setStart(cell, newCursor);
-            range.setEnd(cell, newCursor);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
-    }
-}
-
-// セルがフォーカスを失った時に保存
-async function handleCellBlur(e) {
+// セルクリックハンドラ - 進捗率設定ポップアップを表示
+function handleCellClick(e) {
     const cell = e.target;
     const ticketId = cell.dataset.ticketId;
-    const childIndex = cell.dataset.childIndex;
     const date = cell.dataset.date;
-    const text = cell.textContent.trim();
+    const childIndex = cell.dataset.childIndex !== undefined ? parseInt(cell.dataset.childIndex) : null;
     
-    let hours = 0;
-    if (text !== '') {
-        hours = parseFloat(text);
-        if (isNaN(hours)) {
-            hours = 0;
-        }
-    }
+    const key = childIndex !== null ? `${ticketId}_${childIndex}_${date}` : `${ticketId}_${date}`;
+    const data = actualDataCache[key] || {};
+    const currentProgress = data.progressRate ?? 0;
+    const currentHours = data.hours ?? 0;
 
-    // 範囲チェック（0〜24）
-    if (hours < 0) hours = 0;
-    if (hours > 24) hours = 24;
-
-    // 表示を整形
-    cell.textContent = hours === 0 ? '' : hours;
-    cell._originalValue = cell.textContent;
-
-    try {
-        const body = { date, hours };
-        if (childIndex !== undefined && childIndex !== '') {
-            body.childTaskIndex = parseInt(childIndex);
-        }
-        await api.post(`/api/tickets/${encodeURIComponent(ticketId)}/actuals`, body);
-        if (childIndex !== undefined && childIndex !== '') {
-            actualDataCache[`${ticketId}_${childIndex}_${date}`] = hours;
-        } else {
-            actualDataCache[`${ticketId}_${date}`] = hours;
-        }
-    } catch (err) {
-        console.error('実績保存失敗:', err);
-    }
+    showActualProgressPopup(cell, ticketId, date, childIndex, currentProgress, currentHours, async (progress, hours) => {
+        // 保存後の処理 - キャッシュ更新と表示更新
+        actualDataCache[key] = { hours, progressRate: progress };
+        cell.textContent = formatCellDisplay(progress, hours);
+    });
 }
 
-// キーボードナビゲーション
-function handleCellKeydown(e) {
-    const cell = e.target;
-
-    // Escape - 編集キャンセル
-    if (e.key === 'Escape') {
-        e.preventDefault();
-        cell.textContent = cell._originalValue ?? '';
-        cell.blur();
-        return;
+// セル表示フォーマット "50% / 4h"
+function formatCellDisplay(progressRate, hours) {
+    const parts = [];
+    if (progressRate !== null && progressRate !== undefined && progressRate > 0) {
+        parts.push(`${progressRate}%`);
     }
-
-    // Enter - 右隣のセルに移動
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        const nextCell = cell.parentElement?.nextElementSibling
-            ? cell.parentElement.nextElementSibling.querySelector('.editable-cell')
-            : null;
-        if (nextCell) {
-            nextCell.focus();
-        }
-        return;
+    if (hours !== null && hours !== undefined && hours > 0) {
+        parts.push(`${hours}h`);
     }
-
-    // Tab はデフォルト動作で次のセルに移動（contenteditable間を移動）
+    return parts.join(' / ');
 }
 
 function getDayColor(dayOfWeek) {

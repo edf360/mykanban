@@ -40,6 +40,12 @@ namespace KanbanServer.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("[]");
 
+                    b.Property<string>("MemosJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("{}");
+
                     b.PrimitiveCollection<string>("Users")
                         .IsRequired()
                         .HasColumnType("TEXT")
@@ -59,7 +65,6 @@ namespace KanbanServer.Migrations
             modelBuilder.Entity("KanbanServer.Models.Ticket", b =>
                 {
                     b.Property<string>("TicketId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.PrimitiveCollection<string>("Assignees")
@@ -73,6 +78,9 @@ namespace KanbanServer.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("[]");
 
+                    b.Property<string>("Category")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ChildTasksJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -85,6 +93,9 @@ namespace KanbanServer.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("todo");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("Effort")
                         .HasColumnType("INTEGER");
 
@@ -92,12 +103,19 @@ namespace KanbanServer.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsArchived")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("IsEmergency")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsLocked")
+                        .HasColumnType("INTEGER");
 
                     b.PrimitiveCollection<string>("Labels")
                         .IsRequired()
@@ -118,8 +136,11 @@ namespace KanbanServer.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Position")
-                        .HasColumnType("INTEGER");
+                    b.Property<double>("Position")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PreviousColumn")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Progress")
                         .HasColumnType("INTEGER");
@@ -134,6 +155,36 @@ namespace KanbanServer.Migrations
                     b.HasKey("TicketId");
 
                     b.ToTable("Tickets");
+                });
+
+            modelBuilder.Entity("KanbanServer.Models.TicketActual", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ChildTaskIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Hours")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("ProgressRate")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TicketId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId", "Date", "ChildTaskIndex")
+                        .IsUnique();
+
+                    b.ToTable("TicketActuals");
                 });
 
             modelBuilder.Entity("KanbanServer.Models.TicketHistory", b =>
@@ -162,7 +213,27 @@ namespace KanbanServer.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TicketId");
+
                     b.ToTable("TicketHistories");
+                });
+
+            modelBuilder.Entity("KanbanServer.Models.TicketActual", b =>
+                {
+                    b.HasOne("KanbanServer.Models.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("KanbanServer.Models.TicketHistory", b =>
+                {
+                    b.HasOne("KanbanServer.Models.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

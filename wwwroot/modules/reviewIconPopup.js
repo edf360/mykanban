@@ -51,11 +51,34 @@ export function showReviewIconPopup(anchorElement, currentState, onSelect) {
         popup.appendChild(item);
     });
     
-    // アンカー要素の位置に配置
+    // アンカー要素の位置に配置（画面内に収まるように調整）
     const rect = anchorElement.getBoundingClientRect();
     popup.style.position = 'fixed';
-    popup.style.top = `${rect.bottom + 5}px`;
-    popup.style.left = `${rect.left}px`;
+    
+    // ポップアップのサイズを取得するために一時的に表示
+    popup.style.visibility = 'hidden';
+    document.body.appendChild(popup);
+    const popupRect = popup.getBoundingClientRect();
+    popup.style.visibility = '';
+    
+    // 横幅が画面外に出ないよう調整
+    let left = rect.left;
+    if (left + popupRect.width > window.innerWidth) {
+        left = window.innerWidth - popupRect.width - 10;
+    }
+    if (left < 10) left = 10;
+    
+    // 高さが画面外に出ないよう調整
+    let top = rect.bottom + 5;
+    if (top + popupRect.height > window.innerHeight - 10) {
+        top = rect.top - popupRect.height - 5;
+    }
+    if (top < 10) {
+        top = 10;
+    }
+    
+    popup.style.top = `${top}px`;
+    popup.style.left = `${left}px`;
     popup.style.zIndex = '10003';
     
     document.body.appendChild(popup);

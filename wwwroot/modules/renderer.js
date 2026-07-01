@@ -375,81 +375,106 @@ export function createTicketElement(data) {
             alert('子タスクが存在するため、メインの進捗率は変更できません。');
         });
     } else {
-        progressText.addEventListener('click', (e) => {
+        progressText.addEventListener('click', async (e) => {
             e.stopPropagation();
-            showProgressSlider(progressText, data.progress || 0, async (newProgress) => {
-                const oldProgress = data.progress || 0;
-                if (newProgress !== oldProgress) {
-                    try {
-                        await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/progress`, { progress: newProgress });
-                        updateTicketField(ticket.dataset.id, 'progress', newProgress);
-                        
-                        // 進捗テキストを更新
-                        if (progressText) progressText.textContent = `${newProgress}%`;
-                        
-                        // 進捗グラフを更新
-                        const chartEl = ticket.querySelector('.ticket-chart');
-                        if (chartEl) {
-                            const ticketData = getTicket(ticket.dataset.id);
-                            if (ticketData && ticketData.startDate && ticketData.endDate) {
-                                apiRequest(`${API_BASE}/tickets/${encodeURIComponent(ticketData.id)}/history`)
-                                    .then(histories => {
-                                        renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0, histories);
-                                    })
-                                    .catch(() => {
-                                        renderProgressChart(chartEl, ticketData.startDate, ticketData.endDate, ticketData.progress || 0, []);
-                                    });
-                            }
-                        }
-                        
-                        // 累積進捗グラフを更新
-                        updateMemoColumn();
-                    } catch (error) {
-                        console.error('Failed to update progress:', error);
-                    }
+            const ticketId = ticket.dataset.id;
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 今日の進捗・実績時間を取得
+            let currentHours = 0;
+            let currentProgress = data.progress || 0;
+            try {
+                const actuals = await apiRequest('GET', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, null);
+                const todayActual = actuals.find(a => {
+                    const actualDate = (a.Date || a.date || '').split('T')[0];
+                    return actualDate === today;
+                });
+                if (todayActual) {
+                    currentHours = todayActual.Hours ?? todayActual.hours ?? 0;
+                    currentProgress = todayActual.ProgressRate ?? todayActual.progressRate ?? currentProgress;
                 }
-            });
+            } catch (error) {
+                console.error('Failed to load actuals:', error);
+            }
+            
+            showProgressSlider(progressText, currentProgress, async (newProgress, newHours) => {
+                const oldProgress = data.progress || 0;
+                try {
+                    // 実績時間を保存
+                    await apiRequest('POST', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
+                        date: today,
+                        hours: newHours,
+                        progressRate: newProgress
+                    });
+                    
+                    // 進捗率を更新
+                    if (newProgress !== oldProgress) {
+                        await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticketId)}/progress`, { progress: newProgress });
+                        updateTicketField(ticketId, 'progress', newProgress);
+                    }
+                    
+                    // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
+                    renderAllTickets();
+                } catch (error) {
+                    console.error('Failed to update progress:', error);
+                }
+            }, ticketId, today, null, currentHours);
         });
     }
 
     // 子タスクの進捗スライダー
     const childProgressSpans = ticket.querySelectorAll('[data-child-progress]');
-    childProgressSpans.forEach(span => {
+    childProgressSpans.forEach(async (span) => {
         span.addEventListener('click', async (e) => {
             e.stopPropagation();
+            const ticketId = ticket.dataset.id;
             const childId = span.dataset.childProgress;
             const currentProgress = parseInt(span.textContent) || 0;
+            const today = new Date().toISOString().split('T')[0];
             
-            showProgressSlider(span, currentProgress, async (newProgress) => {
+            // 子タスクインデックスを取得
+            const ticketData = getTicket(ticketId);
+            const childTasks = ticketData?.childTasks || [];
+            const childTaskIndex = childTasks.findIndex(t => t.id === childId);
+            
+            // 今日の進捗・実績時間を取得
+            let currentHours = 0;
+            let progress = currentProgress;
+            try {
+                const actuals = await apiRequest('GET', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, null);
+                const todayActual = actuals.find(a => {
+                    const actualDate = (a.Date || a.date || '').split('T')[0];
+                    const dateMatches = actualDate === today;
+                    const indexMatches = a.ChildTaskIndex === childTaskIndex || a.childTaskIndex === childTaskIndex || (childTaskIndex === -1 && a.ChildTaskIndex === undefined && a.childTaskIndex === undefined);
+                    return dateMatches && indexMatches;
+                });
+                if (todayActual) {
+                    currentHours = todayActual.Hours ?? todayActual.hours ?? 0;
+                    progress = todayActual.ProgressRate ?? todayActual.progressRate ?? progress;
+                }
+            } catch (error) {
+                console.error('Failed to load actuals:', error);
+            }
+            
+            showProgressSlider(span, progress, async (newProgress, newHours) => {
                 try {
-                    const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticket.dataset.id)}/child-task/${encodeURIComponent(childId)}`, { done: false, progress: newProgress });
-                    setTicket(ticket.dataset.id, updated);
+                    // 実績時間を保存
+                    await apiRequest('POST', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
+                        date: today,
+                        hours: newHours,
+                        progressRate: newProgress,
+                        childTaskIndex: childTaskIndex >= 0 ? childTaskIndex : undefined
+                    });
                     
-                    // 進捗テキストを更新
-                    const progressText = ticket.querySelector('.progress-text');
-                    if (progressText) progressText.textContent = `${updated.progress || 0}%`;
+                    const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticketId)}/child-task/${encodeURIComponent(childId)}`, { done: false, progress: newProgress });
+                    setTicket(ticketId, updated);
                     
-                    // 子タスク進捗テキストを更新
-                    span.textContent = `${newProgress}%`;
-                    
-                    // 進捗グラフを更新
-                    const chartEl = ticket.querySelector('.ticket-chart');
-                    if (chartEl && updated.startDate && updated.endDate) {
-                        apiRequest(`${API_BASE}/tickets/${encodeURIComponent(updated.id)}/history`)
-                            .then(histories => {
-                                renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0, histories);
-                            })
-                            .catch(() => {
-                                renderProgressChart(chartEl, updated.startDate, updated.endDate, updated.progress || 0, []);
-                            });
-                    }
-                    
-                    // 累積進捗グラフを更新
-                    updateMemoColumn();
+                    // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
+                    renderAllTickets();
                 } catch (error) {
                     console.error('Failed to update child task progress:', error);
                 }
-            });
+            }, ticketId, today, childTaskIndex >= 0 ? childTaskIndex : null, currentHours);
         });
     });
 

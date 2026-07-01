@@ -30,6 +30,11 @@ public class TicketActual
     public double Hours { get; set; }
     
     /// <summary>
+    /// 進捗率（0-100、null=未設定）
+    /// </summary>
+    public int? ProgressRate { get; set; }
+    
+    /// <summary>
     /// 子タスクインデックス（null=親チケット自身）
     /// </summary>
     public int? ChildTaskIndex { get; set; }

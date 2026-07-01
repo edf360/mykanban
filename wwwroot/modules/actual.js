@@ -11,6 +11,7 @@ const el = {
     actualModal: null,
     actualTicketSelect: null,
     actualDateInput: null,
+    actualProgressInput: null,
     actualHoursInput: null,
     actualSaveBtn: null,
     actualList: null,
@@ -26,6 +27,7 @@ function cacheElements() {
     el.actualModal = document.getElementById('actualModal');
     el.actualTicketSelect = document.getElementById('actualTicketSelect');
     el.actualDateInput = document.getElementById('actualDateInput');
+    el.actualProgressInput = document.getElementById('actualProgressInput');
     el.actualHoursInput = document.getElementById('actualHoursInput');
     el.actualSaveBtn = document.getElementById('actualSaveBtn');
     el.actualList = document.getElementById('actualList');
@@ -42,6 +44,21 @@ function formatDate(date) {
 }
 
 /**
+ * 日本時間に基づいた今日の日付を取得（9時を境目）
+ * 9時以降は当日、9時前は前日
+ */
+function getJapanDateWithCutoff() {
+    const now = new Date();
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const hours = jst.getUTCHours();
+    const date = new Date(jst);
+    if (hours < 9) {
+        date.setDate(date.getDate() - 1);
+    }
+    return date;
+}
+
+/**
  * 実績モーダルを開く
  */
 export async function openActualModal(ticketId) {
@@ -55,9 +72,12 @@ export async function openActualModal(ticketId) {
     // 実績一覧を取得
     await loadActualsForTicket(ticketId);
 
-    // 入力フィールドを初期化（今日の日付を設定）
+    // 入力フィールドを初期化（今日の日付を設定 - 9時を境目）
     if (el.actualDateInput) {
-        el.actualDateInput.value = formatDate(new Date());
+        el.actualDateInput.value = formatDate(getJapanDateWithCutoff());
+    }
+    if (el.actualProgressInput) {
+        el.actualProgressInput.value = '';
     }
     if (el.actualHoursInput) {
         el.actualHoursInput.value = '';
@@ -129,11 +149,14 @@ async function loadActualsForTicket(ticketId) {
 async function onTicketChanged(newTicketId) {
     currentTicketId = newTicketId;
     await loadActualsForTicket(newTicketId);
+    if (el.actualProgressInput) {
+        el.actualProgressInput.value = '';
+    }
     if (el.actualHoursInput) {
         el.actualHoursInput.value = '';
     }
     if (el.actualDateInput) {
-        el.actualDateInput.value = formatDate(new Date());
+        el.actualDateInput.value = formatDate(getJapanDateWithCutoff());
     }
 }
 
@@ -182,6 +205,10 @@ function renderActualList() {
             row.appendChild(childSpan);
         }
 
+        const progressSpan = document.createElement('span');
+        progressSpan.className = 'actual-progress';
+        progressSpan.textContent = actual.progressRate ? `${actual.progressRate}%` : '';
+
         const hoursSpan = document.createElement('span');
         hoursSpan.className = 'actual-hours';
         hoursSpan.textContent = `${Math.round(actual.hours)}h`;
@@ -201,6 +228,7 @@ function renderActualList() {
         row.style.cursor = 'pointer';
 
         row.appendChild(dateSpan);
+        row.appendChild(progressSpan);
         row.appendChild(hoursSpan);
         row.appendChild(deleteBtn);
         el.actualList.appendChild(row);
@@ -215,6 +243,9 @@ function loadActualForEdit(actual) {
     if (el.actualDateInput) {
         el.actualDateInput.value = dateStr;
     }
+    if (el.actualProgressInput) {
+        el.actualProgressInput.value = actual.progressRate ?? '';
+    }
     if (el.actualHoursInput) {
         el.actualHoursInput.value = Math.round(actual.hours);
     }
@@ -224,27 +255,37 @@ function loadActualForEdit(actual) {
  * 実績を保存（登録または更新）
  */
 async function saveActual() {
-    if (!currentTicketId || !el.actualDateInput || !el.actualHoursInput) return;
+    if (!currentTicketId || !el.actualDateInput) return;
 
     const date = el.actualDateInput.value;
+    const progressValue = el.actualProgressInput ? el.actualProgressInput.value.trim() : '';
     const hoursValue = el.actualHoursInput.value.trim();
 
     if (!date) {
         alert('日付を選択してください');
         return;
     }
-    if (hoursValue === '') {
-        alert('作業時間を入力してください');
-        return;
+
+    let progressRate = 0;
+    if (progressValue !== '') {
+        progressRate = parseInt(progressValue, 10);
+        if (isNaN(progressRate) || progressRate < 0 || progressRate > 100) {
+            alert('進捗率は 0〜100 の数値を入力してください');
+            return;
+        }
     }
-    const hours = parseFloat(hoursValue);
-    if (isNaN(hours) || hours < 0) {
-        alert('有効な時間を入力してください');
-        return;
+
+    let hours = 0;
+    if (hoursValue !== '') {
+        hours = parseFloat(hoursValue);
+        if (isNaN(hours) || hours < 0) {
+            alert('有効な時間を入力してください');
+            return;
+        }
     }
 
     try {
-        const payload = { date, hours };
+        const payload = { date, hours, progressRate };
         console.log('[Actual] Saving:', payload);
         
         const response = await fetch(`${API_BASE}/${encodeURIComponent(currentTicketId)}/actuals`, {
@@ -291,8 +332,9 @@ async function saveActual() {
         renderActualList();
 
         // 入力フィールドをクリア
+        if (el.actualProgressInput) el.actualProgressInput.value = '';
         el.actualHoursInput.value = '';
-        el.actualDateInput.value = formatDate(new Date());
+        el.actualDateInput.value = formatDate(getJapanDateWithCutoff());
 
     } catch (error) {
         console.error('[Actual] Failed to save:', error);

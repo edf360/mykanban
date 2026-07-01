@@ -52,8 +52,8 @@ public class KanbanDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TicketId).IsRequired();
             entity.Property(e => e.Date).IsRequired();
-            // TicketId + Date の複合ユニーク制約
-            entity.HasIndex(e => new { e.TicketId, e.Date }).IsUnique();
+            // TicketId + Date + ChildTaskIndex の複合ユニーク制約
+            entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskIndex }).IsUnique();
             // 外部キー制約 - チケット削除時に連動削除
             entity.HasOne<Ticket>()
                 .WithMany()

@@ -284,10 +284,31 @@ public class TicketsController : ControllerBase
         var existing = await _dbContext.TicketActuals
             .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == dto.ChildTaskIndex);
 
+        // チケットの進捗率を更新
+        if (dto.ProgressRate.HasValue)
+        {
+            if (dto.ChildTaskIndex is null)
+            {
+                // 親タスクの進捗率を更新
+                ticket.Progress = (int)dto.ProgressRate;
+            }
+            else
+            {
+                // 子タスクの進捗率を更新
+                var childTasks = ticket.ChildTasks;
+                if (dto.ChildTaskIndex >= 0 && dto.ChildTaskIndex < childTasks.Count)
+                {
+                    childTasks[dto.ChildTaskIndex.Value].Progress = (int)dto.ProgressRate;
+                    ticket.ChildTasks = childTasks;
+                }
+            }
+        }
+
         if (existing != null)
         {
             // 更新
             existing.Hours = dto.Hours;
+            existing.ProgressRate = dto.ProgressRate;
             await _dbContext.SaveChangesAsync();
             await NotifyTicketChanged();
             return Ok(existing);
@@ -299,6 +320,7 @@ public class TicketsController : ControllerBase
             TicketId = id,
             Date = dto.Date.Date,
             Hours = dto.Hours,
+            ProgressRate = dto.ProgressRate,
             ChildTaskIndex = dto.ChildTaskIndex
         };
         _dbContext.TicketActuals.Add(actual);
@@ -322,6 +344,26 @@ public class TicketsController : ControllerBase
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
 
+        // チケットの進捗率を更新
+        if (dto.ProgressRate.HasValue)
+        {
+            if (childTaskIndex is null)
+            {
+                // 親タスクの進捗率を更新
+                ticket.Progress = (int)dto.ProgressRate;
+            }
+            else
+            {
+                // 子タスクの進捗率を更新
+                var childTasks = ticket.ChildTasks;
+                if (childTaskIndex >= 0 && childTaskIndex < childTasks.Count)
+                {
+                    childTasks[childTaskIndex.Value].Progress = (int)dto.ProgressRate;
+                    ticket.ChildTasks = childTasks;
+                }
+            }
+        }
+
         DateTime targetDate;
         if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out targetDate))
         {
@@ -334,6 +376,7 @@ public class TicketsController : ControllerBase
             return NotFound(new { error = "Actual not found" });
 
         actual.Hours = dto.Hours;
+        actual.ProgressRate = dto.ProgressRate;
         await _dbContext.SaveChangesAsync();
         await NotifyTicketChanged();
         return Ok(actual);
@@ -374,5 +417,6 @@ public class ActualDto
 {
     public DateTime Date { get; set; }
     public double Hours { get; set; }
+    public int? ProgressRate { get; set; }
     public int? ChildTaskIndex { get; set; }
 }

@@ -491,6 +491,41 @@ body {
     color: rgba(0, 0, 0, 0.8);
 }
 
+.progress-slider-date {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.progress-slider-hours-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #333;
+}
+
+.progress-slider-hours-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* 実績セルのスタイル */
+.actual-cell {
+    cursor: pointer;
+    padding: 6px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.actual-cell:hover {
+    background-color: #e0e7ff !important;
+}
+
 .delete-btn {
     position: absolute;
     top: 8px;

@@ -4,9 +4,11 @@
  * ドラッグ＆ドロップで順序入れ替え可能
  */
 
-import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked } from './state.js';
+import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked, getEditingTicketId, API_BASE } from './state.js';
 import { showProgressSlider } from './progressSliderPopup.js';
 import { showReviewIconPopup } from './reviewIconPopup.js';
+import { apiRequest } from './api.js';
+import { renderAllTickets } from './renderer.js';
 
 // ローカルID生成（HTTP環境でも動作）
 let childTaskIdCounter = 0;
@@ -282,15 +284,57 @@ function showChildTaskCategoryModal(task, itemDiv) {
 /**
  * 子タスク進捗率編集モーダル
  */
-function showChildTaskProgressModal(task, itemDiv) {
+async function showChildTaskProgressModal(task, itemDiv) {
     const current = task.progress || 0;
     const progressSpan = itemDiv.querySelector('.child-task-progress');
     if (!progressSpan) return;
     
-    showProgressSlider(progressSpan, current, (newProgress) => {
+    const ticketId = getEditingTicketId();
+    const today = new Date().toISOString().split('T')[0];
+    const childTasks = getChildTasks();
+    const childTaskIndex = childTasks.findIndex(t => t.id === task.id);
+    
+    // 今日の進捗・実績時間を取得
+    let currentHours = 0;
+    let currentProgress = current;
+    if (ticketId) {
+        try {
+            const actuals = await apiRequest('GET', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, null);
+            const todayActual = actuals.find(a => {
+                const actualDate = (a.Date || a.date || '').split('T')[0];
+                const dateMatches = actualDate === today;
+                const indexMatches = a.ChildTaskIndex === childTaskIndex || a.childTaskIndex === childTaskIndex || childTaskIndex === -1;
+                return dateMatches && indexMatches;
+            });
+            if (todayActual) {
+                currentHours = todayActual.Hours ?? todayActual.hours ?? 0;
+                currentProgress = todayActual.ProgressRate ?? todayActual.progressRate ?? currentProgress;
+            }
+        } catch (error) {
+            console.error('Failed to load actuals:', error);
+        }
+    }
+    
+    showProgressSlider(progressSpan, currentProgress, async (newProgress, newHours) => {
         updateChildTask(task.id, { progress: newProgress });
         renderChildTasks();
-    });
+        
+        if (ticketId) {
+            try {
+                await apiRequest('POST', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
+                    date: today,
+                    hours: newHours,
+                    progressRate: newProgress,
+                    childTaskIndex: childTaskIndex >= 0 ? childTaskIndex : undefined
+                });
+            } catch (error) {
+                console.error('Failed to save actuals:', error);
+            }
+        }
+        
+        // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
+        renderAllTickets();
+    }, ticketId, today, childTaskIndex >= 0 ? childTaskIndex : null, currentHours);
 }
 
 /**
