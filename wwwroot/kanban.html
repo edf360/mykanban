@@ -337,42 +337,6 @@
         </div>
     </div>
 
-    <!-- 実績登録ダイアログ -->
-    <div class="modal-overlay" id="actualModal" role="dialog" aria-modal="true">
-        <div class="modal actual-modal">
-            <div class="modal-header">
-                <div class="modal-title">実績登録</div>
-            </div>
-            <div class="actual-form">
-                <div class="actual-form-row">
-                    <label for="actualTicketSelect">チケット</label>
-                    <select id="actualTicketSelect"></select>
-                </div>
-                <div class="actual-form-row">
-                    <label for="actualDateInput">日付</label>
-                    <input type="date" id="actualDateInput">
-                </div>
-                <div class="actual-form-row">
-                    <label for="actualProgressInput">進捗率</label>
-                    <div class="actual-hours-input">
-                        <input type="number" id="actualProgressInput" placeholder="例: 50" min="0" max="100" step="1">
-                        <span>%</span>
-                    </div>
-                </div>
-                <div class="actual-form-row">
-                    <label for="actualHoursInput">作業時間</label>
-                    <div class="actual-hours-input">
-                        <input type="number" id="actualHoursInput" placeholder="例: 4" min="0" step="1">
-                        <span>時間</span>
-                    </div>
-                </div>
-                <button class="modal-btn save" id="actualSaveBtn">保存</button>
-            </div>
-            <div class="actual-list-header">過去の実績</div>
-            <div class="actual-list" id="actualList"></div>
-        </div>
-    </div>
-
     <!-- 実績入力ウィンドウ（初期非表示） -->
     <div class="modal-overlay" id="actualModalOverlay">
         <div class="modal actual-table-modal">

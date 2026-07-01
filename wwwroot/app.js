@@ -13,7 +13,6 @@ import { renderLabelSelect } from './modules/labels.js';
 import { renderAssigneeSelect, renderGraphAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
 import { initHistory } from './modules/history.js';
-import { initActual } from './modules/actual.js';
 import { initActualTable, saveActualState } from './modules/actualTable.js';
 import { populateAssigneeFilter, populateLabelFilter, initFilter, adjustBoardForFilterOnInit } from './modules/filter.js';
 import { initArchive } from './modules/archive.js';
@@ -60,10 +59,7 @@ async function initApp() {
     // 2. 履歴ダイアログ
     initHistory();
 
-    // 2.5 実績ダイアログ
-    initActual();
-
-    // 3. ドラッグ＆ドロップ
+    // 2.5 ドラッグ＆ドロップ
     setupDropZones();
 
     // 4. アーカイブトグル

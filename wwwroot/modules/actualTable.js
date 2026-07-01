@@ -1,9 +1,10 @@
 // 実績入力表モジュール
 
-import { getAllTickets, getSettings } from './state.js';
+import { getAllTickets, getSettings, API_BASE } from './state.js';
 import { api } from './api.js';
 import { loadUserSettings, saveUserSettings } from './userSettings.js';
 import { showActualProgressPopup } from './progressSliderPopup.js';
+import { getToken } from './auth.js';
 
 const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -373,7 +374,41 @@ function handleCellClick(e) {
         // 保存後の処理 - キャッシュ更新と表示更新
         actualDataCache[key] = { hours, progressRate: progress };
         cell.textContent = formatCellDisplay(progress, hours);
+        
+        // 子タスクの進捗保存後、親チケットの進捗セルも更新
+        if (childIndex !== null) {
+            updateParentProgressCell(ticketId, date);
+        }
     });
+}
+
+// 子タスクの進捗平均に基づいて親チケットの進捗セルを更新
+async function updateParentProgressCell(ticketId, date) {
+    try {
+        // サーバーから最新の実績を取得（そのチケットの全実績）
+        const response = await fetch(`${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
+            headers: { 'Authorization': `Bearer ${await getToken()}` }
+        });
+        if (!response.ok) return;
+        
+        const allActuals = await response.json();
+        // その日付の親チケット実績を探す
+        const parentActual = allActuals.find(a => a.date.startsWith(date) && a.childTaskIndex === null);
+        if (parentActual && parentActual.progressRate !== null && parentActual.progressRate !== undefined) {
+            const parentKey = `${ticketId}_${date}`;
+            actualDataCache[parentKey] = {
+                hours: parentActual.hours || 0,
+                progressRate: parentActual.progressRate
+            };
+            // 親チケットのセルを更新
+            const parentCell = document.querySelector(`td.actual-cell[data-ticket-id="${ticketId}"][data-date="${date}"]:not([data-child-index])`);
+            if (parentCell) {
+                parentCell.textContent = formatCellDisplay(parentActual.progressRate, parentActual.hours || 0);
+            }
+        }
+    } catch (error) {
+        console.error('[ActualTable] 親進捗セルの更新失敗:', error);
+    }
 }
 
 // セル表示フォーマット "50% / 4h"

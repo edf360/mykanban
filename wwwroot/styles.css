@@ -1589,7 +1589,6 @@ body {
 .floating-icon-btn.active { background: rgb(88, 124, 179); }
 
 /* 実績モーダル表示中は左下ボタンを無効化 */
-body:has(#actualModal.active) .bottom-left-buttons .floating-icon-btn,
 body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
     pointer-events: none;
     opacity: 0.4;
@@ -2802,135 +2801,6 @@ body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
     display: none;
 }
 
-/* ===== 実績モーダル ===== */
-
-.actual-modal {
-    max-width: 500px;
-    width: 90%;
-}
-
-.actual-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--gray-200);
-}
-
-.actual-form-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.actual-form-row label {
-    flex: 0 0 80px;
-    font-weight: 500;
-    color: var(--gray-700);
-}
-
-.actual-form-row input[type="date"] {
-    flex: 1;
-    padding: 8px 12px;
-    border: 1px solid var(--gray-300);
-    border-radius: 6px;
-    font-size: 14px;
-    background: white;
-}
-
-#actualTicketSelect {
-    flex: 1;
-    padding: 8px 12px;
-    border: 1px solid var(--gray-300);
-    border-radius: 6px;
-    font-size: 14px;
-    background: white;
-}
-
-.actual-hours-input {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-}
-
-.actual-hours-input input {
-    flex: 1;
-    padding: 8px 12px;
-    border: 1px solid var(--gray-300);
-    border-radius: 6px;
-    font-size: 14px;
-    max-width: 120px;
-}
-
-.actual-hours-input span {
-    color: var(--gray-600);
-    font-size: 14px;
-}
-
-.actual-list-header {
-    padding: 12px 20px 8px;
-    font-weight: 600;
-    color: var(--gray-700);
-    font-size: 14px;
-}
-
-.actual-list {
-    max-height: 300px;
-    overflow-y: auto;
-    padding: 0 20px 16px;
-}
-
-.actual-empty {
-    text-align: center;
-    color: var(--gray-400);
-    padding: 20px;
-    font-size: 14px;
-}
-
-.actual-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--gray-100);
-}
-
-.actual-row:last-child {
-    border-bottom: none;
-}
-
-.actual-date {
-    flex: 1;
-    font-size: 14px;
-    color: var(--gray-700);
-}
-
-.actual-hours {
-    flex: 0 0 60px;
-    text-align: right;
-    font-weight: 500;
-    color: var(--primary);
-}
-
-.actual-delete-btn {
-    flex: 0 0 auto;
-    padding: 4px 10px;
-    background: transparent;
-    border: 1px solid var(--danger);
-    color: var(--danger);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.15s ease;
-}
-
-.actual-delete-btn:hover {
-    background: var(--danger);
-    color: white;
-}
-
-
 /* 日付なしチケットセクション */
 .timeline-no-date-section {
     margin-top: 20px;
@@ -3117,7 +2987,12 @@ body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
     z-index: 2;
     text-align: left;
     min-width: 200px;
+    max-width: 200px;
+    width: 200px;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .actual-table th.row-header {

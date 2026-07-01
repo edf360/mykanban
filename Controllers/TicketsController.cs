@@ -309,24 +309,81 @@ public class TicketsController : ControllerBase
             // 更新
             existing.Hours = dto.Hours;
             existing.ProgressRate = dto.ProgressRate;
-            await _dbContext.SaveChangesAsync();
-            await NotifyTicketChanged();
-            return Ok(existing);
+        }
+        else
+        {
+            // 新規作成
+            var actual = new TicketActual
+            {
+                TicketId = id,
+                Date = dto.Date.Date,
+                Hours = dto.Hours,
+                ProgressRate = dto.ProgressRate,
+                ChildTaskIndex = dto.ChildTaskIndex
+            };
+            _dbContext.TicketActuals.Add(actual);
         }
 
-        // 新規作成
-        var actual = new TicketActual
+        // 子タスクの実績保存時、親チケットの進捗を子タスクの平均で更新
+        if (dto.ChildTaskIndex is not null && ticket.ChildTasks.Count > 0)
         {
-            TicketId = id,
-            Date = dto.Date.Date,
-            Hours = dto.Hours,
-            ProgressRate = dto.ProgressRate,
-            ChildTaskIndex = dto.ChildTaskIndex
-        };
-        _dbContext.TicketActuals.Add(actual);
+            int sum = 0, count = 0;
+            for (int i = 0; i < ticket.ChildTasks.Count; i++)
+            {
+                // 実績から最新の進捗率を取得
+                var latestActual = await _dbContext.TicketActuals
+                    .Where(a => a.TicketId == id && a.ChildTaskIndex == i && a.ProgressRate.HasValue)
+                    .OrderByDescending(a => a.Date)
+                    .FirstOrDefaultAsync();
+
+                if (latestActual != null)
+                {
+                    sum += latestActual.ProgressRate.Value;
+                    count++;
+                }
+                else
+                {
+                    // 実績なしの場合は Ticket.ChildTasks の Progress を使用
+                    sum += ticket.ChildTasks[i].Progress;
+                    count++;
+                }
+            }
+            if (count > 0)
+            {
+                int averageProgress = sum / count;
+                ticket.Progress = averageProgress;
+
+                // その日付の親チケット実績も更新/作成
+                var parentActual = await _dbContext.TicketActuals
+                    .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == null);
+
+                if (parentActual != null)
+                {
+                    parentActual.ProgressRate = averageProgress;
+                }
+                else
+                {
+                    var newParentActual = new TicketActual
+                    {
+                        TicketId = id,
+                        Date = dto.Date.Date,
+                        Hours = 0,
+                        ProgressRate = averageProgress,
+                        ChildTaskIndex = null
+                    };
+                    _dbContext.TicketActuals.Add(newParentActual);
+                }
+            }
+        }
+
         await _dbContext.SaveChangesAsync();
         await NotifyTicketChanged();
-        return CreatedAtAction(nameof(GetActuals), new { id }, actual);
+        
+        if (existing != null)
+        {
+            return Ok(existing);
+        }
+        return Ok(new { message = "Created" });
     }
 
     /// <summary>

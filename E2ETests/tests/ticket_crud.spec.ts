@@ -193,25 +193,6 @@ test.describe('チケットCRUD', () => {
     await expect(page.locator('#historyList')).toBeVisible();
   });
 
-  test('実績登録モーダルを表示できる', async ({ page }) => {
-    const name = uniqueName('実績テスト');
-    // チケットを作成
-    await page.click('.column-add-btn[data-column="todo"]');
-    await page.fill('#ticketTitle', name);
-    await page.click('#saveBtn');
-    await expect(page.locator('#ticketModal')).toBeHidden();
-
-    // 編集モードで実績ボタンをクリック
-    const ticket = page.locator('.column[data-column="todo"] .ticket:has-text("' + name + '")').first();
-    await ticket.click();
-    await expect(page.locator('#ticketModal')).toBeVisible();
-    await page.waitForSelector('#viewActualBtn', { state: 'visible' });
-    await page.click('#viewActualBtn');
-
-    // 実績モーダルが表示される
-    await expect(page.locator('#actualModal')).toBeVisible();
-  });
-
   test('チケットの全フィールド入力で保存', async ({ page }) => {
     const name = uniqueName('全フィールド');
     await page.click('.column-add-btn[data-column="todo"]');
