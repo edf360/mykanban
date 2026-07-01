@@ -981,34 +981,32 @@ function startSignalRConnection() {
     .build();
 
   // チケット変更イベント受信時に画面を更新（デバウンス付き）
+  // 重複通知の場合、タイマーをリセットして最後の通知から延期して再読み込み
   let ticketChangedTimeout = null;
   signalRConnection.on('TicketChanged', async () => {
-    // 短時間内の重複通知を無視（ローカル操作後のSignalR通知と重複防止）
+    // 短時間内の重複通知の場合、タイマーをリセット（最後の通知から500ms後に再読み込み）
     if (ticketChangedTimeout !== null) {
-      console.log('[SignalR] TicketChanged ignored (debounce)');
+      console.log('[SignalR] TicketChanged debounce reset');
       clearTimeout(ticketChangedTimeout);
-      ticketChangedTimeout = null;
-      return;
     }
-    ticketChangedTimeout = setTimeout(() => {
+    ticketChangedTimeout = setTimeout(async () => {
       ticketChangedTimeout = null;
-    }, 500);
-    
-    console.log('[SignalR] TicketChanged received, refreshing...');
-    try {
-      await loadTickets();
-      console.log('[SignalR] Tickets loaded successfully');
-      renderAllTickets();
-      console.log('[SignalR] Tickets rendered successfully');
-      // グラフパネルが開いている場合はグラフも更新
-      if (isGraphPanelOpen() && refreshGraphPanel !== null) {
-        refreshGraphPanel();
-        console.log('[SignalR] Graph panel refreshed');
+      console.log('[SignalR] TicketChanged received, refreshing...');
+      try {
+        await loadTickets();
+        console.log('[SignalR] Tickets loaded successfully');
+        renderAllTickets();
+        console.log('[SignalR] Tickets rendered successfully');
+        // グラフパネルが開いている場合はグラフも更新
+        if (isGraphPanelOpen() && refreshGraphPanel !== null) {
+          refreshGraphPanel();
+          console.log('[SignalR] Graph panel refreshed');
+        }
+      } catch (error) {
+        console.error('[SignalR] Failed to refresh tickets:', error);
+        console.error('[SignalR] Error stack:', error.stack);
       }
-    } catch (error) {
-      console.error('[SignalR] Failed to refresh tickets:', error);
-      console.error('[SignalR] Error stack:', error.stack);
-    }
+    }, 500);
   });
 
   signalRConnection.start()

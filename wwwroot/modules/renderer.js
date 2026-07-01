@@ -350,13 +350,13 @@ export function createTicketElement(data) {
         openEditModal(ticket.dataset.id);
     });
 
-    // グラフを描画（履歴データを非同期で取得）
+    // グラフを描画（実績データを非同期で取得）
     const chartEl = ticket.querySelector('.ticket-chart');
     if (chartEl) {
         const ticketId = ticket.dataset.id;
-        apiRequest(`${API_BASE}/tickets/${encodeURIComponent(ticketId)}/history`)
-            .then(histories => {
-                renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, histories);
+        apiRequest('GET', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, null)
+            .then(actuals => {
+                renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, actuals);
             })
             .catch(() => {
                 renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, []);
@@ -560,9 +560,9 @@ export function recreateTicket(ticketEl, data, column) {
     if (data.startDate && data.endDate) {
         const chartEl = newTicket.querySelector('.ticket-chart');
         if (chartEl) {
-            apiRequest(`${API_BASE}/tickets/${encodeURIComponent(data.id)}/history`)
-                .then(histories => {
-                    renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, histories);
+            apiRequest('GET', `${API_BASE}/${encodeURIComponent(data.id)}/actuals`, null)
+                .then(actuals => {
+                    renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, actuals);
                 })
                 .catch(() => {
                     renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, []);

@@ -55,38 +55,25 @@ function sanitizeNum(val, fallback = 0) {
 // ===== 個別チケット進捗グラフ =====
 
 /**
- * 進捗履歴からグラフ用のポイントデータを抽出
- * @param {Array} histories - 履歴リスト
+ * 実績データからグラフ用のポイントデータを抽出
+ * @param {Array} actuals - 実績リスト（TicketActual）
  * @returns {Array<{date: Date, progress: number}>} 日付順のポイントリスト
  */
-function extractProgressPoints(histories) {
-    if (!histories || !Array.isArray(histories)) return [];
+function extractActualPoints(actuals) {
+    if (!actuals || !Array.isArray(actuals)) return [];
     const points = [];
-    for (const h of histories) {
-        if (h.date && (h.type === 'progress' || h.type === 'childtask-progress')) {
-            const dateStr = h.date.split('T')[0];
-            const date = parseDate(dateStr);
-            if (!isNaN(date.getTime())) {
-                let progress = 0;
-                if (h.type === 'progress') {
-                    progress = sanitizeNum(h.value, 0);
-                } else {
-                    // childtask-progress: JSONからticketNewProgressを抽出
-                    try {
-                        const data = JSON.parse(h.value || '{}');
-                        progress = sanitizeNum(data.ticketNewProgress, 0);
-                    } catch (e) {
-                        progress = 0;
-                    }
-                }
-                points.push({ date, progress });
-            }
+    for (const a of actuals) {
+        // progressRate が null でない記録のみを対象
+        if (a.progressRate === null || a.progressRate === undefined) continue;
+        const dateStr = (a.date || '').split('T')[0];
+        const date = parseDate(dateStr);
+        if (!isNaN(date.getTime())) {
+            points.push({ date, progress: sanitizeNum(a.progressRate, 0) });
         }
     }
-    // 日付順にソート（同日の場合は進捗率の大きい方を残す）
+    // 日付順にソート
     points.sort((a, b) => a.date.getTime() - b.date.getTime());
     // 同日の重複を除去（最後の値を保持）
-    // toISOString() は UTC ベースなので日本時間でキーを生成
     const unique = [];
     const seenDates = new Set();
     for (const p of points) {
@@ -108,9 +95,9 @@ function extractProgressPoints(histories) {
  * @param {string} startDate - 開始日 (YYYY-MM-DD)
  * @param {string} endDate - 終了日 (YYYY-MM-DD)
  * @param {number} currentProgress - 現在の進捗率（外部から渡す）
- * @param {Array} histories - 進捗履歴リスト（オプション）
+ * @param {Array} actuals - 実績リスト（TicketActual）
  */
-export function renderProgressChart(container, startDate, endDate, currentProgress = 0, histories = []) {
+export function renderProgressChart(container, startDate, endDate, currentProgress = 0, actuals = []) {
     const width = 260;
     const height = 50;
     const labelHeight = 18;
@@ -157,40 +144,30 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
         />
     `;
 
-    // 実績線: 履歴ベースの折れ線グラフ（履歴がない場合は従来の直線）
-    let actualLine = '';
-    const progressPoints = extractProgressPoints(histories);
-    if (progressPoints.length > 0) {
-        // 履歴データがある場合は折れ線グラフ
-        let pathD = '';
-        const circles = [];
-        for (let i = 0; i < progressPoints.length; i++) {
-            const p = progressPoints[i];
-            const x = xScale(p.date);
-            const y = yScale(p.progress);
-            if (pathD === '') {
-                pathD = `M ${x} ${y}`;
-            } else {
-                pathD += ` L ${x} ${y}`;
-            }
-            circles.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="#ef4444"/>`);
-        }
-        if (pathD) {
-            actualLine = `<path d="${pathD}" fill="none" stroke="#ef4444" stroke-width="1.5"/>${circles.join('')}`;
-        }
+    // 実績線: 実績データベースの折れ線グラフ
+    const actualPoints = extractActualPoints(actuals);
+    if (actualPoints.length === 0) {
+        // 実績データがない場合はグラフを描画しない
+        container.innerHTML = '';
+        return;
     }
-    if (!actualLine && today >= start) {
-        // 履歴データがない場合は従来の直線
-        const actualEndX = today > end ? width - padding.right : xScale(today);
-        const actualEndY = yScale(currentProgress);
-        actualLine = `
-            <line
-                x1="${xScale(start)}" y1="${yScale(0)}"
-                x2="${actualEndX}" y2="${actualEndY}"
-                stroke="#ef4444" stroke-width="1.5"
-            />
-            <circle cx="${actualEndX}" cy="${actualEndY}" r="3" fill="#ef4444"/>
-        `;
+
+    let actualLine = '';
+    let pathD = '';
+    const circles = [];
+    for (let i = 0; i < actualPoints.length; i++) {
+        const p = actualPoints[i];
+        const x = xScale(p.date);
+        const y = yScale(p.progress);
+        if (pathD === '') {
+            pathD = `M ${x} ${y}`;
+        } else {
+            pathD += ` L ${x} ${y}`;
+        }
+        circles.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="#ef4444"/>`);
+    }
+    if (pathD) {
+        actualLine = `<path d="${pathD}" fill="none" stroke="#ef4444" stroke-width="1.5"/>${circles.join('')}`;
     }
 
     // グリッド線
@@ -1315,24 +1292,28 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
     
     // 子タスクヘッダー（デフォルト非表示）
     // 全チケットの子タスクを収集して列を生成
-    const allChildTasks = new Map(); // key -> childTask
+    const allChildTasks = new Map(); // category -> { category, childTasks: [] }
     sortedTickets.forEach(t => {
         const children = ticketChildTasks.get(t.id) || [];
         children.forEach(ct => {
-            const key = `${t.id}::${ct.text || '無題'}`;
-            if (!allChildTasks.has(key)) {
-                allChildTasks.set(key, { ticketId: t.id, childTask: ct });
+            const category = ct.category || '未分類';
+            if (!allChildTasks.has(category)) {
+                allChildTasks.set(category, { category, childTasks: [] });
+            }
+            // 重複チェック（同じチケットの同じ子タスクは追加しない）
+            const exists = allChildTasks.get(category).childTasks.some(ct2 => ct2.id === ct.id);
+            if (!exists) {
+                allChildTasks.get(category).childTasks.push(ct);
             }
         });
     });
     
-    allChildTasks.forEach((value, key) => {
+    allChildTasks.forEach((value, category) => {
         const childTh = document.createElement('th');
         childTh.className = 'child-task-header';
         childTh.dataset.parentTitle = 'progress';
-        const ctCat = value.childTask.category || '';
-        childTh.textContent = ctCat ? `${ctCat} ${value.childTask.text || '無題'}` : (value.childTask.text || '無題');
-        childTh.title = value.childTask.text || '無題';
+        childTh.textContent = category;
+        childTh.title = category;
         childTh.style.display = 'none';
         headerRow.appendChild(childTh);
     });
@@ -1394,16 +1375,19 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
         
         // 子タスクセル
         const children = ticketChildTasks.get(ticket.id) || [];
-        allChildTasks.forEach((value, key) => {
+        allChildTasks.forEach((value, category) => {
             const childTd = document.createElement('td');
             childTd.className = 'child-task-cell';
             childTd.dataset.parentTitle = 'progress';
             childTd.style.display = 'none';
             
-            if (value.ticketId === ticket.id) {
-                const ct = value.childTask;
-                const ctProgress = sanitizeNum(ct.progress, 0);
-                const cColor = getProgressColor(ctProgress);
+            // 該当チケットの同じ集計IDの子タスクを収集
+            const ticketChildren = (ticketChildTasks.get(ticket.id) || []).filter(ct => (ct.category || '未分類') === category);
+            
+            if (ticketChildren.length > 0) {
+                // 進捗率の平均を計算
+                const avgProgress = ticketChildren.reduce((sum, ct) => sum + sanitizeNum(ct.progress, 0), 0) / ticketChildren.length;
+                const cColor = getProgressColor(avgProgress);
                 const cDiv = document.createElement('div');
                 cDiv.className = 'progress-bar-cell';
                 
@@ -1411,13 +1395,13 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
                 cBar.className = 'progress-bar-mini';
                 const cFill = document.createElement('div');
                 cFill.className = 'progress-bar-mini-fill';
-                cFill.style.width = ctProgress + '%';
+                cFill.style.width = avgProgress + '%';
                 cFill.style.background = cColor;
                 cBar.appendChild(cFill);
                 
                 const cText = document.createElement('span');
                 cText.className = 'progress-bar-text';
-                cText.textContent = Math.round(ctProgress) + '%';
+                cText.textContent = Math.round(avgProgress) + '%';
                 
                 cDiv.appendChild(cBar);
                 cDiv.appendChild(cText);
