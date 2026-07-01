@@ -2930,20 +2930,6 @@ body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
     color: white;
 }
 
-/* 実績ボタン - 他のアクションボタンと同じスタイル */
-.modal-btn.actual {
-    background: rgba(107, 114, 128, 0.1);
-    color: #4b5563;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.modal-btn.actual:hover {
-    background: rgba(107, 114, 128, 0.2);
-}
-.modal-btn.actual:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
 
 /* 日付なしチケットセクション */
 .timeline-no-date-section {

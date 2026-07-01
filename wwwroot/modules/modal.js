@@ -11,7 +11,6 @@ import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
 import { createTicket, updateTicket } from './ticketService.js';
 import { renderAllTickets } from './renderer.js';
-import { openActualModal } from './actual.js';
 
 // ===== DOM要素キャッシュ =====
 const el = {
@@ -28,7 +27,6 @@ const el = {
     cancelBtn: null,
     saveBtn: null,
     hamburgerBtn: null,
-    viewActualBtn: null,
     ticketCategoryDisplay: null,
 };
 
@@ -52,7 +50,6 @@ function cacheElements() {
     el.cancelBtn = document.getElementById('cancelBtn');
     el.saveBtn = document.getElementById('saveBtn');
     el.hamburgerBtn = document.getElementById('modalHamburgerBtn');
-    el.viewActualBtn = document.getElementById('viewActualBtn');
     el.ticketCategoryDisplay = document.getElementById('ticketCategoryDisplay');
 }
 
@@ -145,9 +142,6 @@ function _openModal(options) {
     updateHamburgerMenu();
     applyEmergencyToModal();
     applyLockToModal();
-    
-    // 実績登録ボタンの有効/無効（新規チケット時は無効）
-    updateActualButton();
     
     // レンダリング
     renderAssigneeTags();
@@ -548,16 +542,6 @@ export async function copyTicket() {
 }
 
 /**
- * 実績登録ボタンの有効/無効を更新
- * 新規チケット時は無効、既存チケット編集時は有効
- */
-function updateActualButton() {
-    if (!el.viewActualBtn) return;
-    const isEdit = !!getEditingTicketId();
-    el.viewActualBtn.disabled = !isEdit;
-}
-
-/**
  * モーダル関連のイベントを初期化
  */
 export function initModal() {
@@ -575,14 +559,6 @@ export function initModal() {
         el.hamburgerBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleHamburgerMenu();
-        });
-    }
-    if (el.viewActualBtn) {
-        el.viewActualBtn.addEventListener('click', () => {
-            const ticketId = getEditingTicketId();
-            if (ticketId) {
-                openActualModal(ticketId);
-            }
         });
     }
     
