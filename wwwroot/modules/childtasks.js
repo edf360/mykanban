@@ -4,11 +4,10 @@
  * ドラッグ＆ドロップで順序入れ替え可能
  */
 
-import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked, getEditingTicketId, API_BASE } from './state.js';
+import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked, getEditingTicketId, API_BASE, emit } from './state.js';
 import { showProgressSlider } from './progressSliderPopup.js';
 import { showReviewIconPopup } from './reviewIconPopup.js';
 import { apiRequest } from './api.js';
-import { renderAllTickets } from './renderer.js';
 
 // ローカルID生成（HTTP環境でも動作）
 let childTaskIdCounter = 0;
@@ -332,8 +331,8 @@ async function showChildTaskProgressModal(task, itemDiv) {
             }
         }
         
-        // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
-        renderAllTickets();
+        // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画（イベントバス経由）
+        emit('render-tickets');
     }, ticketId, today, childTaskIndex >= 0 ? childTaskIndex : null, currentHours);
 }
 

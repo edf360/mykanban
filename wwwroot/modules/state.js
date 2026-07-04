@@ -659,12 +659,6 @@ export function invalidateLabelColorCache() {
 }
 
 // 設定データ取得（循環インポート回避のためstate.jsに配置）
-export function getSettings() {
-    if (typeof window.Settings !== 'undefined' && window.Settings.settings) {
-        return window.Settings.settings();
-    }
-    return { users: [], labels: [], holidays: [] };
-}
 
 /**
  * 日付を「月日(曜日)」形式に変換（null安全、toLocaleDateString使用）
@@ -743,4 +737,39 @@ export function getCurrentCategory() {
 export function setCurrentCategory(category) {
     internal.modal.currentCategory = category || '';
     emit('modal-changed', internal.modal);
+}
+
+// ===== 設定データアクセス（settings.js経由） =====
+
+/**
+ * 設定データを取得（window.Settings経由で循環依存回避）
+ */
+export function getSettings() {
+    return window.Settings?.settings?.() ?? { users: [], labels: [], holidays: [], memos: {} };
+}
+
+/**
+ * ラベルカラーキャッシュを無効化して再描画をリクエスト
+ */
+export function requestRenderAfterSettingsChange() {
+    invalidateLabelColorCache();
+    emit('render-tickets');
+}
+
+// ===== ドラッグ＆ドロップ関連 =====
+
+let draggedTicket = null;
+
+/**
+ * ドラッグ中のチケット要素を設定
+ */
+export function setDraggedTicket(ticket) {
+    draggedTicket = ticket;
+}
+
+/**
+ * ドラッグ中のチケット要素を取得
+ */
+export function getDraggedTicket() {
+    return draggedTicket;
 }

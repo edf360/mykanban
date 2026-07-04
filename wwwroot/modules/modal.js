@@ -5,12 +5,11 @@
 // モーダルアニメーション完了までの待機時間（ms）
 export const MODAL_ANIMATION_DURATION = 350;
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on, closeGraphPanel } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on, closeGraphPanel, emit } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
 import { createTicket, updateTicket } from './ticketService.js';
-import { renderAllTickets } from './renderer.js';
 
 // ===== DOM要素キャッシュ =====
 const el = {
@@ -527,8 +526,8 @@ export async function copyTicket() {
         // 新チケットを作成
         await createTicket(newData);
         
-        // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
-        renderAllTickets();
+        // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画（イベントバス経由）
+        emit('render-tickets');
         
         // 新チケット編集画面を開く
         setTimeout(() => {

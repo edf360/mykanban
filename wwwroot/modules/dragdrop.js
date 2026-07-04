@@ -2,9 +2,22 @@
  * ドラッグ＆ドロップ処理モジュール
  */
 
-import { API_BASE, state, getAllTickets, getTicket, updateTicketField } from './state.js';
+import { API_BASE, state, getAllTickets, getTicket, updateTicketField, setDraggedTicket, getDraggedTicket, on } from './state.js';
 import { apiRequest, loadTickets } from './api.js';
-import { draggedTicket, removeDropIndicators, ticketMatchesFilter } from './renderer.js';
+
+/**
+ * ドロップインジケーターを削除
+ */
+function removeDropIndicators() {
+    document.querySelectorAll('.drop-indicator').forEach(indicator => {
+        indicator.remove();
+    });
+}
+
+// ドラッグ開始時にインジケーターを削除
+on('drag-started', () => {
+    removeDropIndicators();
+});
 
 /**
  * ドロップゾーンを設定
@@ -63,7 +76,7 @@ export function setupDropZones() {
             e.preventDefault();
             removeDropIndicators();
             
-            if (!draggedTicket) return;
+            if (!getDraggedTicket()) return;
             
             const tickets = Array.from(list.querySelectorAll('.ticket:not(.dragging)'));
             
@@ -82,20 +95,20 @@ export function setupDropZones() {
                 if (lastTicket) {
                     const nextSibling = lastTicket.nextSibling;
                     if (nextSibling) {
-                        list.insertBefore(draggedTicket, nextSibling);
+                        list.insertBefore(getDraggedTicket(), nextSibling);
                     } else {
-                        list.appendChild(draggedTicket);
+                        list.appendChild(getDraggedTicket());
                     }
                 } else {
-                    list.appendChild(draggedTicket);
+                    list.appendChild(getDraggedTicket());
                 }
             } else {
-                list.insertBefore(draggedTicket, tickets[insertIndex]);
+                list.insertBefore(getDraggedTicket(), tickets[insertIndex]);
             }
             
             // サーバーにカラム変更を通知
             const newColumn = list.closest('.column').dataset.column;
-            const ticketId = draggedTicket.dataset.id;
+            const ticketId = getDraggedTicket().dataset.id;
             try {
                 const allTickets = getAllTickets();
                 // ドロップ先カラムの全チケットを取得（ドラッグ中除外）

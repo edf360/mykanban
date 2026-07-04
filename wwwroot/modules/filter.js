@@ -3,8 +3,7 @@
  * DOM取得・state更新・render呼び出しを一元管理
  */
 
-import { setFilter, getFilterAssignee, getAssigneeSuggestions, getLabelSuggestions } from './state.js';
-import { renderAllTickets } from './renderer.js';
+import { setFilter, getFilterAssignee, getAssigneeSuggestions, getLabelSuggestions, emit } from './state.js';
 import { updateMemoColumn } from './memo.js';
 import { loadUserSettings, saveUserSettings } from './userSettings.js';
 
@@ -46,7 +45,7 @@ function debounce(fn, delay) {
  * 再描画をまとめた集約関数
  */
 function triggerRender() {
-    renderAllTickets();
+    emit('render-tickets');
     updateMemoColumn();
 }
 

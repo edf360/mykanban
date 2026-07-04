@@ -338,7 +338,7 @@ public class TicketsController : ControllerBase
 
                 if (latestActual != null)
                 {
-                    sum += latestActual.ProgressRate.Value;
+                    sum += latestActual.ProgressRate ?? 0;
                     count++;
                 }
                 else

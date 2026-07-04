@@ -3,12 +3,12 @@
  * 各モジュールを統合して初期化
  */
 
-import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback } from './modules/state.js';
+import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback, on, emit, invalidateLabelColorCache } from './modules/state.js';
 import { loadUserSettings, saveUserSettings } from './modules/userSettings.js';
 import { loadTickets, loadSuggestions } from './modules/api.js';
 import { renderAllTickets } from './modules/renderer.js';
 import { setupDropZones } from './modules/dragdrop.js';
-import { initModal, openNewModal } from './modules/modal.js';
+import { initModal, openNewModal, openEditModal } from './modules/modal.js';
 import { renderLabelSelect } from './modules/labels.js';
 import { renderAssigneeSelect, renderGraphAssigneeSelect } from './modules/assignees.js';
 import { addChildTask } from './modules/childtasks.js';
@@ -52,6 +52,18 @@ async function initApp() {
   const { signal } = eventController;
 
   try {
+    // イベントバスリスナー登録（循環依存解消用）
+    on('open-edit-modal', (data) => {
+        openEditModal(data.ticketId);
+    });
+    on('render-tickets', () => {
+        renderAllTickets();
+    });
+    on('settings-saved', () => {
+        invalidateLabelColorCache();
+        renderAllTickets();
+    });
+
     // 1. モーダル関連イベント
     logInfo('[app] Initializing modal...');
     initModal();

@@ -6,16 +6,16 @@ import { getFilterAssignee } from './state.js';
 import { renderAssigneeChart } from './charts.js';
 import { getUsername } from './auth.js';
 import { loadUserSettings, saveUserSettings } from './userSettings.js';
-import { getSettings as loadSettings, save as saveSettings } from './settings.js';
+import { apiRequest } from './api.js';
 
 // ===== Storage層 =====
 
 /**
- * 担当者のメモを取得（DBから）
+ * 担当者のメモを取得（API経由）
  */
 export async function getMemoFromDb(assignee) {
     try {
-        const settings = loadSettings();
+        const settings = await apiRequest('GET', '/api/settings');
         return (settings?.memos?.[assignee] ?? '') || '';
     } catch {
         return '';
@@ -23,16 +23,22 @@ export async function getMemoFromDb(assignee) {
 }
 
 /**
- * 担当者のメモをDBに保存
+ * 担当者のメモをDBに保存（API経由）
  */
 export async function saveMemoToDb(assignee, memo) {
     try {
-        const settings = loadSettings();
+        const settings = await apiRequest('GET', '/api/settings');
         if (!settings.memos) {
             settings.memos = {};
         }
         settings.memos[assignee] = memo;
-        await saveSettings();
+        const payload = {
+            users: settings.users || [],
+            labels: settings.labels || [],
+            holidays: settings.holidays || [],
+            memos: settings.memos
+        };
+        await apiRequest('PUT', '/api/settings', payload);
         return true;
     } catch (e) {
         console.error('Failed to save memo:', e);

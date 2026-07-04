@@ -1,8 +1,7 @@
 // 設定パネル管理モジュール
 import { apiRequest, loadSuggestions } from './api.js';
 import { isAdmin, getToken } from './auth.js';
-import { renderAllTickets } from './renderer.js';
-import { invalidateLabelColorCache, closeGraphPanel } from './state.js';
+import { invalidateLabelColorCache, closeGraphPanel, emit } from './state.js';
 
 // ローカルID生成（HTTP環境でも動作）
 let localIdCounter = 0;
@@ -318,7 +317,7 @@ function createLabelItem(label, admin) {
                 renderLabels(currentAdminState);
                 save();
                 invalidateLabelColorCache();
-                renderAllTickets();
+                emit('render-tickets');
             }
         });
         actions.appendChild(deleteBtn);
@@ -370,7 +369,7 @@ function createLabelItem(label, admin) {
                 renderLabels(currentAdminState);
                 save();
                 invalidateLabelColorCache();
-                renderAllTickets();
+                emit('render-tickets');
             }
         }
     });
@@ -418,7 +417,7 @@ function finishLabelInlineEdit(id, newName, newColor, admin) {
     renderLabels(currentAdminState);
     save();
     invalidateLabelColorCache();
-    renderAllTickets();
+    emit('render-tickets');
 }
 
 /**
@@ -529,7 +528,7 @@ function createUserItem(user, admin) {
                 renderUsers(currentAdminState);
                 save();
                 invalidateLabelColorCache();
-                renderAllTickets();
+                emit('render-tickets');
             }
         });
         actions.appendChild(deleteBtn);
@@ -581,7 +580,7 @@ function createUserItem(user, admin) {
                     renderUsers(currentAdminState);
                     save();
                     invalidateLabelColorCache();
-                    renderAllTickets();
+                    emit('render-tickets');
                 }
             }
         });
@@ -626,7 +625,7 @@ function finishUserInlineEdit(id, newName) {
     renderUsers(currentAdminState);
     save();
     invalidateLabelColorCache();
-    renderAllTickets();
+    emit('render-tickets');
 }
 
 /**
@@ -656,7 +655,7 @@ function addUser() {
     renderUsers(currentAdminState);
     save();
     invalidateLabelColorCache();
-    renderAllTickets();
+    emit('render-tickets');
 }
 
 /**
@@ -680,7 +679,7 @@ function addLabel() {
     renderLabels(currentAdminState);
     save();
     invalidateLabelColorCache();
-    renderAllTickets();
+    emit('render-tickets');
 }
 
 /**

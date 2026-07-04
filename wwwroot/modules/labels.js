@@ -2,8 +2,7 @@
  * ラベル管理モジュール
  */
 
-import { getCurrentLabels, getLabelSuggestions, escapeHtml, addLabelToState, removeLabelFromState } from './state.js';
-import { getSettings } from './settings.js';
+import { getCurrentLabels, getLabelSuggestions, escapeHtml, addLabelToState, removeLabelFromState, getSettings } from './state.js';
 
 /**
  * ラベルを追加

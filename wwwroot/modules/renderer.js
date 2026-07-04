@@ -3,11 +3,10 @@
  * チケット要素の生成・描画・更新
  */
 
-import { API_BASE, state, escapeHtml, labelColorCacheInvalidated, getSettings, getAllTickets, getTicket, setTicket, removeTicket, updateTicketField } from './state.js';
+import { API_BASE, state, escapeHtml, labelColorCacheInvalidated, getSettings, getAllTickets, getTicket, setTicket, removeTicket, updateTicketField, emit, setDraggedTicket, getDraggedTicket } from './state.js';
 import { loadUserSettings, saveUserSettings } from './userSettings.js';
 import { apiRequest, loadTickets } from './api.js';
 import { renderProgressChart } from './charts.js';
-import { openEditModal } from './modal.js';
 import { updateMemoColumn } from './memo.js';
 import { showProgressSlider } from './progressSliderPopup.js';
 import { showReviewIconPopup } from './reviewIconPopup.js';
@@ -343,11 +342,11 @@ export function createTicketElement(data) {
         });
     }
     
-    // チケットクリックでモーダルを開く
+    // チケットクリックでモーダルを開く（イベントバス経由）
     ticket.addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-btn') || e.target.closest('.progress-slider-popup') || e.target.classList.contains('ticket-collapse-btn')) return;
         if (data.isArchived) return;
-        openEditModal(ticket.dataset.id);
+        emit('open-edit-modal', { ticketId: ticket.dataset.id });
     });
 
     // グラフを描画（実績データを非同期で取得）
@@ -574,14 +573,11 @@ export function recreateTicket(ticketEl, data, column) {
 }
 
 
-// ドラッグ関連のグローバル変数（dragdrop.jsと共有）
-export let draggedTicket = null;
-
 /**
  * ドラッグ開始処理（dragdrop.jsから呼び出し用）
  */
 function handleDragStart(e) {
-    draggedTicket = this;
+    setDraggedTicket(this);
     this.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', this.dataset.id);
@@ -594,7 +590,8 @@ function handleDragStart(e) {
     };
     this.addEventListener('dragover', this._dragOverHandler);
     
-    removeDropIndicators();
+    // イベントバス経由でインジケーター削除を通知
+    emit('drag-started');
 }
 
 /**
@@ -607,26 +604,10 @@ function handleDragEnd(e) {
         delete this._dragOverHandler;
     }
     this.classList.remove('dragging');
-    draggedTicket = null;
+    setDraggedTicket(null);
     
     document.querySelectorAll('.ticket-list').forEach(list => {
         list.classList.remove('drag-over');
     });
-}
-
-/**
- * ドロップインジケーターを削除
- */
-export function removeDropIndicators() {
-    document.querySelectorAll('.drop-indicator').forEach(indicator => {
-        indicator.remove();
-    });
-}
-
-// イベント用簡易バス
-const listeners = {};
-export function on(event, callback) {
-    if (!listeners[event]) listeners[event] = [];
-    listeners[event].push(callback);
 }
 
