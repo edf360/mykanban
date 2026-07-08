@@ -25,6 +25,23 @@ public class Ticket
     public string? Category { get; set; }
     public DateTime CreatedAt { get; set; }
 
+    // 監査用列
+    [JsonPropertyName("createdAtBy")]
+    public string? CreatedBy { get; set; }
+
+    [JsonPropertyName("updatedAt")]
+    public DateTime? UpdatedAt { get; set; }
+
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
+
+    // ソフト削除用列
+    [JsonIgnore]
+    public bool IsDeleted { get; set; }
+
+    [JsonIgnore]
+    public DateTime? DeletedAt { get; set; }
+
     // DB用フィールド（シリアライズ時は非表示）
     [JsonIgnore]
     public string AssigneesJson { get; set; } = "[]";
@@ -77,6 +94,7 @@ public class Ticket
         set => LabelsJson = JsonSerializer.Serialize(value);
     }
 
+    [NotMapped]
     [JsonPropertyName("childTasks")]
     public List<ChildTask> ChildTasks
     {
@@ -93,28 +111,10 @@ public class Ticket
         }
         set => ChildTasksJson = JsonSerializer.Serialize(value);
     }
-}
 
-public class ChildTask
-{
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
-
-    [JsonPropertyName("text")]
-    public string Text { get; set; } = string.Empty;
-
-    [JsonPropertyName("done")]
-    public bool Done { get; set; }
-
-    [JsonPropertyName("progress")]
-    public int Progress { get; set; }
-
-    [JsonPropertyName("category")]
-    public string? Category { get; set; }
-
-    [JsonPropertyName("memo")]
-    public string? Memo { get; set; }
-
-    [JsonPropertyName("reviewState")]
-    public string ReviewState { get; set; } = "none";
+    /// <summary>
+    /// 独立テーブルの子タスク（ナビゲーションプロパティ）
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<ChildTask> ChildTasksEntities { get; set; } = new List<ChildTask>();
 }

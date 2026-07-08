@@ -36,6 +36,23 @@ public class TicketActual
     
     /// <summary>
     /// 子タスクインデックス（null=親チケット自身）
+    /// 非推奨：ChildTaskIdを使用してください
     /// </summary>
+    [Obsolete("Use ChildTaskId instead")]
     public int? ChildTaskIndex { get; set; }
+
+    /// <summary>
+    /// 関連する子タスクID（null=親チケット自身）
+    /// </summary>
+    public string? ChildTaskId { get; set; }
+
+    /// <summary>
+    /// 作成日時
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// 更新日時
+    /// </summary>
+    public DateTime? UpdatedAt { get; set; }
 }

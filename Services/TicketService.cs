@@ -34,11 +34,17 @@ public class TicketService
         return await _context.Tickets.FindAsync(ticketId);
     }
 
-    public async Task<Ticket> CreateAsync(TicketDto dto)
+    public async Task<Ticket> CreateAsync(TicketDto dto, string? username = null)
     {
+        // タイトル検証
+        if (string.IsNullOrEmpty(dto.Title))
+        {
+            throw new ArgumentException("タイトルは必須です。", nameof(dto));
+        }
+
         var validChildTasks = dto.ChildTasks
             .Where(ct => !string.IsNullOrWhiteSpace(ct.Text))
-            .Select(ct => new ChildTask
+            .Select((ct, index) => new ChildTask
             {
                 Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                 Text = ct.Text,
@@ -46,7 +52,8 @@ public class TicketService
                 Progress = ct.Progress,
                 Category = ct.Category,
                 Memo = ct.Memo,
-                ReviewState = ct.ReviewState ?? "none"
+                ReviewState = ct.ReviewState ?? "none",
+                OrderIndex = index
             })
             .ToList();
 
@@ -77,7 +84,8 @@ public class TicketService
             IsLocked = dto.IsLocked,
             IsEmergency = dto.IsEmergency,
             Category = dto.Category,
-            CreatedAt = DateTime.Now
+            CreatedAt = DateTime.Now,
+            CreatedBy = username
         };
 
         // Id は MaxAsync + 1 で生成（インメモリSQLiteテストとの互換性のためAUTOINCREMENT不使用）
@@ -92,24 +100,42 @@ public class TicketService
 
         _context.Tickets.Add(ticket);
 
-        var history = new TicketHistory
+        // 子タスクを独立テーブルにも保存（ナビゲーションプロパティ経由）
+        foreach (var ct in validChildTasks)
         {
-            TicketId = ticket.TicketId,
-            Type = "created",
-            Value = null,
-            PreviousValue = null,
-            Date = DateTime.Now
-        };
-        _context.TicketHistories.Add(history);
+            ticket.ChildTasksEntities.Add(new ChildTask
+            {
+                Id = ct.Id,
+                TicketId = ticket.TicketId,
+                Text = ct.Text,
+                Done = ct.Done,
+                Progress = ct.Progress,
+                Category = ct.Category,
+                Memo = ct.Memo,
+                ReviewState = ct.ReviewState ?? "none",
+                OrderIndex = ct.OrderIndex,
+                CreatedAt = DateTime.Now
+            });
+        }
 
         await _context.SaveChangesAsync();
         return ticket;
     }
 
-    public async Task<Ticket?> UpdateAsync(string ticketId, TicketDto dto)
+    public async Task<Ticket?> UpdateAsync(string ticketId, TicketDto dto, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return null;
+
+        // タイトル検証
+        if (string.IsNullOrEmpty(dto.Title))
+        {
+            throw new ArgumentException("タイトルは必須です。", nameof(dto));
+        }
+
+        // 監査列の更新
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
 
         var oldTitle = ticket.Title;
         var oldAssigneesJson = ticket.AssigneesJson;
@@ -152,9 +178,9 @@ public class TicketService
         ticket.Category = dto.Category;
         if (dto.ChildTasks != null)
         {
-            ticket.ChildTasks = dto.ChildTasks
+            var validChildTasks = dto.ChildTasks
                 .Where(ct => !string.IsNullOrWhiteSpace(ct.Text))
-                .Select(ct => new ChildTask
+                .Select((ct, index) => new ChildTask
                 {
                     Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                     Text = ct.Text,
@@ -165,19 +191,56 @@ public class TicketService
                     ReviewState = ct.ReviewState ?? "none"
                 })
                 .ToList();
-        }
+            ticket.ChildTasks = validChildTasks;
 
-        RecordHistoryIfChanged(ticketId, "title", ticket.Title, oldTitle);
-        RecordHistoryIfChanged(ticketId, "column", ticket.Column, oldColumn);
-        RecordHistoryIfChanged(ticketId, "assignee", ticket.AssigneesJson, oldAssigneesJson);
-        RecordHistoryIfChanged(ticketId, "assignee", $"main:{ticket.MainAssignee}", $"main:{oldMainAssignee}");
-        RecordHistoryIfChanged(ticketId, "label", ticket.LabelsJson, oldLabelsJson);
-        RecordHistoryIfChanged(ticketId, "childtask", ticket.ChildTasksJson, oldChildTasksJson);
-        RecordHistoryIfChanged(ticketId, "memo", ticket.Memo, oldMemo);
-        RecordHistoryIfChanged(ticketId, "date-start", ticket.StartDate?.ToString("yyyy-MM-dd"), oldStartDate?.ToString("yyyy-MM-dd"));
-        RecordHistoryIfChanged(ticketId, "date-end", ticket.EndDate?.ToString("yyyy-MM-dd"), oldEndDate?.ToString("yyyy-MM-dd"));
-        RecordHistoryIfChanged(ticketId, "effort", ticket.Effort?.ToString(), oldEffort?.ToString());
-        RecordHistoryIfChanged(ticketId, "lock", ticket.IsLocked ? "locked" : "unlocked", oldIsLocked ? "locked" : "unlocked");
+            // 独立テーブルの子タスクを同期
+            var existingChildTasks = await _context.ChildTasks
+                .Where(ct => ct.TicketId == ticketId)
+                .ToListAsync();
+            var existingIds = existingChildTasks.Select(ct => ct.Id).ToHashSet();
+            var newIds = validChildTasks.Select(ct => ct.Id).ToHashSet();
+
+            // 削除された子タスクを削除
+            var toRemove = existingChildTasks.Where(ct => !newIds.Contains(ct.Id)).ToList();
+            if (toRemove.Count > 0)
+            {
+                _context.ChildTasks.RemoveRange(toRemove);
+            }
+
+            // 新規または更新された子タスクを追加/更新
+            foreach (var ct in validChildTasks)
+            {
+                var existing = existingChildTasks.FirstOrDefault(c => c.Id == ct.Id);
+                if (existing != null)
+                {
+                    // 更新
+                    existing.Text = ct.Text;
+                    existing.Done = ct.Done;
+                    existing.Progress = ct.Progress;
+                    existing.Category = ct.Category;
+                    existing.Memo = ct.Memo;
+                    existing.ReviewState = ct.ReviewState ?? "none";
+                    existing.UpdatedAt = DateTime.Now;
+                }
+                else
+                {
+                    // 新規追加
+                    ticket.ChildTasksEntities.Add(new ChildTask
+                    {
+                        Id = ct.Id,
+                        TicketId = ticketId,
+                        Text = ct.Text,
+                        Done = ct.Done,
+                        Progress = ct.Progress,
+                        Category = ct.Category,
+                        Memo = ct.Memo,
+                        ReviewState = ct.ReviewState ?? "none",
+                        OrderIndex = validChildTasks.IndexOf(ct),
+                        CreatedAt = DateTime.Now
+                    });
+                }
+            }
+        }
 
         await _context.SaveChangesAsync();
         return ticket;
@@ -187,7 +250,7 @@ public class TicketService
     /// チケットをアーカイブに移動（ソフトデリート）
     /// 既にアーカイブ済みの場合は何もしない
     /// </summary>
-    public async Task<Ticket?> ArchiveAsync(string ticketId)
+    public async Task<Ticket?> ArchiveAsync(string ticketId, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return null;
@@ -202,6 +265,8 @@ public class TicketService
         ticket.IsArchived = true;
         ticket.Column = "archive";
         ticket.Position = 0;
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
         await _context.SaveChangesAsync();
         return ticket;
     }
@@ -210,17 +275,45 @@ public class TicketService
     /// チケットを完全に削除（ハードデリート）
     /// 管理者のみが使用可能
     /// </summary>
-    public async Task<bool> DeleteAsync(string ticketId)
+    public async Task<bool> DeleteAsync(string ticketId, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return false;
 
-        _context.Tickets.Remove(ticket);
+        // アーカイブ済みチケットは完全削除
+        if (ticket.IsArchived)
+        {
+            // 子タスクの実績も削除
+            var actuals = await _context.TicketActuals.Where(a => a.TicketId == ticketId).ToListAsync();
+            if (actuals.Count > 0)
+            {
+                _context.TicketActuals.RemoveRange(actuals);
+            }
+
+            // 独立テーブルの子タスクも削除
+            var childTasks = await _context.ChildTasks.Where(ct => ct.TicketId == ticketId).ToListAsync();
+            if (childTasks.Count > 0)
+            {
+                _context.ChildTasks.RemoveRange(childTasks);
+            }
+
+            _context.Tickets.Remove(ticket);
+        }
+        else
+        {
+            // ソフト削除
+            ticket.IsDeleted = true;
+            ticket.DeletedAt = DateTime.Now;
+        }
+
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
+
         await _context.SaveChangesAsync();
         return true;
     }
 
-    public async Task<Ticket?> RestoreAsync(string ticketId)
+    public async Task<Ticket?> RestoreAsync(string ticketId, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return null;
@@ -240,23 +333,24 @@ public class TicketService
         ticket.Position = maxPos + 1000.0;
 
         ticket.PreviousColumn = null;
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
         await _context.SaveChangesAsync();
         return ticket;
     }
 
-    public async Task<bool> UpdateColumnAsync(string ticketId, ColumnUpdateDto dto)
+    public async Task<bool> UpdateColumnAsync(string ticketId, ColumnUpdateDto dto, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return false;
 
+        // 監査列の更新
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
+
         var oldColumn = ticket.Column;
         var newColumn = dto.Column;
         ticket.Column = newColumn;
-
-        if (oldColumn != newColumn)
-        {
-            RecordHistory(ticketId, "column", newColumn, oldColumn);
-        }
 
         if (dto.InsertIndex.HasValue)
         {
@@ -338,10 +432,14 @@ public class TicketService
         return true;
     }
 
-    public async Task<bool> UpdateProgressAsync(string ticketId, ProgressUpdateDto dto)
+    public async Task<bool> UpdateProgressAsync(string ticketId, ProgressUpdateDto dto, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return false;
+
+        // 監査列の更新
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
 
         // 子タスクがある場合は進捗を直接更新できない
         if (ticket.ChildTasks != null && ticket.ChildTasks.Count > 0)
@@ -352,19 +450,18 @@ public class TicketService
         var oldProgress = ticket.Progress;
         ticket.Progress = Math.Max(0, Math.Min(100, dto.Progress));
 
-        if (oldProgress != ticket.Progress)
-        {
-            RecordHistory(ticketId, "progress", ticket.Progress.ToString(), oldProgress.ToString());
-        }
-
         await _context.SaveChangesAsync();
         return true;
     }
 
-    public async Task<Ticket?> UpdateChildTaskAsync(string ticketId, string childId, ChildTaskUpdateDto dto)
+    public async Task<Ticket?> UpdateChildTaskAsync(string ticketId, string childId, ChildTaskUpdateDto dto, string? username = null)
     {
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return null;
+
+        // 監査列の更新
+        ticket.UpdatedAt = DateTime.Now;
+        ticket.UpdatedBy = username;
 
         var childTasks = ticket.ChildTasks;
         var childTask = childTasks?.FirstOrDefault(ct => ct.Id == childId);
@@ -374,14 +471,9 @@ public class TicketService
         var oldTicketProgress = ticket.Progress;
 
         childTask.Done = dto.Done;
-        bool childProgressChanged = false;
         if (dto.Progress.HasValue)
         {
             var newProgress = Math.Max(0, Math.Min(100, dto.Progress.Value));
-            if (newProgress != oldChildProgress)
-            {
-                childProgressChanged = true;
-            }
             childTask.Progress = newProgress;
         }
         if (!string.IsNullOrEmpty(dto.ReviewState))
@@ -390,48 +482,31 @@ public class TicketService
         }
         ticket.ChildTasks = childTasks!;
 
+        // 独立テーブルの子タスクも同期更新
+        var childTaskEntity = await _context.ChildTasks.FindAsync(childId);
+        if (childTaskEntity != null)
+        {
+            childTaskEntity.Done = dto.Done;
+            if (dto.Progress.HasValue)
+            {
+                childTaskEntity.Progress = Math.Max(0, Math.Min(100, dto.Progress.Value));
+            }
+            if (!string.IsNullOrEmpty(dto.ReviewState))
+            {
+                childTaskEntity.ReviewState = dto.ReviewState;
+            }
+            childTaskEntity.UpdatedAt = DateTime.Now;
+        }
+
         // 子タスクの進捗からメインタスクの進捗を平均値で計算
         if (childTasks != null && childTasks.Count > 0)
         {
             ticket.Progress = (int)Math.Round(childTasks.Average(ct => ct.Progress));
         }
 
-        // 子タスクの進捗が変更された場合は履歴に記録
-        if (childProgressChanged)
-        {
-            // 子タスク進捗履歴（子タスク進捗とチケット進捗の両方を残す）
-            var childHistoryValue = System.Text.Json.JsonSerializer.Serialize(new {
-                childId,
-                childTask.Text,
-                oldProgress = oldChildProgress,
-                newProgress = childTask.Progress,
-                ticketOldProgress = oldTicketProgress,
-                ticketNewProgress = ticket.Progress
-            });
-            RecordHistory(ticketId, "childtask-progress", childHistoryValue, null);
-
-            // チケット全体の進捗が変更された場合は進捗履歴も記録
-            if (ticket.Progress != oldTicketProgress)
-            {
-                RecordHistory(ticketId, "progress", ticket.Progress.ToString(), oldTicketProgress.ToString());
-            }
-        }
-
         await _context.SaveChangesAsync();
 
         return ticket;
-    }
-
-    public async Task<List<TicketHistory>> GetHistoryAsync(string ticketId)
-    {
-        var ticket = await _context.Tickets.FindAsync(ticketId);
-        if (ticket == null) return new List<TicketHistory>();
-
-        return await _context.TicketHistories
-            .Where(h => h.TicketId == ticketId)
-            .OrderByDescending(h => h.Date)
-            .ThenBy(h => h.Type)
-            .ToListAsync();
     }
 
     public async Task<List<LabelSuggestDto>> GetLabelsSuggestAsync()
@@ -542,33 +617,4 @@ public class TicketService
         // Positionの変更は呼び元でSaveChangesAsyncにより保存される
     }
 
-    private void RecordHistory(string ticketId, string type, string? value, string? previousValue)
-    {
-        try
-        {
-            var history = new TicketHistory
-            {
-                TicketId = ticketId,
-                Type = type,
-                Value = value,
-                PreviousValue = previousValue,
-                Date = DateTime.Now
-            };
-            _context.TicketHistories.Add(history);
-        }
-        catch (Exception ex)
-        {
-            // Serilogを使用して本番環境でもログ出力
-            var log = Serilog.Log.Logger;
-            log.Error(ex, "履歴記録に失敗しました: TicketId={TicketId}, Type={Type}", ticketId, type);
-        }
-    }
-
-    private void RecordHistoryIfChanged(string ticketId, string type, string? newValue, string? oldValue)
-    {
-        if (newValue != oldValue)
-        {
-            RecordHistory(ticketId, type, newValue, oldValue);
-        }
-    }
 }

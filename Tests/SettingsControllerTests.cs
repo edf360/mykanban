@@ -40,7 +40,8 @@ public class SettingsControllerTests : IDisposable
     {
         _context.Tickets.RemoveRange(_context.Tickets);
         _context.Settings.RemoveRange(_context.Settings);
-        _context.TicketHistories.RemoveRange(_context.TicketHistories);
+        _context.ChildTasks.RemoveRange(_context.ChildTasks);
+        _context.TicketActuals.RemoveRange(_context.TicketActuals);
         await _context.SaveChangesAsync();
     }
 

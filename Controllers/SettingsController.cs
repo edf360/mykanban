@@ -1,5 +1,4 @@
 using CsvHelper;
-using KanbanServer.Constants;
 using KanbanServer.Data;
 using KanbanServer.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -137,7 +136,6 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> Export()
     {
         var tickets = await _context.Tickets.ToListAsync();
-        var histories = await _context.TicketHistories.ToListAsync();
         var settings = await _context.Settings.ToListAsync();
 
         // TicketのJSONフィールドを直接シリアライズするために特別処理
@@ -162,15 +160,6 @@ public class SettingsController : ControllerBase
                 labels = t.Labels,
                 t.Memo,
                 childTasks = t.ChildTasks,
-            }).ToList(),
-            histories = histories.Select(h => new
-            {
-                h.Id,
-                h.TicketId,
-                h.Type,
-                h.Value,
-                h.PreviousValue,
-                h.Date
             }).ToList(),
             settings = settings.Select(s => new
             {
@@ -216,7 +205,6 @@ public class SettingsController : ControllerBase
             try
             {
                 // 全データを削除してからインポート（完全上書き）
-                await _context.Database.ExecuteSqlRawAsync("DELETE FROM TicketHistories");
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM Tickets");
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM Settings");
 
@@ -242,31 +230,6 @@ public class SettingsController : ControllerBase
                         ChildTasks = t.ChildTasks?.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList() ?? new List<ChildTask>()
                     };
                     _context.Tickets.Add(ticket);
-                }
-
-                // 履歴をインポート（履歴がない場合は自動生成）
-                if (importData.Histories != null && importData.Histories.Count > 0)
-                {
-                    foreach (var h in importData.Histories)
-                    {
-                        var history = new TicketHistory
-                        {
-                            TicketId = h.TicketId,
-                            Type = h.Type,
-                            Value = h.Value,
-                            PreviousValue = h.PreviousValue,
-                            Date = h.Date
-                        };
-                        _context.TicketHistories.Add(history);
-                    }
-                }
-                else if (importData.Tickets != null && importData.Tickets.Count > 0)
-                {
-                    // 履歴がない古いバックアップの場合、各チケットに作成履歴を自動生成
-                    foreach (var t in importData.Tickets)
-                    {
-                        AddHistory(t.TicketId, HistoryTypes.Created, t.Title, null);
-                    }
                 }
 
                 // 設定をインポート
@@ -455,9 +418,6 @@ public class SettingsController : ControllerBase
 
                 // Dictionaryに追加して同一IDの重複インポートを防ぐ
                 existingTicketsDict[ticket.TicketId] = ticket;
-
-                // 作成履歴を記録
-                AddHistory(ticket.TicketId, HistoryTypes.Created, ticket.Title, null);
             }
             else
             {
@@ -469,43 +429,6 @@ public class SettingsController : ControllerBase
                     }
                     ticket.Position = maxPos + 1000.0;
                     maxPositionByColumn[ticket.Column] = ticket.Position;
-                }
-                // 既存チケット更新 - 変更フィールドを比較して履歴記録
-                if (existingTicket.Title != ticket.Title)
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Title, ticket.Title, existingTicket.Title);
-                }
-                if (existingTicket.AssigneesJson != ticket.AssigneesJson)
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Assignee, ticket.AssigneesJson, existingTicket.AssigneesJson);
-                }
-                if (existingTicket.LabelsJson != ticket.LabelsJson)
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Label, ticket.LabelsJson, existingTicket.LabelsJson);
-                }
-                if (existingTicket.Column != ticket.Column)
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Status, ticket.Column, existingTicket.Column);
-                }
-                if (!Equals(existingTicket.StartDate, ticket.StartDate))
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Date,
-                        ticket.StartDate?.ToString("yyyy-MM-dd") ?? "",
-                        existingTicket.StartDate?.ToString("yyyy-MM-dd") ?? "");
-                }
-                if (!Equals(existingTicket.Effort, ticket.Effort))
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Effort,
-                        ticket.Effort?.ToString() ?? "",
-                        existingTicket.Effort?.ToString() ?? "");
-                }
-                if (existingTicket.Memo != ticket.Memo)
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.Memo, ticket.Memo, existingTicket.Memo);
-                }
-                if (existingTicket.ChildTasksJson != ticket.ChildTasksJson)
-                {
-                    AddHistory(ticket.TicketId, HistoryTypes.ChildTask, ticket.ChildTasksJson, existingTicket.ChildTasksJson);
                 }
             }
 
@@ -625,21 +548,6 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
-    /// 履歴を追加
-    /// </summary>
-    private void AddHistory(string ticketId, string type, string? value, string? previousValue)
-    {
-        _context.TicketHistories.Add(new TicketHistory
-        {
-            TicketId = ticketId,
-            Type = type,
-            Value = value,
-            PreviousValue = previousValue,
-            Date = DateTime.Now
-        });
-    }
-
-    /// <summary>
     /// 各カラムのPositionを再配置（重複を解消）
     /// </summary>
     private void RepositionAllColumns()
@@ -751,7 +659,6 @@ public class ImportData
     public int Version { get; set; }
     public string? ExportedAt { get; set; }
     public List<ImportTicket>? Tickets { get; set; }
-    public List<ImportHistory>? Histories { get; set; }
     public List<ImportSetting>? Settings { get; set; }
 }
 
@@ -778,16 +685,6 @@ public class ImportChildTask
 {
     public string Text { get; set; } = "";
     public bool Done { get; set; }
-}
-
-public class ImportHistory
-{
-    public int Id { get; set; }
-    public string TicketId { get; set; } = "";
-    public string Type { get; set; } = "";
-    public string? Value { get; set; }
-    public string? PreviousValue { get; set; }
-    public DateTime Date { get; set; }
 }
 
 public class ImportSetting

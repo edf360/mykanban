@@ -943,7 +943,7 @@ public class ControllerTests : IDisposable
 }
 
 /// <summary>
-/// Restore・History・Suggest・AssigneeOrderなどの未カバー機能のテスト
+/// Restore・Suggest・AssigneeOrderなどの未カバー機能のテスト
 /// </summary>
 public class AdditionalControllerTests : IDisposable
 {
@@ -1059,100 +1059,6 @@ public class AdditionalControllerTests : IDisposable
         Assert.IsType<NoContentResult>(result2);
         var afterSecond = await _context.Tickets.FindAsync("double-del");
         Assert.Null(afterSecond);
-    }
-
-    // ===== History機能テスト =====
-
-    [Fact]
-    public async Task GetHistory_ShouldReturnHistoriesForTicket()
-    {
-        // Arrange: チケットを作成（作成履歴が記録される）
-        var dto = new TicketDto { Title = "履歴テスト", Column = "todo" };
-        var createResult = await _controller.Create(dto);
-        var createAction = Assert.IsType<ActionResult<Ticket>>(createResult);
-        var createdResponse = Assert.IsType<CreatedAtActionResult>(createAction.Result!);
-        var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
-
-        // カラム移動で履歴を追加
-        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "doing", InsertIndex = 0 });
-
-        // Act: 履歴取得
-        var result = await _controller.GetHistory(ticket.TicketId);
-
-        // Assert: Okが返り、履歴が含まれる
-        var actionResult = Assert.IsType<ActionResult<List<TicketHistory>>>(result);
-        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
-        var histories = Assert.IsAssignableFrom<List<TicketHistory>>(okResult.Value!);
-
-        // 作成履歴 + カラム移動履歴の少なくとも2件
-        Assert.True(histories.Count >= 2, $"Expected at least 2 histories but got {histories.Count}");
-        Assert.Contains(histories, h => h.Type == "created");
-        Assert.Contains(histories, h => h.Type == "column");
-    }
-
-    [Fact]
-    public async Task GetHistory_NotFound_WhenTicketMissing()
-    {
-        // Act: 存在しないチケットの履歴を取得 시도
-        var result = await _controller.GetHistory("non-existent");
-
-        // Assert: NotFoundが返る（ActionResult<List<TicketHistory>>ラップ）
-        var actionResult = Assert.IsType<ActionResult<List<TicketHistory>>>(result);
-        Assert.IsType<NotFoundObjectResult>(actionResult.Result!);
-    }
-
-    [Fact]
-    public async Task GetHistory_EmptyList_WhenNoHistories()
-    {
-        // Arrange: 直接DBにチケットを追加（コントローラー経由ではないので履歴なし）
-        _context.Tickets.Add(new Ticket { TicketId = "no-history", Id = 1, Title = "履歴なし", Column = "todo", Position = 0 });
-        await _context.SaveChangesAsync();
-
-        // Act: 履歴取得
-        var result = await _controller.GetHistory("no-history");
-
-        // Assert: Okが返り、空リストまたは作成履歴のみ
-        var actionResult = Assert.IsType<ActionResult<List<TicketHistory>>>(result);
-        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
-        var histories = Assert.IsAssignableFrom<List<TicketHistory>>(okResult.Value!);
-        // 直接追加なので履歴なし
-        Assert.Empty(histories);
-    }
-
-    [Fact]
-    public async Task UpdateProgress_ShouldRecordHistory()
-    {
-        // Arrange: チケットを作成
-        var dto = new TicketDto { Title = "進捗履歴テスト", Column = "todo" };
-        var createResult = await _controller.Create(dto);
-        var createAction = Assert.IsType<ActionResult<Ticket>>(createResult);
-        var createdResponse = Assert.IsType<CreatedAtActionResult>(createAction.Result!);
-        var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
-
-        // Act: 進捗更新（0 → 50）
-        await _controller.UpdateProgress(ticket.TicketId, new ProgressUpdateDto { Progress = 50 });
-
-        // Assert: 履歴にprogressタイプが記録される
-        var histories = await _context.TicketHistories.Where(h => h.TicketId == ticket.TicketId).ToListAsync();
-        Assert.Contains(histories, h => h.Type == "progress" && h.Value == "50" && h.PreviousValue == "0");
-    }
-
-    [Fact]
-    public async Task UpdateColumn_ShouldRecordHistory()
-    {
-        // Arrange: チケットを作成
-        var dto = new TicketDto { Title = "カラム履歴テスト", Column = "todo" };
-        var createResult = await _controller.Create(dto);
-        var createAction = Assert.IsType<ActionResult<Ticket>>(createResult);
-        var createdResponse = Assert.IsType<CreatedAtActionResult>(createAction.Result!);
-        var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
-
-        // Act: カラム移動（todo → doing）
-        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "doing", InsertIndex = 0 });
-
-        // Assert: 履歴にcolumnタイプが記録される
-        var histories = await _context.TicketHistories.Where(h => h.TicketId == ticket.TicketId).ToListAsync();
-        Assert.Contains(histories, h => h.Type == "column" && h.Value == "doing" && h.PreviousValue == "todo");
     }
 
     // ===== Suggest機能テスト =====
@@ -1271,42 +1177,6 @@ public class AdditionalControllerTests : IDisposable
         // Assert: NotFoundが返る
         var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
         Assert.IsType<NotFoundObjectResult>(actionResult.Result);
-    }
-
-    [Fact]
-    public async Task UpdateProgress_SameValue_ShouldNotRecordHistory()
-    {
-        // Arrange: チケットを作成（Progress=0）
-        var dto = new TicketDto { Title = "同じ進捗テスト", Column = "todo" };
-        var createResult = await _controller.Create(dto);
-        var createAction = Assert.IsType<ActionResult<Ticket>>(createResult);
-        var createdResponse = Assert.IsType<CreatedAtActionResult>(createAction.Result!);
-        var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
-
-        // Act: 同じ進捗値（0）で更新
-        await _controller.UpdateProgress(ticket.TicketId, new ProgressUpdateDto { Progress = 0 });
-
-        // Assert: 履歴にprogressタイプは記録されない（変更なし）
-        var histories = await _context.TicketHistories.Where(h => h.TicketId == ticket.TicketId).ToListAsync();
-        Assert.DoesNotContain(histories, h => h.Type == "progress");
-    }
-
-    [Fact]
-    public async Task UpdateColumn_SameColumn_ShouldNotRecordHistory()
-    {
-        // Arrange: チケットを作成
-        var dto = new TicketDto { Title = "同じカラムテスト", Column = "todo" };
-        var createResult = await _controller.Create(dto);
-        var createAction = Assert.IsType<ActionResult<Ticket>>(createResult);
-        var createdResponse = Assert.IsType<CreatedAtActionResult>(createAction.Result!);
-        var ticket = Assert.IsAssignableFrom<Ticket>(createdResponse.Value!);
-
-        // Act: 同じカラムに移動（Position変更のみ）
-        await _controller.UpdateColumn(ticket.TicketId, new ColumnUpdateDto { Column = "todo", InsertIndex = 0 });
-
-        // Assert: 履歴にcolumnタイプは記録されない（同じカラム）
-        var histories = await _context.TicketHistories.Where(h => h.TicketId == ticket.TicketId).ToListAsync();
-        Assert.DoesNotContain(histories, h => h.Type == "column");
     }
 
     // ===== GetAllでアーカイブ除外テスト =====

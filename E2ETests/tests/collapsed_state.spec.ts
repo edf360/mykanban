@@ -24,23 +24,30 @@ test.describe('折りたたみ状態のユーザー別保存 (B01)', () => {
     
     // 保存
     await page.click('#saveBtn');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
 
-    // チケットが作成されたことを確認
-    const ticket = page.locator('.ticket:has-text("折りたたみテストチケット")');
+    // チケットが作成されたことを確認（最初に作成されるので最初を取得）
+    const tickets = page.locator('.ticket:has-text("折りたたみテストチケット")');
+    const ticket = tickets.first();
     await expect(ticket).toBeVisible();
     
+    // チケットのレンダリングが完了するまで待つ
+    await page.waitForTimeout(1000);
+
+    // チケットIDを取得（後でリロード後に使用）
+    const ticketId = await ticket.getAttribute('data-id');
+
     // 折りたたみボタンがあることを確認
     const collapseBtn = ticket.locator('.ticket-collapse-btn');
     await expect(collapseBtn).toBeVisible();
-    
+
     // 折りたたみボタンをクリック
     await collapseBtn.click();
-    await page.waitForTimeout(500);
-    
+    await page.waitForTimeout(1000);
+
     // 折りたたみ状態になっていることを確認
     await expect(ticket).toHaveClass(/collapsed/);
-    
+
     // localStorageに保存されていることを確認
     const localStorageData = await page.evaluate(() => {
       const key = Object.keys(localStorage).find(k => k.startsWith('kanban_user_settings_'));
@@ -49,13 +56,12 @@ test.describe('折りたたみ状態のユーザー別保存 (B01)', () => {
       }
       return null;
     });
-    
+
     expect(localStorageData).not.toBeNull();
     expect(localStorageData.collapsedTickets).toBeDefined();
     expect(Array.isArray(localStorageData.collapsedTickets)).toBe(true);
-    
-    // 折りたたみ状態の配列にチケットIDが含まれていることを確認
-    const ticketId = await ticket.getAttribute('data-id');
+
+    // 折りたたみ状態の配列にチケットIdが含まれていることを確認
     const isCollapsed = await page.evaluate(({ id }) => {
       const key = Object.keys(localStorage).find(k => k.startsWith('kanban_user_settings_'));
       if (key) {

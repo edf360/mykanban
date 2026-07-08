@@ -6,8 +6,8 @@ namespace KanbanServer.Data;
 public class KanbanDbContext : DbContext
 {
     public DbSet<Ticket> Tickets => Set<Ticket>();
-    public DbSet<TicketHistory> TicketHistories => Set<TicketHistory>();
     public DbSet<TicketActual> TicketActuals => Set<TicketActual>();
+    public DbSet<ChildTask> ChildTasks => Set<ChildTask>();
     public DbSet<Setting> Settings => Set<Setting>();
 
     public KanbanDbContext(DbContextOptions<KanbanDbContext> options) : base(options)
@@ -18,8 +18,7 @@ public class KanbanDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // ChildTask/LabelConfigはエンティティとして扱わない（JSONフィールド用）
-        modelBuilder.Ignore<ChildTask>();
+        // LabelConfigはエンティティとして扱わない（JSONフィールド用）
         modelBuilder.Ignore<LabelConfig>();
 
         modelBuilder.Entity<Ticket>(entity =>
@@ -33,17 +32,21 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.LabelsJson).HasDefaultValue("[]");
             entity.Property(e => e.ChildTasksJson).HasDefaultValue("[]");
             entity.Property(e => e.IsArchived).HasDefaultValue(false);
-        });
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false);
 
-        modelBuilder.Entity<TicketHistory>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TicketId).IsRequired();
-            entity.Property(e => e.Type).IsRequired();
-            // 外部キー制約を追加
-            entity.HasOne<Ticket>()
-                .WithMany()
-                .HasForeignKey(e => e.TicketId)
+            // ソフト削除のGlobal Query Filter
+            entity.HasQueryFilter(e => !e.IsDeleted);
+
+            // インデックス
+            entity.HasIndex(e => e.Column);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.IsArchived);
+            entity.HasIndex(e => e.IsDeleted);
+
+            // 子タスクとの関連
+            entity.HasMany(t => t.ChildTasksEntities)
+                .WithOne(ct => ct.Ticket!)
+                .HasForeignKey(ct => ct.TicketId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -52,13 +55,30 @@ public class KanbanDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TicketId).IsRequired();
             entity.Property(e => e.Date).IsRequired();
-            // TicketId + Date + ChildTaskIndex の複合ユニーク制約
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            // TicketId + Date + ChildTaskIndex の複合ユニーク制約（旧互換）
             entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskIndex }).IsUnique();
+            // TicketId + Date + ChildTaskId の複合ユニーク制約（新）
+            entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskId }).IsUnique();
             // 外部キー制約 - チケット削除時に連動削除
             entity.HasOne<Ticket>()
                 .WithMany()
                 .HasForeignKey(e => e.TicketId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChildTask>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Text).IsRequired();
+            entity.Property(e => e.TicketId).IsRequired();
+            entity.Property(e => e.ReviewState).HasDefaultValue("none");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // インデックス
+            entity.HasIndex(e => e.TicketId);
+            entity.HasIndex(e => e.OrderIndex);
+            // 関係はTicket側で定義されているためここでは設定しない
         });
 
         modelBuilder.Entity<Setting>(entity =>

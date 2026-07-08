@@ -1,0 +1,265 @@
+
+Running 7 tests using 7 workers
+
+  x  3 [chromium] › tests\settings_management.spec.ts:107:7 › 設定操作完全フロー › CSVインポートボタンが存在する (6.5s)
+  x  2 [chromium] › tests\settings_management.spec.ts:55:7 › 設定操作完全フロー › ラベルを削除できる (6.7s)
+  x  4 [chromium] › tests\settings_management.spec.ts:77:7 › 設定操作完全フロー › 休日を追加できる (6.7s)
+  x  7 [chromium] › tests\settings_management.spec.ts:98:7 › 設定操作完全フロー › DBエクスポートボタンが存在する (6.7s)
+  x  5 [chromium] › tests\settings_management.spec.ts:126:7 › 設定操作完全フロー › 管理者のみ設定で書き込み可能 (6.7s)
+  x  6 [chromium] › tests\settings_management.spec.ts:116:7 › 設定操作完全フロー › 設定パネルを閉じられる (6.7s)
+  x  1 [chromium] › tests\settings_management.spec.ts:33:7 › 設定操作完全フロー › 担当者を削除できる (6.8s)
+
+
+  1) [chromium] › tests\settings_management.spec.ts:33:7 › 設定操作完全フロー › 担当者を削除できる ───────────────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+      39 |     // 設定モーダルを開く
+      40 |     await page.click('#settingsBtn');
+    > 41 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+         |                                                  ^
+      42 |     
+      43 |     // 既存の担当者が存在することを確認
+      44 |     const initialCount = await page.locator('#usersList .user-item').count();
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:41:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-担当者を削除できる-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-担当者を削除できる-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-担当者を削除できる-chromium\error-context.md
+
+  2) [chromium] › tests\settings_management.spec.ts:55:7 › 設定操作完全フロー › ラベルを削除できる ───────────────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+      61 |     // 設定モーダルを開く
+      62 |     await page.click('#settingsBtn');
+    > 63 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+         |                                                  ^
+      64 |     
+      65 |     // 既存のラベルが存在する場合、削除を試みる
+      66 |     const labelCount = await page.locator('#labelsList .label-item').count();
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:63:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-ラベルを削除できる-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-ラベルを削除できる-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-ラベルを削除できる-chromium\error-context.md
+
+  3) [chromium] › tests\settings_management.spec.ts:77:7 › 設定操作完全フロー › 休日を追加できる ────────────────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+      78 |     // 設定モーダルを開く
+      79 |     await page.click('#settingsBtn');
+    > 80 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+         |                                                  ^
+      81 |     
+      82 |     // 休日テキストエリアに日付を入力（8桁形式）
+      83 |     const holidayInput = page.locator('#holidaysTextarea');
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:80:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-休日を追加できる-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-休日を追加できる-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-休日を追加できる-chromium\error-context.md
+
+  4) [chromium] › tests\settings_management.spec.ts:98:7 › 設定操作完全フロー › DBエクスポートボタンが存在する ────────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+       99 |     // 設定モーダルを開く
+      100 |     await page.click('#settingsBtn');
+    > 101 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+          |                                                  ^
+      102 |     
+      103 |     // DBエクスポートボタンが存在することを確認
+      104 |     await expect(page.locator('#exportDbBtn')).toBeVisible();
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:101:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-DBエクスポートボタンが存在する-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-DBエクスポートボタンが存在する-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-DBエクスポートボタンが存在する-chromium\error-context.md
+
+  5) [chromium] › tests\settings_management.spec.ts:107:7 › 設定操作完全フロー › CSVインポートボタンが存在する ───────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+      108 |     // 設定モーダルを開く
+      109 |     await page.click('#settingsBtn');
+    > 110 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+          |                                                  ^
+      111 |     
+      112 |     // CSVインポートボタンが存在することを確認
+      113 |     await expect(page.locator('#importCsvBtn')).toBeVisible();
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:110:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-CSVインポートボタンが存在する-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-CSVインポートボタンが存在する-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-CSVインポートボタンが存在する-chromium\error-context.md
+
+  6) [chromium] › tests\settings_management.spec.ts:116:7 › 設定操作完全フロー › 設定パネルを閉じられる ────────────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+      117 |     // 設定モーダルを開く
+      118 |     await page.click('#settingsBtn');
+    > 119 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+          |                                                  ^
+      120 |     
+      121 |     // 設定ボタンを再度クリックして閉じる
+      122 |     await page.click('#settingsBtn');
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:119:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-設定パネルを閉じられる-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-設定パネルを閉じられる-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-設定パネルを閉じられる-chromium\error-context.md
+
+  7) [chromium] › tests\settings_management.spec.ts:126:7 › 設定操作完全フロー › 管理者のみ設定で書き込み可能 ─────────────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('#settingsModal')
+    Expected pattern: /active/
+    Received string:  "modal-overlay"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveClass" with timeout 5000ms
+      - waiting for locator('#settingsModal')
+        14 × locator resolved to <div role="dialog" aria-modal="true" id="settingsModal" class="modal-overlay">…</div>
+           - unexpected value "modal-overlay"
+
+
+      127 |     // 管理者でログインしている場合、設定モーダルで書き込み可能
+      128 |     await page.click('#settingsBtn');
+    > 129 |     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+          |                                                  ^
+      130 |     
+      131 |     // 担当者追加ボタンが有効
+      132 |     await expect(page.locator('#addUserBtn')).toBeEnabled();
+        at c:\repos\mykanban\E2ETests\tests\settings_management.spec.ts:129:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-管理者のみ設定で書き込み可能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings_management-設定操作完全フロー-管理者のみ設定で書き込み可能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings_management-設定操作完全フロー-管理者のみ設定で書き込み可能-chromium\error-context.md
+
+  7 failed
+    [chromium] › tests\settings_management.spec.ts:33:7 › 設定操作完全フロー › 担当者を削除できる ────────────────────
+    [chromium] › tests\settings_management.spec.ts:55:7 › 設定操作完全フロー › ラベルを削除できる ────────────────────
+    [chromium] › tests\settings_management.spec.ts:77:7 › 設定操作完全フロー › 休日を追加できる ─────────────────────
+    [chromium] › tests\settings_management.spec.ts:98:7 › 設定操作完全フロー › DBエクスポートボタンが存在する ─────────────
+    [chromium] › tests\settings_management.spec.ts:107:7 › 設定操作完全フロー › CSVインポートボタンが存在する ────────────
+    [chromium] › tests\settings_management.spec.ts:116:7 › 設定操作完全フロー › 設定パネルを閉じられる ─────────────────
+    [chromium] › tests\settings_management.spec.ts:126:7 › 設定操作完全フロー › 管理者のみ設定で書き込み可能 ──────────────

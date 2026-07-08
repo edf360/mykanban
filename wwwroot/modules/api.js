@@ -164,23 +164,6 @@ export async function loadSuggestions() {
 }
 
 /**
- * チケット履歴を取得
- * @param {string} ticketId - チケットID
- * @returns {Promise<Array>} 履歴データ配列
- */
-export async function loadHistory(ticketId) {
-    try {
-        return await apiRequest('GET', `${API_BASE}/${ticketId}/history`, null);
-    } catch (error) {
-        // UnauthorizedError は apiRequest 側でログ出力済み
-        if (!(error instanceof UnauthorizedError)) {
-            console.error('Failed to load history:', error);
-        }
-        throw error;
-    }
-}
-
-/**
  * 簡易APIクライアントオブジェクト
  * GET/POST/PUT/PATCH/DELETEメソッドを提供
  */

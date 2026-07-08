@@ -26,6 +26,18 @@ public class TicketsController : ControllerBase
     }
 
     /// <summary>
+    /// 現在ログイン中のユーザー名を取得
+    /// </summary>
+    private string? GetUsername()
+    {
+        if (HttpContext is null || HttpContext.Items.Count == 0)
+        {
+            return null;
+        }
+        return HttpContext.Items["Username"] as string;
+    }
+
+    /// <summary>
     /// チケット変更を全クライアントに通知
     /// </summary>
     private async Task NotifyTicketChanged()
@@ -72,7 +84,7 @@ public class TicketsController : ControllerBase
             return BadRequest(new { error = "Request body is required" });
         try
         {
-            var ticket = await _ticketService.CreateAsync(dto);
+            var ticket = await _ticketService.CreateAsync(dto, GetUsername());
             await NotifyTicketChanged();
             return CreatedAtAction(nameof(GetAll), new { id = ticket.TicketId }, ticket);
         }
@@ -92,7 +104,7 @@ public class TicketsController : ControllerBase
             return BadRequest(new { error = "Request body is required" });
         try
         {
-            var ticket = await _ticketService.UpdateAsync(id, dto);
+            var ticket = await _ticketService.UpdateAsync(id, dto, GetUsername());
             if (ticket == null)
                 return NotFound(new { error = "Ticket not found" });
             await NotifyTicketChanged();
@@ -102,19 +114,6 @@ public class TicketsController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
-    }
-
-    /// <summary>
-    /// チケットの履歴一覧を取得
-    /// </summary>
-    [HttpGet("{id}/history")]
-    public async Task<ActionResult<List<TicketHistory>>> GetHistory(string id)
-    {
-        var ticket = await _ticketService.GetAsync(id);
-        if (ticket == null)
-            return NotFound(new { error = "Ticket not found" });
-        var histories = await _ticketService.GetHistoryAsync(id);
-        return Ok(histories);
     }
 
     /// <summary>
@@ -131,8 +130,8 @@ public class TicketsController : ControllerBase
 
         if (ticket.IsArchived)
         {
-            // アーカイブ済み → 完全削除
-            var result = await _ticketService.DeleteAsync(id);
+            // アーカイブ済み → ソフト削除
+            var result = await _ticketService.DeleteAsync(id, GetUsername());
             if (!result)
                 return NotFound(new { error = "Ticket not found" });
             await NotifyTicketChanged();
@@ -141,7 +140,7 @@ public class TicketsController : ControllerBase
         else
         {
             // 未アーカイブ → アーカイブ移動
-            var result = await _ticketService.ArchiveAsync(id);
+            var result = await _ticketService.ArchiveAsync(id, GetUsername());
             if (result == null)
                 return NotFound(new { error = "Ticket not found" });
             await NotifyTicketChanged();
@@ -155,7 +154,7 @@ public class TicketsController : ControllerBase
     [HttpPatch("{id}/restore")]
     public async Task<ActionResult<Ticket>> Restore(string id)
     {
-        var ticket = await _ticketService.RestoreAsync(id);
+        var ticket = await _ticketService.RestoreAsync(id, GetUsername());
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
         await NotifyTicketChanged();
@@ -176,7 +175,7 @@ public class TicketsController : ControllerBase
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
         
-        var success = await _ticketService.UpdateColumnAsync(id, dto);
+        var success = await _ticketService.UpdateColumnAsync(id, dto, GetUsername());
         if (!success)
             return BadRequest(new { error = "Failed to update column" });
         await NotifyTicketChanged();
@@ -191,7 +190,7 @@ public class TicketsController : ControllerBase
     {
         if (dto is null)
             return BadRequest(new { error = "Request body is required" });
-        var success = await _ticketService.UpdateProgressAsync(id, dto);
+        var success = await _ticketService.UpdateProgressAsync(id, dto, GetUsername());
         if (!success)
             return NotFound(new { error = "Ticket not found" });
         await NotifyTicketChanged();
@@ -206,7 +205,7 @@ public class TicketsController : ControllerBase
     {
         if (dto is null)
             return BadRequest(new { error = "Request body is required" });
-        var ticket = await _ticketService.UpdateChildTaskAsync(id, childId, dto);
+        var ticket = await _ticketService.UpdateChildTaskAsync(id, childId, dto, GetUsername());
         if (ticket == null)
             return NotFound(new { error = "Ticket or child task not found" });
         await NotifyTicketChanged();
@@ -280,25 +279,48 @@ public class TicketsController : ControllerBase
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
 
-        // 既存の実績を確認（TicketId + Date + ChildTaskIndexで一意）
-        var existing = await _dbContext.TicketActuals
-            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == dto.ChildTaskIndex);
+        // ChildTaskIdを優先、ChildTaskIndexは後方互換
+        string? childTaskId = dto.ChildTaskId;
+        int? childTaskIndex = childTaskId == null ? dto.ChildTaskIndex : null;
+
+        // 既存の実績を確認（ChildTaskId優先、次にChildTaskIndex）
+        TicketActual? existing;
+        if (childTaskId != null)
+        {
+            existing = await _dbContext.TicketActuals
+                .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskId == childTaskId);
+        }
+        else
+        {
+            existing = await _dbContext.TicketActuals
+                .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == childTaskIndex);
+        }
 
         // チケットの進捗率を更新
         if (dto.ProgressRate.HasValue)
         {
-            if (dto.ChildTaskIndex is null)
+            if (childTaskId == null && childTaskIndex is null)
             {
                 // 親タスクの進捗率を更新
                 ticket.Progress = (int)dto.ProgressRate;
             }
+            else if (childTaskId != null)
+            {
+                // 子タスク（独立テーブル）の進捗率を更新
+                var childTask = await _dbContext.ChildTasks.FindAsync(childTaskId);
+                if (childTask != null)
+                {
+                    childTask.Progress = (int)dto.ProgressRate;
+                    childTask.UpdatedAt = DateTime.Now;
+                }
+            }
             else
             {
-                // 子タスクの進捗率を更新
+                // 子タスク（JSON）の進捗率を更新（後方互換）
                 var childTasks = ticket.ChildTasks;
-                if (dto.ChildTaskIndex >= 0 && dto.ChildTaskIndex < childTasks.Count)
+                if (childTaskIndex >= 0 && childTaskIndex < childTasks.Count)
                 {
-                    childTasks[dto.ChildTaskIndex.Value].Progress = (int)dto.ProgressRate;
+                    childTasks[childTaskIndex.Value].Progress = (int)dto.ProgressRate;
                     ticket.ChildTasks = childTasks;
                 }
             }
@@ -309,6 +331,7 @@ public class TicketsController : ControllerBase
             // 更新
             existing.Hours = dto.Hours;
             existing.ProgressRate = dto.ProgressRate;
+            existing.UpdatedAt = DateTime.Now;
         }
         else
         {
@@ -319,7 +342,9 @@ public class TicketsController : ControllerBase
                 Date = dto.Date.Date,
                 Hours = dto.Hours,
                 ProgressRate = dto.ProgressRate,
-                ChildTaskIndex = dto.ChildTaskIndex
+                ChildTaskIndex = childTaskIndex,
+                ChildTaskId = childTaskId,
+                CreatedAt = DateTime.Now
             };
             _dbContext.TicketActuals.Add(actual);
         }
@@ -390,7 +415,7 @@ public class TicketsController : ControllerBase
     /// 実績を更新
     /// </summary>
     [HttpPut("{id}/actuals/{date}")]
-    public async Task<ActionResult<TicketActual>> UpdateActual(string id, string date, [FromQuery] int? childTaskIndex, [FromBody] ActualDto? dto)
+    public async Task<ActionResult<TicketActual>> UpdateActual(string id, string date, [FromQuery] int? childTaskIndex, [FromQuery] string? childTaskId, [FromBody] ActualDto? dto)
     {
         if (dto is null)
             return BadRequest(new { error = "Request body is required" });
@@ -401,21 +426,35 @@ public class TicketsController : ControllerBase
         if (ticket == null)
             return NotFound(new { error = "Ticket not found" });
 
+        // ChildTaskIdを優先
+        string? targetChildTaskId = childTaskId ?? dto.ChildTaskId;
+        int? targetChildTaskIndex = targetChildTaskId == null ? childTaskIndex ?? dto.ChildTaskIndex : null;
+
         // チケットの進捗率を更新
         if (dto.ProgressRate.HasValue)
         {
-            if (childTaskIndex is null)
+            if (targetChildTaskId == null && targetChildTaskIndex is null)
             {
                 // 親タスクの進捗率を更新
                 ticket.Progress = (int)dto.ProgressRate;
             }
+            else if (targetChildTaskId != null)
+            {
+                // 子タスク（独立テーブル）の進捗率を更新
+                var childTask = await _dbContext.ChildTasks.FindAsync(targetChildTaskId);
+                if (childTask != null)
+                {
+                    childTask.Progress = (int)dto.ProgressRate;
+                    childTask.UpdatedAt = DateTime.Now;
+                }
+            }
             else
             {
-                // 子タスクの進捗率を更新
+                // 子タスク（JSON）の進捗率を更新（後方互換）
                 var childTasks = ticket.ChildTasks;
-                if (childTaskIndex >= 0 && childTaskIndex < childTasks.Count)
+                if (targetChildTaskIndex >= 0 && targetChildTaskIndex < childTasks.Count)
                 {
-                    childTasks[childTaskIndex.Value].Progress = (int)dto.ProgressRate;
+                    childTasks[targetChildTaskIndex.Value].Progress = (int)dto.ProgressRate;
                     ticket.ChildTasks = childTasks;
                 }
             }
@@ -427,13 +466,24 @@ public class TicketsController : ControllerBase
             return BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd" });
         }
 
-        var actual = await _dbContext.TicketActuals
-            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == childTaskIndex);
+        // ChildTaskId優先で検索
+        TicketActual? actual;
+        if (targetChildTaskId != null)
+        {
+            actual = await _dbContext.TicketActuals
+                .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskId == targetChildTaskId);
+        }
+        else
+        {
+            actual = await _dbContext.TicketActuals
+                .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == targetChildTaskIndex);
+        }
         if (actual == null)
             return NotFound(new { error = "Actual not found" });
 
         actual.Hours = dto.Hours;
         actual.ProgressRate = dto.ProgressRate;
+        actual.UpdatedAt = DateTime.Now;
         await _dbContext.SaveChangesAsync();
         await NotifyTicketChanged();
         return Ok(actual);
@@ -443,7 +493,7 @@ public class TicketsController : ControllerBase
     /// 実績を削除
     /// </summary>
     [HttpDelete("{id}/actuals/{date}")]
-    public async Task<IActionResult> DeleteActual(string id, string date, [FromQuery] int? childTaskIndex = null)
+    public async Task<IActionResult> DeleteActual(string id, string date, [FromQuery] int? childTaskIndex = null, [FromQuery] string? childTaskId = null)
     {
         var ticket = await _ticketService.GetAsync(id);
         if (ticket == null)
@@ -455,8 +505,18 @@ public class TicketsController : ControllerBase
             return BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd" });
         }
 
-        var actual = await _dbContext.TicketActuals
-            .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == childTaskIndex);
+        // ChildTaskId優先で検索
+        TicketActual? actual;
+        if (childTaskId != null)
+        {
+            actual = await _dbContext.TicketActuals
+                .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskId == childTaskId);
+        }
+        else
+        {
+            actual = await _dbContext.TicketActuals
+                .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == childTaskIndex);
+        }
         if (actual == null)
             return NotFound(new { error = "Actual not found" });
 
@@ -475,5 +535,15 @@ public class ActualDto
     public DateTime Date { get; set; }
     public double Hours { get; set; }
     public int? ProgressRate { get; set; }
+    
+    /// <summary>
+    /// 子タスクインデックス（旧方式、非推奨）
+    /// </summary>
+    [Obsolete("Use ChildTaskId instead")]
     public int? ChildTaskIndex { get; set; }
+    
+    /// <summary>
+    /// 子タスクID（null=親チケット自身）
+    /// </summary>
+    public string? ChildTaskId { get; set; }
 }

@@ -1471,46 +1471,7 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
             });
         });
     }
-    
     container.innerHTML = '';
     container.appendChild(table);
-    
-    // 非同期: 各チケットの最終更新日を取得
-    updateTicketProgressLastUpdatedPerTicket(container, sortedTickets);
 }
-
-/**
- * 各チケットの最終更新日を非同期で更新
- */
-async function updateTicketProgressLastUpdatedPerTicket(container, tickets) {
-    const cells = container.querySelectorAll('.last-updated-cell');
-    const cellMap = new Map();
-    cells.forEach(cell => {
-        cellMap.set(cell.dataset.ticketId, cell);
-    });
     
-    const promises = [];
-    tickets.forEach(ticket => {
-        promises.push((async () => {
-            try {
-                const response = await fetch(`/api/tickets/${ticket.id}/history`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
-                });
-                if (response.ok) {
-                    const histories = await response.json();
-                    if (histories && histories.length > 0) {
-                        const date = new Date(histories[0].date);
-                        const cell = cellMap.get(String(ticket.id));
-                        if (cell) {
-                            cell.textContent = date.toISOString().split('T')[0];
-                        }
-                    }
-                }
-            } catch (e) {
-                // スキップ
-            }
-        })());
-    });
-    
-    await Promise.all(promises);
-}

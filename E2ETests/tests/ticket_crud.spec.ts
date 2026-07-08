@@ -9,7 +9,6 @@ import { test, expect } from '@playwright/test';
  * - 必須バリデーション
  * - 編集ロック
  * - 子タスク操作
- * - 履歴表示
  * - 実績登録
  */
 
@@ -163,34 +162,6 @@ test.describe('チケットCRUD', () => {
     // 子タスクアイテムが追加される（.child-task-item 内の input）
     const childTaskInput = page.locator('#childTasks .child-task-item input[type="text"]');
     await expect(childTaskInput.first()).toBeVisible();
-  });
-
-  test('履歴を確認できる', async ({ page }) => {
-    const name = uniqueName('履歴テスト');
-    // チケットを作成
-    await page.click('.column-add-btn[data-column="todo"]');
-    await page.fill('#ticketTitle', name);
-    await page.click('#saveBtn');
-    await expect(page.locator('#ticketModal')).toBeHidden();
-
-    // チケットを編集して履歴を生成
-    const ticket = page.locator('.column[data-column="todo"] .ticket:has-text("' + name + '")').first();
-    await ticket.click();
-    await expect(page.locator('#ticketModal')).toBeVisible();
-    await page.fill('#ticketTitle', name + ' 編集後');
-    await page.click('#saveBtn');
-    await expect(page.locator('#ticketModal')).toBeHidden();
-
-    // 再度編集モードで履歴ボタンをクリック
-    await ticket.click();
-    await expect(page.locator('#ticketModal')).toBeVisible();
-    // 履歴ボタンがvisibleになるまで待つ
-    await page.waitForSelector('#viewHistoryBtn', { state: 'visible' });
-    await page.click('#viewHistoryBtn');
-
-    // 履歴モーダルが表示される
-    await expect(page.locator('#historyModal')).toBeVisible();
-    await expect(page.locator('#historyList')).toBeVisible();
   });
 
   test('チケットの全フィールド入力で保存', async ({ page }) => {

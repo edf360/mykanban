@@ -291,6 +291,11 @@ function openHamburgerMenu() {
             <span class="menu-label">緊急チケット</span>
             <span class="menu-check">${isTicketEmergency() ? '✓' : ''}</span>
         </div>
+        <div class="modal-menu-item" data-action="category">
+            <span class="menu-icon">🏷️</span>
+            <span class="menu-label">集計ID</span>
+            <span class="menu-check"></span>
+        </div>
         ${isEdit ? `
         <div class="modal-menu-item" data-action="copy">
             <span class="menu-icon">📄</span>
@@ -326,6 +331,9 @@ function openHamburgerMenu() {
                     break;
                 case 'emergency':
                     toggleEmergency();
+                    break;
+                case 'category':
+                    openCategoryDialog();
                     break;
                 case 'copy':
                     copyTicket();
@@ -591,9 +599,6 @@ export function initModal() {
         if (tagName === 'TEXTAREA') return;
         
         if (e.key === 'Escape') {
-            // 履歴モーダルがアクティブな場合はチケット編集モーダルを閉じない
-            const historyModal = document.getElementById('historyModal');
-            if (historyModal && historyModal.classList.contains('active')) return;
             e.preventDefault();
             closeModal();
         } else if (e.key === 'Enter') {
