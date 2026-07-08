@@ -316,13 +316,12 @@ public class TicketsController : ControllerBase
             }
             else
             {
-                // 子タスク（JSON）の進捗率を更新（後方互換）
-                var childTasks = ticket.ChildTasks;
-                if (childTaskIndex >= 0 && childTaskIndex < childTasks.Count)
-                {
-                    childTasks[childTaskIndex.Value].Progress = (int)dto.ProgressRate;
-                    ticket.ChildTasks = childTasks;
-                }
+                // 子タスク（独立テーブル）の進捗率を更新
+                var childTaskEntity = await _dbContext.ChildTasks
+                    .Where(ct => ct.TicketId == id)
+                    .ElementAtAsync(childTaskIndex.Value);
+                childTaskEntity.Progress = (int)dto.ProgressRate;
+                childTaskEntity.UpdatedAt = DateTime.Now;
             }
         }
 
@@ -350,53 +349,59 @@ public class TicketsController : ControllerBase
         }
 
         // 子タスクの実績保存時、親チケットの進捗を子タスクの平均で更新
-        if (dto.ChildTaskIndex is not null && ticket.ChildTasks.Count > 0)
+        if (dto.ChildTaskIndex is not null)
         {
-            int sum = 0, count = 0;
-            for (int i = 0; i < ticket.ChildTasks.Count; i++)
+            var childTasks = await _dbContext.ChildTasks
+                .Where(ct => ct.TicketId == id)
+                .ToListAsync();
+            if (childTasks.Count > 0)
             {
-                // 実績から最新の進捗率を取得
-                var latestActual = await _dbContext.TicketActuals
-                    .Where(a => a.TicketId == id && a.ChildTaskIndex == i && a.ProgressRate.HasValue)
-                    .OrderByDescending(a => a.Date)
-                    .FirstOrDefaultAsync();
+                int sum = 0, count = 0;
+                for (int i = 0; i < childTasks.Count; i++)
+                {
+                    // 実績から最新の進捗率を取得
+                    var latestActual = await _dbContext.TicketActuals
+                        .Where(a => a.TicketId == id && a.ChildTaskIndex == i && a.ProgressRate.HasValue)
+                        .OrderByDescending(a => a.Date)
+                        .FirstOrDefaultAsync();
 
-                if (latestActual != null)
-                {
-                    sum += latestActual.ProgressRate ?? 0;
-                    count++;
-                }
-                else
-                {
-                    // 実績なしの場合は Ticket.ChildTasks の Progress を使用
-                    sum += ticket.ChildTasks[i].Progress;
-                    count++;
-                }
-            }
-            if (count > 0)
-            {
-                int averageProgress = sum / count;
-                ticket.Progress = averageProgress;
-
-                // その日付の親チケット実績も更新/作成
-                var parentActual = await _dbContext.TicketActuals
-                    .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == null);
-
-                if (parentActual != null)
-                {
-                    parentActual.ProgressRate = averageProgress;
-                }
-                else
-                {
-                    var newParentActual = new TicketActual
+                    if (latestActual != null)
                     {
-                        TicketId = id,
-                        Date = dto.Date.Date,
-                        Hours = 0,
-                        ProgressRate = averageProgress,
-                        ChildTaskIndex = null
-                    };
-                    _dbContext.TicketActuals.Add(newParentActual);
+                        sum += latestActual.ProgressRate ?? 0;
+                        count++;
+                    }
+                    else
+                    {
+                        // 実績なしの場合は子タスクエンティティの Progress を使用
+                        sum += childTasks[i].Progress;
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    int averageProgress = sum / count;
+                    ticket.Progress = averageProgress;
+
+                    // その日付の親チケット実績も更新/作成
+                    var parentActual = await _dbContext.TicketActuals
+                        .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == null);
+
+                    if (parentActual != null)
+                    {
+                        parentActual.ProgressRate = averageProgress;
+                    }
+                    else
+                    {
+                        var newParentActual = new TicketActual
+                        {
+                            TicketId = id,
+                            Date = dto.Date.Date,
+                            Hours = 0,
+                            ProgressRate = averageProgress,
+                            ChildTaskIndex = null
+                        };
+                        _dbContext.TicketActuals.Add(newParentActual);
+                    }
                 }
             }
         }
@@ -450,13 +455,12 @@ public class TicketsController : ControllerBase
             }
             else
             {
-                // 子タスク（JSON）の進捗率を更新（後方互換）
-                var childTasks = ticket.ChildTasks;
-                if (targetChildTaskIndex >= 0 && targetChildTaskIndex < childTasks.Count)
-                {
-                    childTasks[targetChildTaskIndex.Value].Progress = (int)dto.ProgressRate;
-                    ticket.ChildTasks = childTasks;
-                }
+                // 子タスク（独立テーブル）の進捗率を更新
+                var childTaskEntity = await _dbContext.ChildTasks
+                    .Where(ct => ct.TicketId == id)
+                    .ElementAtAsync(targetChildTaskIndex.Value);
+                childTaskEntity.Progress = (int)dto.ProgressRate;
+                childTaskEntity.UpdatedAt = DateTime.Now;
             }
         }
 

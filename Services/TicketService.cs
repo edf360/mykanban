@@ -80,7 +80,6 @@ public class TicketService
             MainAssignee = mainAssignee,
             Labels = dto.Labels,
             Memo = dto.Memo,
-            ChildTasks = validChildTasks,
             IsLocked = dto.IsLocked,
             IsEmergency = dto.IsEmergency,
             Category = dto.Category,
@@ -124,7 +123,9 @@ public class TicketService
 
     public async Task<Ticket?> UpdateAsync(string ticketId, TicketDto dto, string? username = null)
     {
-        var ticket = await _context.Tickets.FindAsync(ticketId);
+        var ticket = await _context.Tickets
+            .Include(t => t.ChildTasksEntities)
+            .FirstOrDefaultAsync(t => t.TicketId == ticketId);
         if (ticket == null) return null;
 
         // タイトル検証
@@ -138,10 +139,9 @@ public class TicketService
         ticket.UpdatedBy = username;
 
         var oldTitle = ticket.Title;
-        var oldAssigneesJson = ticket.AssigneesJson;
+        var oldAssignees = ticket.Assignees;
         var oldMainAssignee = ticket.MainAssignee;
-        var oldLabelsJson = ticket.LabelsJson;
-        var oldChildTasksJson = ticket.ChildTasksJson;
+        var oldLabels = ticket.Labels;
         var oldMemo = ticket.Memo;
         var oldStartDate = ticket.StartDate;
         var oldEndDate = ticket.EndDate;
@@ -191,7 +191,6 @@ public class TicketService
                     ReviewState = ct.ReviewState ?? "none"
                 })
                 .ToList();
-            ticket.ChildTasks = validChildTasks;
 
             // 独立テーブルの子タスクを同期
             var existingChildTasks = await _context.ChildTasks
@@ -442,7 +441,7 @@ public class TicketService
         ticket.UpdatedBy = username;
 
         // 子タスクがある場合は進捗を直接更新できない
-        if (ticket.ChildTasks != null && ticket.ChildTasks.Count > 0)
+        if (ticket.ChildTasksEntities != null && ticket.ChildTasksEntities.Count > 0)
         {
             return false;
         }
@@ -456,14 +455,16 @@ public class TicketService
 
     public async Task<Ticket?> UpdateChildTaskAsync(string ticketId, string childId, ChildTaskUpdateDto dto, string? username = null)
     {
-        var ticket = await _context.Tickets.FindAsync(ticketId);
+        var ticket = await _context.Tickets
+            .Include(t => t.ChildTasksEntities)
+            .FirstOrDefaultAsync(t => t.TicketId == ticketId);
         if (ticket == null) return null;
 
         // 監査列の更新
         ticket.UpdatedAt = DateTime.Now;
         ticket.UpdatedBy = username;
 
-        var childTasks = ticket.ChildTasks;
+        var childTasks = ticket.ChildTasksEntities;
         var childTask = childTasks?.FirstOrDefault(ct => ct.Id == childId);
         if (childTask == null) return null;
 
@@ -480,23 +481,7 @@ public class TicketService
         {
             childTask.ReviewState = dto.ReviewState;
         }
-        ticket.ChildTasks = childTasks!;
-
-        // 独立テーブルの子タスクも同期更新
-        var childTaskEntity = await _context.ChildTasks.FindAsync(childId);
-        if (childTaskEntity != null)
-        {
-            childTaskEntity.Done = dto.Done;
-            if (dto.Progress.HasValue)
-            {
-                childTaskEntity.Progress = Math.Max(0, Math.Min(100, dto.Progress.Value));
-            }
-            if (!string.IsNullOrEmpty(dto.ReviewState))
-            {
-                childTaskEntity.ReviewState = dto.ReviewState;
-            }
-            childTaskEntity.UpdatedAt = DateTime.Now;
-        }
+        childTask.UpdatedAt = DateTime.Now;
 
         // 子タスクの進捗からメインタスクの進捗を平均値で計算
         if (childTasks != null && childTasks.Count > 0)
@@ -522,28 +507,13 @@ public class TicketService
             }
         }
 
-        var tickets = await _context.Tickets
-            .Where(t => t.LabelsJson != null && t.LabelsJson.Length > 2)
-            .ToListAsync();
-        foreach (var ticket in tickets)
+        // 中間テーブルからラベルを取得
+        var ticketLabels = await _context.TicketLabels.Select(tl => tl.Label).Distinct().ToListAsync();
+        foreach (var label in ticketLabels)
         {
-            try
+            if (!labelMap.ContainsKey(label))
             {
-                var labels = System.Text.Json.JsonSerializer.Deserialize<List<string>>(ticket.LabelsJson);
-                if (labels != null)
-                {
-                    foreach (var label in labels)
-                    {
-                        if (!labelMap.ContainsKey(label))
-                        {
-                            labelMap[label] = "#808080";
-                        }
-                    }
-                }
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                // 無効なJSONはスキップ
+                labelMap[label] = "#808080";
             }
         }
 
@@ -566,29 +536,13 @@ public class TicketService
             orderedAssignees = new List<string>();
         }
 
-        // チケットから追加の担当者を収集
-        var tickets = await _context.Tickets
-            .Where(t => t.AssigneesJson != null && t.AssigneesJson.Length > 2)
-            .ToListAsync();
-        foreach (var ticket in tickets)
+        // 中間テーブルから担当者を収集
+        var ticketAssignees = await _context.TicketAssignees.Select(ta => ta.Assignee).Distinct().ToListAsync();
+        foreach (var assignee in ticketAssignees)
         {
-            try
+            if (!orderedAssignees.Contains(assignee))
             {
-                var assignees = System.Text.Json.JsonSerializer.Deserialize<List<string>>(ticket.AssigneesJson);
-                if (assignees != null)
-                {
-                    foreach (var assignee in assignees)
-                    {
-                        if (!orderedAssignees.Contains(assignee))
-                        {
-                            orderedAssignees.Add(assignee);
-                        }
-                    }
-                }
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                // 無効なJSONはスキップ
+                orderedAssignees.Add(assignee);
             }
         }
 

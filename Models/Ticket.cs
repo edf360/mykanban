@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Linq;
 
 namespace KanbanServer.Models;
 
@@ -42,74 +43,52 @@ public class Ticket
     [JsonIgnore]
     public DateTime? DeletedAt { get; set; }
 
-    // DB用フィールド（シリアライズ時は非表示）
-    [JsonIgnore]
-    public string AssigneesJson { get; set; } = "[]";
-
-    [JsonIgnore]
-    public string LabelsJson { get; set; } = "[]";
-
-    // 担当者配列（APIレスポンス用）
-    [JsonPropertyName("assignees")]
-    public List<string> Assignees
-    {
-        get
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<List<string>>(AssigneesJson) ?? new();
-            }
-            catch (JsonException)
-            {
-                return new();
-            }
-        }
-        set => AssigneesJson = JsonSerializer.Serialize(value);
-    }
-
     // メイン担当者（担当者の一人を指定）
     [JsonPropertyName("mainAssignee")]
     public string? MainAssignee { get; set; }
 
     public string Memo { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 担当者中間テーブルへのナビゲーションプロパティ
+    /// </summary>
     [JsonIgnore]
-    public string ChildTasksJson { get; set; } = "[]";
+    public virtual ICollection<TicketAssignee> TicketAssignees { get; set; } = new List<TicketAssignee>();
 
-    // APIレスポンス用プロパティ（シリアライズ時に出力）
+    /// <summary>
+    /// ラベル中間テーブルへのナビゲーションプロパティ
+    /// </summary>
+    [JsonIgnore]
+    public virtual ICollection<TicketLabel> TicketLabels { get; set; } = new List<TicketLabel>();
+
+    // 担当者配列（APIレスポンス用）
+    [JsonPropertyName("assignees")]
+    public List<string> Assignees
+    {
+        get => TicketAssignees?.Select(a => a.Assignee).ToList() ?? new();
+        set
+        {
+            TicketAssignees = new List<TicketAssignee>();
+            foreach (var assignee in value)
+            {
+                TicketAssignees.Add(new TicketAssignee { Assignee = assignee });
+            }
+        }
+    }
+
+    // ラベル配列（APIレスポンス用）
     [JsonPropertyName("labels")]
     public List<string> Labels
     {
-        get
+        get => TicketLabels?.Select(l => l.Label).ToList() ?? new();
+        set
         {
-            try
+            TicketLabels = new List<TicketLabel>();
+            foreach (var label in value)
             {
-                return JsonSerializer.Deserialize<List<string>>(LabelsJson) ?? new();
-            }
-            catch (JsonException)
-            {
-                return new();
+                TicketLabels.Add(new TicketLabel { Label = label });
             }
         }
-        set => LabelsJson = JsonSerializer.Serialize(value);
-    }
-
-    [NotMapped]
-    [JsonPropertyName("childTasks")]
-    public List<ChildTask> ChildTasks
-    {
-        get
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<List<ChildTask>>(ChildTasksJson) ?? new();
-            }
-            catch (JsonException)
-            {
-                return new();
-            }
-        }
-        set => ChildTasksJson = JsonSerializer.Serialize(value);
     }
 
     /// <summary>

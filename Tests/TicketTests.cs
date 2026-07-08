@@ -61,8 +61,7 @@ public class TicketTests : IDisposable
             Title = "テストチケット",
             Column = "todo",
             Position = 0,
-            Labels = new List<string> { "重要" },
-            ChildTasks = new List<ChildTask> { new() { Text = "タスク1", Done = false } }
+            Labels = new List<string> { "重要" }
         };
 
         // Act
@@ -160,38 +159,6 @@ public class TicketTests : IDisposable
         Assert.Contains("バックエンド", saved.Labels);
     }
 
-    [Fact]
-    public async Task ChildTasks_ShouldSerializeCorrectly()
-    {
-        // Arrange
-        var childTasks = new List<ChildTask> 
-        { 
-            new() { Text = "タスクA", Done = false },
-            new() { Text = "タスクB", Done = true }
-        };
-        var ticket = new Ticket 
-        { 
-            TicketId = "child-test", 
-            Id = 1, 
-            Title = "子タスクテスト", 
-            Column = "todo", 
-            Position = 0,
-            ChildTasks = childTasks
-        };
-
-        // Act
-        _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        var saved = await _context.Tickets.FindAsync("child-test");
-
-        // Assert
-        Assert.NotNull(saved);
-        Assert.Equal(2, saved!.ChildTasks.Count);
-        Assert.Equal("タスクA", saved.ChildTasks[0].Text);
-        Assert.False(saved.ChildTasks[0].Done);
-        Assert.True(saved.ChildTasks[1].Done);
-    }
 
     [Fact]
     public async Task Progress_ShouldBeClampedBetween0And100()
@@ -255,46 +222,6 @@ public class TicketTests : IDisposable
 
         // Act
         _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        var saved = await _context.Tickets.FindAsync("empty-labels-test");
-
-        // Assert
-        Assert.NotNull(saved);
-        Assert.Empty(saved!.Labels);
-        Assert.Equal("[]", saved.LabelsJson);
-    }
-
-    [Fact]
-    public async Task EmptyChildTasks_ShouldSerializeAsEmptyArray()
-    {
-        // Arrange
-        var ticket = new Ticket
-        {
-            TicketId = "empty-child-test",
-            Id = 1,
-            Title = "空子タスクテスト",
-            Column = "todo",
-            Position = 0,
-            ChildTasks = new List<ChildTask>()
-        };
-
-        // Act
-        _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        var saved = await _context.Tickets.FindAsync("empty-child-test");
-
-        // Assert
-        Assert.NotNull(saved);
-        Assert.Empty(saved!.ChildTasks);
-        Assert.Equal("[]", saved.ChildTasksJson);
-    }
-
-    [Fact]
-    public async Task ColumnMove_ShouldRepositionOldColumn()
-    {
-        // Arrange: todoに2つのチケット（Position 0, 1）
         _context.Tickets.Add(new Ticket { TicketId = "reposition-a", Id = 1, Title = "A", Column = "todo", Position = 0 });
         _context.Tickets.Add(new Ticket { TicketId = "reposition-b", Id = 2, Title = "B", Column = "todo", Position = 1 });
         await _context.SaveChangesAsync();
@@ -639,78 +566,6 @@ public class JsonSerializationTests
     }
 
     [Fact]
-    public void Ticket_ShouldSerializeChildTasksAsArray()
-    {
-        // Arrange
-        var ticket = new Ticket
-        {
-            TicketId = "json-test",
-            Id = 1,
-            Title = "JSONテスト",
-            Column = "todo",
-            Position = 0,
-            ChildTasks = new List<ChildTask> { new() { Text = "タスク1", Done = false } }
-        };
-
-        // Act
-        var json = System.Text.Json.JsonSerializer.Serialize(ticket, new System.Text.Json.JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        });
-
-        // Assert
-        Assert.Contains("\"childTasks\"", json);
-        Assert.Contains("タスク1", json);
-        // childTasksJson は出力されないこと（JsonIgnore）
-        Assert.DoesNotContain("\"childTasksJson\"", json);
-    }
-
-    [Fact]
-    public void Ticket_ShouldDeserializeLabelsFromArray()
-    {
-        // Arrange
-        var json = @"{
-            ""ticketId"": ""test"",
-            ""id"": 1,
-            ""title"": ""テスト"",
-            ""column"": ""todo"",
-            ""position"": 0,
-            ""labels"": [""重要"", ""緊急""]
-        }";
-
-        // Act
-        var ticket = System.Text.Json.JsonSerializer.Deserialize<Ticket>(json);
-
-        // Assert
-        Assert.NotNull(ticket);
-        Assert.Equal(2, ticket!.Labels.Count);
-        Assert.Contains("重要", ticket.Labels);
-    }
-
-    [Fact]
-    public void Ticket_ShouldDeserializeChildTasksFromArray()
-    {
-        // Arrange
-        var json = @"{
-            ""ticketId"": ""test"",
-            ""id"": 1,
-            ""title"": ""テスト"",
-            ""column"": ""todo"",
-            ""position"": 0,
-            ""childTasks"": [{""text"": ""タスク1"", ""done"": false}]
-        }";
-
-        // Act
-        var ticket = System.Text.Json.JsonSerializer.Deserialize<Ticket>(json);
-
-        // Assert
-        Assert.NotNull(ticket);
-        Assert.Single(ticket!.ChildTasks);
-        Assert.Equal("タスク1", ticket.ChildTasks[0].Text);
-    }
-
-    [Fact]
     public void Ticket_EmptyLabelsSerializesAsArray()
     {
         // Arrange
@@ -816,36 +671,6 @@ public class JsonSerializationTests
         Assert.Equal(ticket.Title, deserialized!.Title);
     }
 
-    [Fact]
-    public void ChildTask_DeserializeWithDoneTrue()
-    {
-        // Arrange
-        var json = @"{
-            ""ticketId"": ""test"",
-            ""id"": 1,
-            ""title"": ""テスト"",
-            ""column"": ""todo"",
-            ""position"": 0,
-            ""childTasks"": [
-                {""text"": ""完了タスク"", ""done"": true},
-                {""text"": ""未完了タスク"", ""done"": false}
-            ]
-        }";
-
-        // Act
-        var ticket = System.Text.Json.JsonSerializer.Deserialize<Ticket>(json);
-
-        // Assert
-        Assert.NotNull(ticket);
-        Assert.Equal(2, ticket!.ChildTasks.Count);
-        Assert.True(ticket.ChildTasks[0].Done);
-        Assert.Equal("完了タスク", ticket.ChildTasks[0].Text);
-        Assert.False(ticket.ChildTasks[1].Done);
-        Assert.Equal("未完了タスク", ticket.ChildTasks[1].Text);
-    }
-
-    [Fact]
-    public void Ticket_MixedLanguageLabelsSerializeCorrectly()
     {
         // Arrange: 日本語/英語/数字の混合ラベル
         var ticket = new Ticket

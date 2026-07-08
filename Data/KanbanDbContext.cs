@@ -9,6 +9,8 @@ public class KanbanDbContext : DbContext
     public DbSet<TicketActual> TicketActuals => Set<TicketActual>();
     public DbSet<ChildTask> ChildTasks => Set<ChildTask>();
     public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<TicketAssignee> TicketAssignees => Set<TicketAssignee>();
+    public DbSet<TicketLabel> TicketLabels => Set<TicketLabel>();
 
     public KanbanDbContext(DbContextOptions<KanbanDbContext> options) : base(options)
     {
@@ -28,9 +30,6 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.Property(e => e.Title).IsRequired();
             entity.Property(e => e.Column).HasDefaultValue("todo");
-            entity.Property(e => e.AssigneesJson).HasDefaultValue("[]");
-            entity.Property(e => e.LabelsJson).HasDefaultValue("[]");
-            entity.Property(e => e.ChildTasksJson).HasDefaultValue("[]");
             entity.Property(e => e.IsArchived).HasDefaultValue(false);
             entity.Property(e => e.IsDeleted).HasDefaultValue(false);
 
@@ -48,6 +47,28 @@ public class KanbanDbContext : DbContext
                 .WithOne(ct => ct.Ticket!)
                 .HasForeignKey(ct => ct.TicketId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // 担当者との関連
+            entity.HasMany(t => t.TicketAssignees)
+                .WithOne(ta => ta.Ticket!)
+                .HasForeignKey(ta => ta.TicketId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ラベルとの関連
+            entity.HasMany(t => t.TicketLabels)
+                .WithOne(tl => tl.Ticket!)
+                .HasForeignKey(tl => tl.TicketId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TicketAssignee>(entity =>
+        {
+            entity.HasKey(e => new { e.TicketId, e.Assignee });
+        });
+
+        modelBuilder.Entity<TicketLabel>(entity =>
+        {
+            entity.HasKey(e => new { e.TicketId, e.Label });
         });
 
         modelBuilder.Entity<TicketActual>(entity =>

@@ -61,40 +61,39 @@ public class SettingsController : ControllerBase
             newLabels.Select(l => l.Name).ToList()
         );
 
-        // 既存チケットの担当者名・ラベル名を更新
+        // 既存チケットの担当者名・ラベル名を更新（中間テーブル経由）
         if (assigneeMap.Count > 0 || labelMap.Count > 0)
         {
-            var tickets = await _context.Tickets.ToListAsync();
-            foreach (var ticket in tickets)
+            // 担当者名更新 - TicketAssignees テーブルのUPDATE
+            if (assigneeMap.Count > 0)
             {
-                // 担当者名更新
-                if (assigneeMap.Count > 0)
+                var assigneesToUpdate = await _context.TicketAssignees
+                    .Where(a => assigneeMap.ContainsKey(a.Assignee))
+                    .ToListAsync();
+                foreach (var a in assigneesToUpdate)
                 {
-                    var newAssignees = ticket.Assignees.Select(a =>
-                        assigneeMap.TryGetValue(a, out var newName) ? newName : a
-                    ).ToList();
-                    if (!ticket.Assignees.SequenceEqual(newAssignees))
-                    {
-                        ticket.Assignees = newAssignees;
-                    }
-
-                    // MainAssignee も更新
-                    if (ticket.MainAssignee != null && assigneeMap.TryGetValue(ticket.MainAssignee, out var newMain))
-                    {
-                        ticket.MainAssignee = newMain;
-                    }
+                    a.Assignee = assigneeMap[a.Assignee];
                 }
 
-                // ラベル名更新
-                if (labelMap.Count > 0)
+                // MainAssignee も更新
+                var ticketsWithMainAssignee = await _context.Tickets
+                    .Where(t => t.MainAssignee != null && assigneeMap.ContainsKey(t.MainAssignee!))
+                    .ToListAsync();
+                foreach (var t in ticketsWithMainAssignee)
                 {
-                    var newLabelsForTicket = ticket.Labels.Select(l =>
-                        labelMap.TryGetValue(l, out var newName) ? newName : l
-                    ).ToList();
-                    if (!ticket.Labels.SequenceEqual(newLabelsForTicket))
-                    {
-                        ticket.Labels = newLabelsForTicket;
-                    }
+                    t.MainAssignee = assigneeMap[t.MainAssignee!];
+                }
+            }
+
+            // ラベル名更新 - TicketLabels テーブルのUPDATE
+            if (labelMap.Count > 0)
+            {
+                var labelsToUpdate = await _context.TicketLabels
+                    .Where(l => labelMap.ContainsKey(l.Label))
+                    .ToListAsync();
+                foreach (var l in labelsToUpdate)
+                {
+                    l.Label = labelMap[l.Label];
                 }
             }
         }
@@ -138,29 +137,34 @@ public class SettingsController : ControllerBase
         var tickets = await _context.Tickets.ToListAsync();
         var settings = await _context.Settings.ToListAsync();
 
+        // 子タスクをチケットごとにグループ化
+        var allChildTasks = await _context.ChildTasks.ToListAsync();
+
         // TicketのJSONフィールドを直接シリアライズするために特別処理
+        var exportTickets = tickets.Select(t => new
+        {
+            t.TicketId,
+            t.Id,
+            t.Title,
+            t.IsArchived,
+            t.Column,
+            t.Position,
+            t.Progress,
+            t.StartDate,
+            t.EndDate,
+            t.Effort,
+            assignees = t.Assignees,
+            mainAssignee = t.MainAssignee,
+            labels = t.Labels,
+            t.Memo,
+            childTasks = allChildTasks.Where(ct => ct.TicketId == t.TicketId).Select(ct => new { ct.Text, ct.Progress, ct.Done }).ToList(),
+        }).ToList();
+
         var exportData = new
         {
             version = 1,
             exportedAt = DateTime.UtcNow.ToString("o"),
-            tickets = tickets.Select(t => new
-            {
-                t.TicketId,
-                t.Id,
-                t.Title,
-                t.IsArchived,
-                t.Column,
-                t.Position,
-                t.Progress,
-                t.StartDate,
-                t.EndDate,
-                t.Effort,
-                assignees = t.Assignees,
-                mainAssignee = t.MainAssignee,
-                labels = t.Labels,
-                t.Memo,
-                childTasks = t.ChildTasks,
-            }).ToList(),
+            tickets = exportTickets,
             settings = settings.Select(s => new
             {
                 s.Id,
@@ -227,7 +231,7 @@ public class SettingsController : ControllerBase
                         MainAssignee = t.MainAssignee,
                         Labels = t.Labels ?? new List<string>(),
                         Memo = t.Memo ?? string.Empty,
-                        ChildTasks = t.ChildTasks?.Select(ct => new ChildTask { Text = ct.Text, Done = ct.Done }).ToList() ?? new List<ChildTask>()
+                        // ChildTasksは独立テーブルへインポート
                     };
                     _context.Tickets.Add(ticket);
                 }
@@ -375,20 +379,26 @@ public class SettingsController : ControllerBase
             ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
             ticket.EndDate = ParseDate(csv.GetField(columnIndexes["期限"]) ?? "");
 
-            // チェックリストの処理（子タスクのCategoryにタイトルを設定）
+            // チェックリストの処理（独立テーブルへ登録）
             var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
-            ticket.ChildTasks = ParseChecklist(checklistItems);
+            var childTaskList = ParseChecklist(checklistItems);
             // 各子タスクのCategoryにテキストを設定
-            foreach (var ct in ticket.ChildTasks)
+            foreach (var ct in childTaskList)
             {
                 ct.Category = ct.Text;
+            }
+            // 子タスクを独立テーブルへ追加
+            foreach (var ct in childTaskList)
+            {
+                ct.TicketId = ticket.TicketId;
+                _context.ChildTasks.Add(ct);
             }
 
             // 子タスクに【X%】指定があればバケットを無視して子タスクから進捗率を計算
             if (HasProgressAnnotation(checklistItems))
             {
-                var totalProgress = ticket.ChildTasks.Sum(ct => ct.Progress);
-                ticket.Progress = (int)(totalProgress / ticket.ChildTasks.Count);
+                var totalProgress = childTaskList.Sum(ct => ct.Progress);
+                ticket.Progress = (int)(totalProgress / childTaskList.Count);
             }
 
             // ラベルの処理
