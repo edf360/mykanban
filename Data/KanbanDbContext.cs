@@ -26,8 +26,6 @@ public class KanbanDbContext : DbContext
         modelBuilder.Entity<Ticket>(entity =>
         {
             entity.HasKey(e => e.TicketId);
-            // Id は DB 上の AUTOINCREMENT 列だが、主キーは TicketId
-            entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.Property(e => e.Title).IsRequired();
             entity.Property(e => e.Column).HasDefaultValue("todo");
             entity.Property(e => e.IsArchived).HasDefaultValue(false);
@@ -64,6 +62,7 @@ public class KanbanDbContext : DbContext
         modelBuilder.Entity<TicketAssignee>(entity =>
         {
             entity.HasKey(e => new { e.TicketId, e.Assignee });
+            entity.Property(e => e.IsPrimary).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<TicketLabel>(entity =>
@@ -81,11 +80,6 @@ public class KanbanDbContext : DbContext
             entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskIndex }).IsUnique();
             // TicketId + Date + ChildTaskId の複合ユニーク制約（新）
             entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskId }).IsUnique();
-            // 外部キー制約 - チケット削除時に連動削除
-            entity.HasOne<Ticket>()
-                .WithMany()
-                .HasForeignKey(e => e.TicketId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChildTask>(entity =>

@@ -21,11 +21,13 @@ public class TicketService
 
     public async Task<List<Ticket>> GetAllAsync()
     {
-        var tickets = await _context.Tickets.ToListAsync();
+        var tickets = await _context.Tickets
+            .Include(t => t.ChildTasksEntities)
+            .ToListAsync();
         return tickets
             .OrderBy(t => ColumnOrderMap.GetValueOrDefault(t.Column.ToLowerInvariant(), 999))
             .ThenByDescending(t => t.Position)
-            .ThenBy(t => t.Id)
+            .ThenBy(t => t.CreatedAt)
             .ToList();
     }
 
@@ -59,13 +61,6 @@ public class TicketService
 
         var column = dto.Column ?? "todo";
 
-        // 担当者がいるがメイン担当が未設定の場合は最初の担当者をメインに設定
-        string? mainAssignee = dto.MainAssignee;
-        if (string.IsNullOrEmpty(mainAssignee) && dto.Assignees != null && dto.Assignees.Count > 0)
-        {
-            mainAssignee = dto.Assignees[0];
-        }
-        
         var ticket = new Ticket
         {
             TicketId = Guid.NewGuid().ToString("N"),
@@ -77,7 +72,6 @@ public class TicketService
             EndDate = dto.EndDate,
             Effort = dto.Effort,
             Assignees = dto.Assignees ?? new List<string>(),
-            MainAssignee = mainAssignee,
             Labels = dto.Labels,
             Memo = dto.Memo,
             IsLocked = dto.IsLocked,
@@ -87,10 +81,6 @@ public class TicketService
             CreatedBy = username
         };
 
-        // Id は MaxAsync + 1 で生成（インメモリSQLiteテストとの互換性のためAUTOINCREMENT不使用）
-        var maxId = await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0;
-        ticket.Id = maxId + 1;
-
         var existingPositions = await _context.Tickets
             .Where(t => t.Column == column)
             .Select(t => t.Position)
@@ -98,6 +88,20 @@ public class TicketService
         ticket.Position = existingPositions.Count == 0 ? 0 : existingPositions.Max() + 1000.0;
 
         _context.Tickets.Add(ticket);
+
+        // 担当者をTicketAssigneesに保存
+        if (dto.Assignees != null && dto.Assignees.Count > 0)
+        {
+            foreach (var assignee in dto.Assignees)
+            {
+                ticket.TicketAssignees.Add(new TicketAssignee
+                {
+                    TicketId = ticket.TicketId,
+                    Assignee = assignee,
+                    IsPrimary = assignee == dto.MainAssignee
+                });
+            }
+        }
 
         // 子タスクを独立テーブルにも保存（ナビゲーションプロパティ経由）
         foreach (var ct in validChildTasks)
@@ -140,7 +144,6 @@ public class TicketService
 
         var oldTitle = ticket.Title;
         var oldAssignees = ticket.Assignees;
-        var oldMainAssignee = ticket.MainAssignee;
         var oldLabels = ticket.Labels;
         var oldMemo = ticket.Memo;
         var oldStartDate = ticket.StartDate;
@@ -160,15 +163,23 @@ public class TicketService
         if (dto.Effort.HasValue)
             ticket.Effort = dto.Effort;
         if (dto.Assignees != null)
+        {
             ticket.Assignees = dto.Assignees;
-        // 担当者がいるがメイン担当が未設定の場合は最初の担当者をメインに設定
-        if (string.IsNullOrEmpty(dto.MainAssignee) && dto.Assignees != null && dto.Assignees.Count > 0)
-        {
-            ticket.MainAssignee = dto.Assignees[0];
-        }
-        else if (dto.MainAssignee != null)
-        {
-            ticket.MainAssignee = dto.MainAssignee;
+            // TicketAssigneesを更新（IsPrimaryを含む）
+            var existingAssignees = await _context.TicketAssignees
+                .Where(ta => ta.TicketId == ticketId)
+                .ToListAsync();
+            _context.TicketAssignees.RemoveRange(existingAssignees);
+            
+            foreach (var assignee in dto.Assignees)
+            {
+                _context.TicketAssignees.Add(new TicketAssignee
+                {
+                    TicketId = ticketId,
+                    Assignee = assignee,
+                    IsPrimary = assignee == dto.MainAssignee
+                });
+            }
         }
         if (dto.Labels != null)
             ticket.Labels = dto.Labels;
@@ -260,7 +271,6 @@ public class TicketService
             return ticket;
         }
 
-        ticket.PreviousColumn = ticket.Column;
         ticket.IsArchived = true;
         ticket.Column = "archive";
         ticket.Position = 0;
@@ -317,10 +327,8 @@ public class TicketService
         var ticket = await _context.Tickets.FindAsync(ticketId);
         if (ticket == null) return null;
 
-        // アーカイブ前のカラムを復元（未設定の場合はtodo）
-        var restoreColumn = !string.IsNullOrEmpty(ticket.PreviousColumn)
-            ? ticket.PreviousColumn
-            : "todo";
+        // アーカイブ前のカラムを復元（PreviousColumnが削除されたので常にtodo）
+        var restoreColumn = "todo";
 
         ticket.IsArchived = false;
         ticket.Column = restoreColumn;
@@ -331,7 +339,6 @@ public class TicketService
             .MaxAsync(t => (double?)t.Position) ?? -1000.0;
         ticket.Position = maxPos + 1000.0;
 
-        ticket.PreviousColumn = null;
         ticket.UpdatedAt = DateTime.Now;
         ticket.UpdatedBy = username;
         await _context.SaveChangesAsync();
@@ -359,7 +366,7 @@ public class TicketService
             var ordered = await _context.Tickets
                 .Where(t => t.Column == newColumn && t.TicketId != ticketId)
                 .OrderByDescending(t => t.Position)
-                .ThenBy(t => t.Id)
+                .ThenBy(t => t.CreatedAt)
                 .ToListAsync();
 
             double newPos;
@@ -389,7 +396,7 @@ public class TicketService
                 ordered = await _context.Tickets
                     .Where(t => t.Column == newColumn && t.TicketId != ticketId)
                     .OrderByDescending(t => t.Position)
-                    .ThenBy(t => t.Id)
+                    .ThenBy(t => t.CreatedAt)
                     .ToListAsync();
 
                 if (insertIdx <= 0)
@@ -560,7 +567,7 @@ public class TicketService
         var tickets = await _context.Tickets
             .Where(t => t.Column == column && (excludeTicketId == null || t.TicketId != excludeTicketId))
             .OrderByDescending(t => t.Position)
-            .ThenBy(t => t.Id)
+            .ThenBy(t => t.CreatedAt)
             .ToListAsync();
 
         // 先頭から大きな値を割り当て（降順で配置）

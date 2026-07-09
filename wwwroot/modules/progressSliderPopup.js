@@ -72,11 +72,11 @@ export function showProgressSliderWithActual(anchorElement, options) {
     popup.innerHTML = `
         ${dateLabel}
         <input type="range" min="0" max="100" step="10" value="${currentProgress}" class="progress-slider-input">
-        <div class="progress-slider-label">${currentProgress}%</div>
+        <div class="progress-slider-label">進捗率 ${currentProgress}%</div>
         ${hasActual ? `
             <div class="progress-slider-hours-row">
+                <span>実績工数（時間）</span>
                 <input type="number" class="progress-slider-hours-input" value="${currentHours}" min="0" max="24" step="0.25" placeholder="0">
-                <span>時間</span>
             </div>
         ` : ''}
     `;
@@ -118,7 +118,7 @@ export function showProgressSliderWithActual(anchorElement, options) {
     const hoursInput = popup.querySelector('.progress-slider-hours-input');
 
     slider.addEventListener('input', () => {
-        label.textContent = `${slider.value}%`;
+        label.textContent = `進捗率 ${slider.value}%`;
     });
 
     const closePopup = async () => {

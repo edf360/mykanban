@@ -11,6 +11,11 @@ public class TicketAssignee
     
     public string Assignee { get; set; } = string.Empty;  // PK
     
+    /// <summary>
+    /// プライマリ（メイン）担当者かどうか
+    /// </summary>
+    public bool IsPrimary { get; set; }
+    
     [JsonIgnore]
     public Ticket? Ticket { get; set; }
 }

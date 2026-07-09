@@ -10,12 +10,9 @@ public class Ticket
 {
     public string TicketId { get; set; } = string.Empty;
     
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
     public string Column { get; set; } = "todo";
-    public string? PreviousColumn { get; set; }
     public double Position { get; set; }
     public int Progress { get; set; }
     public DateTime? StartDate { get; set; }
@@ -42,10 +39,6 @@ public class Ticket
 
     [JsonIgnore]
     public DateTime? DeletedAt { get; set; }
-
-    // メイン担当者（担当者の一人を指定）
-    [JsonPropertyName("mainAssignee")]
-    public string? MainAssignee { get; set; }
 
     public string Memo { get; set; } = string.Empty;
 
@@ -96,4 +89,21 @@ public class Ticket
     /// </summary>
     [JsonIgnore]
     public virtual ICollection<ChildTask> ChildTasksEntities { get; set; } = new List<ChildTask>();
+
+    /// <summary>
+    /// 子タスク一覧（APIレスポンス用）
+    /// </summary>
+    [JsonPropertyName("childTasks")]
+    public List<ChildTask> ChildTasks
+    {
+        get => ChildTasksEntities?.OrderBy(ct => ct.OrderIndex).ToList() ?? new();
+        set
+        {
+            ChildTasksEntities = new List<ChildTask>();
+            foreach (var ct in value)
+            {
+                ChildTasksEntities.Add(ct);
+            }
+        }
+    }
 }

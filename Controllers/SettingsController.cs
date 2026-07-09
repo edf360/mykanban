@@ -67,33 +67,23 @@ public class SettingsController : ControllerBase
             // 担当者名更新 - TicketAssignees テーブルのUPDATE
             if (assigneeMap.Count > 0)
             {
-                var assigneesToUpdate = await _context.TicketAssignees
-                    .Where(a => assigneeMap.ContainsKey(a.Assignee))
-                    .ToListAsync();
-                foreach (var a in assigneesToUpdate)
+                var oldAssigneeKeys = assigneeMap.Keys.ToList();
+                foreach (var (oldName, newName) in assigneeMap)
                 {
-                    a.Assignee = assigneeMap[a.Assignee];
-                }
-
-                // MainAssignee も更新
-                var ticketsWithMainAssignee = await _context.Tickets
-                    .Where(t => t.MainAssignee != null && assigneeMap.ContainsKey(t.MainAssignee!))
-                    .ToListAsync();
-                foreach (var t in ticketsWithMainAssignee)
-                {
-                    t.MainAssignee = assigneeMap[t.MainAssignee!];
+                    await _context.TicketAssignees
+                        .Where(a => a.Assignee == oldName)
+                        .ExecuteUpdateAsync(a => a.SetProperty(x => x.Assignee, newName));
                 }
             }
 
             // ラベル名更新 - TicketLabels テーブルのUPDATE
             if (labelMap.Count > 0)
             {
-                var labelsToUpdate = await _context.TicketLabels
-                    .Where(l => labelMap.ContainsKey(l.Label))
-                    .ToListAsync();
-                foreach (var l in labelsToUpdate)
+                foreach (var (oldLabel, newLabel) in labelMap)
                 {
-                    l.Label = labelMap[l.Label];
+                    await _context.TicketLabels
+                        .Where(l => l.Label == oldLabel)
+                        .ExecuteUpdateAsync(l => l.SetProperty(x => x.Label, newLabel));
                 }
             }
         }
@@ -144,7 +134,6 @@ public class SettingsController : ControllerBase
         var exportTickets = tickets.Select(t => new
         {
             t.TicketId,
-            t.Id,
             t.Title,
             t.IsArchived,
             t.Column,
@@ -154,7 +143,6 @@ public class SettingsController : ControllerBase
             t.EndDate,
             t.Effort,
             assignees = t.Assignees,
-            mainAssignee = t.MainAssignee,
             labels = t.Labels,
             t.Memo,
             childTasks = allChildTasks.Where(ct => ct.TicketId == t.TicketId).Select(ct => new { ct.Text, ct.Progress, ct.Done }).ToList(),
@@ -218,7 +206,6 @@ public class SettingsController : ControllerBase
                     var ticket = new Ticket
                     {
                         TicketId = t.TicketId,
-                        Id = t.Id,
                         Title = t.Title,
                         IsArchived = t.IsArchived,
                         Column = t.Column,
@@ -228,7 +215,6 @@ public class SettingsController : ControllerBase
                         EndDate = t.EndDate,
                         Effort = t.Effort,
                         Assignees = t.Assignees ?? new List<string>(),
-                        MainAssignee = t.MainAssignee,
                         Labels = t.Labels ?? new List<string>(),
                         Memo = t.Memo ?? string.Empty,
                         // ChildTasksは独立テーブルへインポート
@@ -328,9 +314,6 @@ public class SettingsController : ControllerBase
             .GroupBy(t => t.Column)
             .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1000);
 
-        // 次Idを事前計算（自動採番されないスキーマでも登録可能に）
-        var nextTicketInternalId = (await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0) + 1;
-
         while (csv.Read())
         {
             // 空行をスキップ
@@ -370,10 +353,6 @@ public class SettingsController : ControllerBase
             {
                 discoveredAssignees.Add(a);
             }
-            if (existingTicket == null)
-            {
-                ticket.MainAssignee = assignees.Count > 0 ? assignees[0] : null;
-            }
 
             // 日付の処理
             ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
@@ -386,6 +365,12 @@ public class SettingsController : ControllerBase
             foreach (var ct in childTaskList)
             {
                 ct.Category = ct.Text;
+            }
+            // 既存チケットの場合は既存子タスクを削除してから新しい子タスクを追加
+            if (existingTicket != null)
+            {
+                var existingChildTasks = _context.ChildTasks.Where(ct => ct.TicketId == ticketId).ToList();
+                _context.ChildTasks.RemoveRange(existingChildTasks);
             }
             // 子タスクを独立テーブルへ追加
             foreach (var ct in childTaskList)
@@ -415,10 +400,6 @@ public class SettingsController : ControllerBase
 
             if (existingTicket == null)
             {
-                // 新規チケットのId設定（自動採番されないスキーマでも登録可能に）
-                ticket.Id = nextTicketInternalId;
-                nextTicketInternalId++;
-
                 // 新規チケットのPosition設定（事前計算値を使用）
                 if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
                     maxPos = -1000;
@@ -574,7 +555,7 @@ public class SettingsController : ControllerBase
             var tickets = localTickets
                 .Where(t => t.Column == column)
                 .OrderByDescending(t => t.Position)
-                .ThenBy(t => t.Id)
+                .ThenBy(t => t.CreatedAt)
                 .ToList();
 
             // 先頭から大きな値を割り当て（降順で配置）
@@ -675,7 +656,6 @@ public class ImportData
 public class ImportTicket
 {
     public string TicketId { get; set; } = "";
-    public int Id { get; set; }
     public string Title { get; set; } = "";
     public bool IsArchived { get; set; }
     public string Column { get; set; } = "";
@@ -685,7 +665,6 @@ public class ImportTicket
     public DateTime? EndDate { get; set; }
     public int? Effort { get; set; }
     public List<string>? Assignees { get; set; }
-    public string? MainAssignee { get; set; }
     public List<string>? Labels { get; set; }
     public string? Memo { get; set; }
     public List<ImportChildTask>? ChildTasks { get; set; }
