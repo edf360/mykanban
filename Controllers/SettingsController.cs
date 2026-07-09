@@ -98,6 +98,22 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
+    /// 担当者のメモのみを更新（PATCH）
+    /// Read-Modify-Write競合を排除するため、他の設定データに触れない
+    /// </summary>
+    [HttpPatch("memo")]
+    public async Task<IActionResult> UpdateMemo([FromBody] MemoUpdateDto? dto)
+    {
+        if (dto == null || string.IsNullOrEmpty(dto.Assignee))
+            return BadRequest(new { error = "Assignee is required" });
+
+        var setting = await GetOrCreateSettingAsync();
+        setting.Memos[dto.Assignee] = dto.Memo ?? string.Empty;
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>
     /// 名前変更のマッピングを構築 (旧名 -> 新名)
     /// 削除された項目はマップされない（既存チケットの値はそのまま残る）
     /// </summary>
@@ -683,4 +699,13 @@ public class ImportSetting
     public List<LabelConfig>? Labels { get; set; }
     public List<string>? Holidays { get; set; }
     public Dictionary<string, string>? Memos { get; set; }
+}
+
+/// <summary>
+/// メモ更新用DTO (PATCH /api/settings/memo 用)
+/// </summary>
+public class MemoUpdateDto
+{
+    public string Assignee { get; set; } = string.Empty;
+    public string? Memo { get; set; }
 }

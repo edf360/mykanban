@@ -27,18 +27,8 @@ export async function getMemoFromDb(assignee) {
  */
 export async function saveMemoToDb(assignee, memo) {
     try {
-        const settings = await apiRequest('GET', '/api/settings');
-        if (!settings.memos) {
-            settings.memos = {};
-        }
-        settings.memos[assignee] = memo;
-        const payload = {
-            users: settings.users || [],
-            labels: settings.labels || [],
-            holidays: settings.holidays || [],
-            memos: settings.memos
-        };
-        await apiRequest('PUT', '/api/settings', payload);
+        const payload = { assignee, memo };
+        await apiRequest('PATCH', '/api/settings/memo', payload);
         return true;
     } catch (e) {
         console.error('Failed to save memo:', e);
