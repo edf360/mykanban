@@ -23,6 +23,8 @@ public class TicketService
     {
         var tickets = await _context.Tickets
             .Include(t => t.ChildTasksEntities)
+            .Include(t => t.TicketLabels)
+            .Include(t => t.TicketAssignees)
             .ToListAsync();
         return tickets
             .OrderBy(t => ColumnOrderMap.GetValueOrDefault(t.Column.ToLowerInvariant(), 999))
@@ -54,6 +56,7 @@ public class TicketService
                 Category = ct.Category,
                 Memo = ct.Memo,
                 ReviewState = ct.ReviewState ?? "none",
+                Progress = 0,
                 OrderIndex = index
             })
             .ToList();
@@ -66,10 +69,11 @@ public class TicketService
             Title = dto.Title,
             Column = column,
             Position = 0,
+            Progress = 0,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Effort = dto.Effort,
-            Assignees = dto.Assignees ?? new List<string>(),
+            // Assigneesプロパティを使わない（TicketAssigneesを直接操作するため）
             Labels = dto.Labels,
             Memo = dto.Memo,
             IsLocked = dto.IsLocked,
@@ -113,6 +117,7 @@ public class TicketService
                 Category = ct.Category,
                 Memo = ct.Memo,
                 ReviewState = ct.ReviewState ?? "none",
+                Progress = 0,
                 OrderIndex = ct.OrderIndex,
                 CreatedAt = DateTime.Now
             });
@@ -126,6 +131,8 @@ public class TicketService
     {
         var ticket = await _context.Tickets
             .Include(t => t.ChildTasksEntities)
+            .Include(t => t.TicketLabels)
+            .Include(t => t.TicketAssignees)
             .FirstOrDefaultAsync(t => t.TicketId == ticketId);
         if (ticket == null) return null;
 
@@ -195,7 +202,8 @@ public class TicketService
                     Done = ct.Done,
                     Category = ct.Category,
                     Memo = ct.Memo,
-                    ReviewState = ct.ReviewState ?? "none"
+                    ReviewState = ct.ReviewState ?? "none",
+                    Progress = 0
                 })
                 .ToList();
 
@@ -239,6 +247,7 @@ public class TicketService
                         Category = ct.Category,
                         Memo = ct.Memo,
                         ReviewState = ct.ReviewState ?? "none",
+                        Progress = 0,
                         OrderIndex = validChildTasks.IndexOf(ct),
                         CreatedAt = DateTime.Now
                     });
@@ -341,7 +350,11 @@ public class TicketService
 
     public async Task<bool> UpdateColumnAsync(string ticketId, ColumnUpdateDto dto, string? username = null)
     {
-        var ticket = await _context.Tickets.FindAsync(ticketId);
+        var ticket = await _context.Tickets
+            .Include(t => t.ChildTasksEntities)
+            .Include(t => t.TicketLabels)
+            .Include(t => t.TicketAssignees)
+            .FirstOrDefaultAsync(t => t.TicketId == ticketId);
         if (ticket == null) return false;
 
         // 監査列の更新
@@ -436,6 +449,8 @@ public class TicketService
     {
         var ticket = await _context.Tickets
             .Include(t => t.ChildTasksEntities)
+            .Include(t => t.TicketLabels)
+            .Include(t => t.TicketAssignees)
             .FirstOrDefaultAsync(t => t.TicketId == ticketId);
         if (ticket == null) return null;
 

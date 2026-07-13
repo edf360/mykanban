@@ -165,30 +165,25 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     await expect(page.locator('#ticketModal')).toBeVisible({ timeout: 5000 });
     await page.fill('#ticketTitle', ticketName);
     
-    // JavaScript で担当者的ドロップダウンを開く
-    await page.evaluate(() => {
-      const list = document.getElementById('assigneeList');
-      if (list) list.classList.add('active');
-    });
+    // 担当者ドロップダウンボタンをクリックして開く
+    await page.click('#assigneeToggleBtn');
     
-    // ドロップダウンが active 状態になるまで待機
-    await page.waitForTimeout(500);
+    // ドロップダウンが開くまで待機（.activeクラスが付与される）
+    await expect(page.locator('#assigneeList')).toHaveClass(/active/, { timeout: 5000 });
     
-    // JavaScript で「テスト担当者」のチェックボックスをチェック
-    await page.evaluate(() => {
-      const items = document.querySelectorAll('#assigneeList .assignee-list-item');
-      for (const item of items) {
-        const nameSpan = item.querySelector('.assignee-item-name');
-        if (nameSpan && nameSpan.textContent === 'テスト担当者') {
-          const toggle = item.querySelector('.assignee-enabled-toggle') as HTMLInputElement;
-          if (toggle) {
-            toggle.checked = true;
-            toggle.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          break;
-        }
-      }
-    });
+    // 「テスト担当者」のトグルスイッチをONにする
+    // CSSで #assigneeTags { display: none; } となっているため、
+    // 担当者タグは非表示。代わりにcheckboxのchecked状態を確認する。
+    const assigneeItem = page.locator('#assigneeList .assignee-list-item:has(.assignee-item-name:has-text("テスト担当者"))');
+    await expect(assigneeItem).toBeVisible({ timeout: 5000 });
+    
+    // スライダー要素をクリック（label要素と連動してcheckboxが切り替わる）
+    const slider = assigneeItem.locator('.assignee-slider');
+    await slider.click();
+    
+    // checkboxがchecked状態になったことを確認
+    const checkbox = assigneeItem.locator('.assignee-enabled-toggle');
+    await expect(checkbox).toBeChecked({ timeout: 5000 });
     
     // 保存
     await page.click('#saveBtn');
@@ -226,25 +221,45 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     }
     await page.click('#settingsBtn');  // 設定を閉じる
     
-    // ラベル付きチケットを作成
-    const ticketName = uniqueName('ラベルフィル');
-    await page.click('.column-add-btn[data-column="todo"]');
-    await page.fill('#ticketTitle', ticketName);
-    // ラベルをドロップダウンから選択
-    await page.click('#labelToggleBtn');
-    await page.waitForTimeout(500);
-    await page.click('#labelList .dropdown-item:has-text("テストラベル")');
-    await page.click('#saveBtn');
-    await expect(page.locator('#ticketModal')).toBeHidden();
-    
-    // チケット作成後にリロードしてフィルターを再populate
+    // ページをリロードしてラベル設定がフロントエンドに反映されるまで待機
     await page.reload();
     await page.waitForTimeout(1000);
-    // ログイン画面が表示されている場合のみログイン
     const loginVisible = await page.locator('#loginScreen').isVisible();
     if (loginVisible) {
       await login(page);
     }
+    
+    // ラベル付きチケットを作成
+    const ticketName = uniqueName('ラベルフィル');
+    await page.click('.column-add-btn[data-column="todo"]');
+    await expect(page.locator('#ticketModal')).toBeVisible({ timeout: 5000 });
+    await page.fill('#ticketTitle', ticketName);
+    
+    // ラベルドロップダウンボタンをクリックして開く
+    await page.click('#labelToggleBtn');
+    
+    // ドロップダウンが開くまで待機（.activeクラスが付与される）
+    await expect(page.locator('#labelList')).toHaveClass(/active/, { timeout: 5000 });
+    
+    // 「テストラベル」をクリックして選択
+    const labelItem = page.locator('#labelList .dropdown-item:has-text("テストラベル")');
+    await expect(labelItem).toBeVisible({ timeout: 5000 });
+    await labelItem.click();
+    
+    // ラベルが選択されたことを確認（dropdown-itemにselectedクラスがつく）
+    await expect(labelItem).toHaveClass(/selected/);
+    
+    // ドロップダウンを閉じる（ラベルトグルボタンを再度クリック）
+    await page.click('#labelToggleBtn');
+    await page.waitForTimeout(300);
+    
+    // 保存
+    await page.click('#saveBtn');
+    await expect(page.locator('#ticketModal')).toBeHidden({ timeout: 10000 });
+    
+    // チケットがTo Doカラムに表示されることを確認
+    await expect(page.locator('.column[data-column="todo"] .ticket:has-text("' + ticketName + '")').first())
+      .toBeVisible({ timeout: 10000 });
     
     // フィルターパネルを表示（hiddenの場合はトグルで表示）
     const filterClasses = await page.locator('#filterArea').getAttribute('class');
@@ -254,12 +269,22 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     }
     await expect(page.locator('#filterArea')).not.toHaveClass(/hidden/);
     
+    // 他のフィルター（担当者等）が適用されていないことを確認するため、
+    // 担当者フィルターを「すべて」にリセット
+    await page.selectOption('#assigneeFilterSelect', '');
+    await page.waitForTimeout(500);
+    
+    // 検索フィルターもクリア
+    await page.fill('#titleSearchInput', '');
+    await page.waitForTimeout(500);
+    
     // ラベルフィルターで「テストラベル」を選択
     await page.selectOption('#labelFilterSelect', 'テストラベル');
+    await page.waitForTimeout(1500);
     
     // チケットが絞り込まれていることを確認
     await expect(page.locator('.column[data-column="todo"] .ticket:has-text("' + ticketName + '")').first())
-      .toBeVisible();
+      .toBeVisible({ timeout: 10000 });
     
     // フィルターを解除
     await page.selectOption('#labelFilterSelect', '');

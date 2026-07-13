@@ -17,6 +17,7 @@ public class Ticket
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public int? Effort { get; set; }
+    public int Progress { get; set; }
     public bool IsLocked { get; set; }
     public bool IsEmergency { get; set; }
     public string? Category { get; set; }

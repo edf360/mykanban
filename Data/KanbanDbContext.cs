@@ -29,6 +29,7 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.Title).IsRequired();
             entity.Property(e => e.Column).HasDefaultValue("todo");
             entity.Property(e => e.IsArchived).HasDefaultValue(false);
+            entity.Property(e => e.Progress).HasDefaultValue(0);
             entity.Property(e => e.IsDeleted).HasDefaultValue(false);
 
             // ソフト削除のGlobal Query Filter
@@ -88,6 +89,7 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.Text).IsRequired();
             entity.Property(e => e.TicketId).IsRequired();
             entity.Property(e => e.ReviewState).HasDefaultValue("none");
+            entity.Property(e => e.Progress).HasDefaultValue(0);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // インデックス
