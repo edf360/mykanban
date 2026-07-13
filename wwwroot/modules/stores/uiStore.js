@@ -1,6 +1,6 @@
 import { create } from './zustand.mjs';
 import { emit } from './eventStore.js';
-import { loadUserSettings, saveUserSettings } from '../userSettings.js';
+import { loadUserSettings, updateHiddenChildTasks } from '../userSettings.js';
 
 const useUiStore = create((set, get) => ({
     // 状態
@@ -59,10 +59,8 @@ const useUiStore = create((set, get) => ({
             } else {
                 newHidden.delete(key);
             }
-            // 永続化
-            const settings = loadUserSettings();
-            settings.childTasks = { hidden: Array.from(newHidden) };
-            saveUserSettings(settings);
+            // 永続化（新API使用）
+            updateHiddenChildTasks(list => Array.from(newHidden));
             return { hiddenChildTasks: newHidden };
         });
     },

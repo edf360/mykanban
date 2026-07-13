@@ -14,7 +14,6 @@ public class Ticket
     public bool IsArchived { get; set; }
     public string Column { get; set; } = "todo";
     public double Position { get; set; }
-    public int Progress { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public int? Effort { get; set; }

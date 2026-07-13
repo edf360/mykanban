@@ -2,15 +2,13 @@
  * アーカイブ機能モジュール
  */
 
-import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { loadUserSettings, updateArchiveVisibility } from './userSettings.js';
 
 /**
  * アーカイブ表示状態を保存
  */
 function saveArchiveVisibility(visible) {
-    const settings = loadUserSettings();
-    settings.archive = { visible };
-    saveUserSettings(settings);
+    updateArchiveVisibility(visible);
 }
 
 /**

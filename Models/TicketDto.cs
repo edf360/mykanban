@@ -25,7 +25,6 @@ public class ChildTaskDto
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Text { get; set; } = string.Empty;
     public bool Done { get; set; }
-    public int Progress { get; set; }
     public string? Category { get; set; }
     public string? Memo { get; set; }
     public string ReviewState { get; set; } = "none";
@@ -45,20 +44,11 @@ public class ColumnUpdateDto
 }
 
 /// <summary>
-/// 進捗更新用のDTO
-/// </summary>
-public class ProgressUpdateDto
-{
-    public int Progress { get; set; }
-}
-
-/// <summary>
 /// 子タスク更新用のDTO
 /// </summary>
 public class ChildTaskUpdateDto
 {
     public bool Done { get; set; }
-    public int? Progress { get; set; }
     public string? ReviewState { get; set; }
 }
 

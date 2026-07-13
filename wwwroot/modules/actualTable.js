@@ -2,7 +2,7 @@
 
 import { getAllTickets, getSettings, API_BASE } from './state.js';
 import { api } from './api.js';
-import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { loadUserSettings, updateActualSettingsSync } from './userSettings.js';
 import { showActualProgressPopup } from './progressSliderPopup.js';
 import { getToken } from './auth.js';
 
@@ -117,14 +117,12 @@ export function initActualTable(onFilterChange) {
 export function saveActualState() {
     const assigneeSelect = document.getElementById('actualTableAssigneeSelect');
     const monthInput = document.getElementById('actualTableMonthInput');
-    const settings = loadUserSettings();
-    settings.actual = {
+    updateActualSettingsSync({
         visible: document.getElementById('actualModalOverlay')?.classList.contains('active') || false,
         assignee: assigneeSelect?.value || '',
         columns: Array.from(selectedColumns),
         month: monthInput?.value || ''
-    };
-    saveUserSettings(settings);
+    });
 }
 
 /**

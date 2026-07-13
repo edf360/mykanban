@@ -5,7 +5,7 @@
 // モーダルアニメーション完了までの待機時間（ms）
 export const MODAL_ANIMATION_DURATION = 350;
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, on, closeGraphPanel, emit } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, getTicketProgress, on, closeGraphPanel, emit } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
@@ -378,10 +378,6 @@ function toggleDetailsSubmenu() {
                     <span class="detail-value">${data.ticketId || '-'}</span>
                 </div>
                 <div class="modal-menu-submenu-row">
-                    <span class="detail-label">内部ID</span>
-                    <span class="detail-value">${data.id || '-'}</span>
-                </div>
-                <div class="modal-menu-submenu-row">
                     <span class="detail-label">位置</span>
                     <span class="detail-value">${data.position ?? '-'}</span>
                 </div>
@@ -391,11 +387,7 @@ function toggleDetailsSubmenu() {
                 </div>
                 <div class="modal-menu-submenu-row">
                     <span class="detail-label">進捗</span>
-                    <span class="detail-value">${data.progress ?? '-'}%</span>
-                </div>
-                <div class="modal-menu-submenu-row">
-                    <span class="detail-label">前カラム</span>
-                    <span class="detail-value">${data.previousColumn || '-'}</span>
+                    <span class="detail-value">${getTicketProgress(data.ticketId) ?? '-'}%</span>
                 </div>
                 <div class="modal-menu-submenu-row">
                     <span class="detail-label">作成日</span>

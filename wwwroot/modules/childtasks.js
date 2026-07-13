@@ -4,7 +4,7 @@
  * ドラッグ＆ドロップで順序入れ替え可能
  */
 
-import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked, getEditingTicketId, API_BASE, emit } from './state.js';
+import { addChildTaskToState, updateChildTaskInState, removeChildTaskFromState, getChildTasks, reorderChildTasks, isTicketLocked, getEditingTicketId, getTicketProgress, API_BASE, emit } from './state.js';
 import { showProgressSlider } from './progressSliderPopup.js';
 import { showReviewIconPopup } from './reviewIconPopup.js';
 import { apiRequest } from './api.js';
@@ -59,7 +59,7 @@ function getReviewStateInfo(state) {
 /**
  * 子タスクを追加
  */
-export function addChildTask(text, done = false, id = null, progress = 0, category = '', memo = '', reviewState = 'none') {
+export function addChildTask(text, done = false, id = null, category = '', memo = '', reviewState = 'none') {
     let taskText = text.trim();
     // 空文字の場合は空のまま保存（DOM側でプレースホルダー表示）
     // blur時に空なら（未設定）になる
@@ -67,7 +67,6 @@ export function addChildTask(text, done = false, id = null, progress = 0, catego
         id: id || generateLocalId(),
         text: taskText,
         done,
-        progress: progress || 0,
         category: category || '',
         memo: memo || '',
         reviewState: reviewState || 'none'
@@ -148,7 +147,8 @@ function addChildTaskToDom(task) {
     // 5. 進捗率（クリックで編集）
     const progressSpan = document.createElement('span');
     progressSpan.className = 'child-task-progress';
-    progressSpan.textContent = `${task.progress || 0}%`;
+    const ticketId = getEditingTicketId();
+    progressSpan.textContent = `${getTicketProgress(ticketId, task.id) || 0}%`;
     progressSpan.title = 'クリックして進捗率を変更';
     progressSpan.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -284,11 +284,10 @@ function showChildTaskCategoryModal(task, itemDiv) {
  * 子タスク進捗率編集モーダル
  */
 async function showChildTaskProgressModal(task, itemDiv) {
-    const current = task.progress || 0;
+    const ticketId = getEditingTicketId();
+    const current = getTicketProgress(ticketId, task.id) || 0;
     const progressSpan = itemDiv.querySelector('.child-task-progress');
     if (!progressSpan) return;
-    
-    const ticketId = getEditingTicketId();
     const today = new Date().toISOString().split('T')[0];
     const childTasks = getChildTasks();
     const childTaskIndex = childTasks.findIndex(t => t.id === task.id);
@@ -315,7 +314,6 @@ async function showChildTaskProgressModal(task, itemDiv) {
     }
     
     showProgressSlider(progressSpan, currentProgress, async (newProgress, newHours) => {
-        updateChildTask(task.id, { progress: newProgress });
         renderChildTasks();
         
         if (ticketId) {

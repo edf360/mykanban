@@ -41,10 +41,10 @@ public class TicketServiceTests : IDisposable
     public async Task GetAllAsync_ShouldReturnSortedByColumnThenPosition()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "a", Id = 1, Title = "Doing-1", Column = "doing", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "b", Id = 2, Title = "Todo-2", Column = "todo", Position = 1 });
-        _context.Tickets.Add(new Ticket { TicketId = "c", Id = 3, Title = "Todo-1", Column = "todo", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "d", Id = 4, Title = "Done-1", Column = "done", Position = 0, IsArchived = true });
+        _context.Tickets.Add(new Ticket { TicketId = "a", Title = "Doing-1", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "b", Title = "Todo-2", Column = "todo", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "c", Title = "Todo-1", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "d", Title = "Done-1", Column = "done", Position = 0, IsArchived = true });
         await _context.SaveChangesAsync();
 
         // Act
@@ -68,7 +68,7 @@ public class TicketServiceTests : IDisposable
     public async Task GetAsync_ExistingTicket_ReturnsTicket()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "get-test", Id = 1, Title = "取得テスト", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "get-test", Title = "取得テスト", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         // Act
@@ -198,7 +198,7 @@ public class TicketServiceTests : IDisposable
         // Arrange
         _context.Tickets.Add(new Ticket
         {
-            TicketId = "update-test", Id = 1, Title = "元タイトル", Column = "todo", Position = 0,
+            TicketId = "update-test", Title = "元タイトル", Column = "todo", Position = 0,
             StartDate = new DateTime(2025, 1, 1), EndDate = new DateTime(2025, 1, 31)
         });
         await _context.SaveChangesAsync();
@@ -240,7 +240,7 @@ public class TicketServiceTests : IDisposable
     public async Task UpdateAsync_EmptyTitle_ThrowsArgumentException()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "update-empty", Id = 1, Title = "元", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "update-empty", Title = "元", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         var dto = new TicketDto { Title = "" };
@@ -255,7 +255,7 @@ public class TicketServiceTests : IDisposable
         // Arrange
         _context.Tickets.Add(new Ticket
         {
-            TicketId = "date-keep", Id = 1, Title = "日付保持", Column = "todo", Position = 0,
+            TicketId = "date-keep", Title = "日付保持", Column = "todo", Position = 0,
             StartDate = new DateTime(2025, 6, 1), EndDate = new DateTime(2025, 6, 30)
         });
         await _context.SaveChangesAsync();
@@ -281,7 +281,7 @@ public class TicketServiceTests : IDisposable
     public async Task ArchiveAsync_ShouldSetIsArchivedAndColumn()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "archive-test", Id = 1, Title = "アーカイブテスト", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "archive-test", Title = "アーカイブテスト", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         // Act
@@ -297,7 +297,7 @@ public class TicketServiceTests : IDisposable
     public async Task ArchiveAsync_AlreadyArchived_DoNothing()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "already-archived", Id = 1, Title = "既アーカイブ", Column = "archive", Position = 0, IsArchived = true });
+        _context.Tickets.Add(new Ticket { TicketId = "already-archived", Title = "既アーカイブ", Column = "archive", Position = 0, IsArchived = true });
         await _context.SaveChangesAsync();
 
         // Act
@@ -324,7 +324,7 @@ public class TicketServiceTests : IDisposable
     public async Task DeleteAsync_ShouldSoftDeleteTicket()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "delete-test", Id = 1, Title = "削除テスト", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "delete-test", Title = "削除テスト", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         // Act
@@ -354,7 +354,7 @@ public class TicketServiceTests : IDisposable
     public async Task RestoreAsync_ShouldUnarchiveTicket()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "restore-test", Id = 1, Title = "復帰テスト", Column = "archive", Position = 0, IsArchived = true });
+        _context.Tickets.Add(new Ticket { TicketId = "restore-test", Title = "復帰テスト", Column = "archive", Position = 0, IsArchived = true });
         await _context.SaveChangesAsync();
 
         // Act
@@ -381,7 +381,7 @@ public class TicketServiceTests : IDisposable
     public async Task UpdateColumnAsync_ShouldChangeColumn()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "col-move", Id = 1, Title = "移動テスト", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "col-move", Title = "移動テスト", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         var dto = new ColumnUpdateDto { Column = "doing", InsertIndex = 0 };
@@ -412,9 +412,9 @@ public class TicketServiceTests : IDisposable
     public async Task UpdateColumnAsync_InsertIndex_ShouldPositionCorrectly()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "pos-a", Id = 1, Title = "A", Column = "doing", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "pos-b", Id = 2, Title = "B", Column = "doing", Position = 1 });
-        _context.Tickets.Add(new Ticket { TicketId = "pos-move", Id = 3, Title = "移動", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "pos-a", Title = "A", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "pos-b", Title = "B", Column = "doing", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "pos-move", Title = "移動", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         // Act: インデックス1に挿入（AとBの間）
@@ -433,8 +433,8 @@ public class TicketServiceTests : IDisposable
     public async Task UpdateColumnAsync_NoInsertIndex_AppendsToEnd()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "append-a", Id = 1, Title = "A", Column = "doing", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "append-b", Id = 2, Title = "B", Column = "doing", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "append-a", Title = "A", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "append-b", Title = "B", Column = "doing", Position = 1 });
         await _context.SaveChangesAsync();
 
         // Act: InsertIndex未指定
@@ -446,73 +446,6 @@ public class TicketServiceTests : IDisposable
         Assert.Equal("append-a", sorted[1].TicketId);
     }
 
-    // ===== UpdateProgressAsync テスト =====
-
-    [Fact]
-    public async Task UpdateProgressAsync_ShouldUpdateProgress()
-    {
-        // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "progress-test", Id = 1, Title = "進捗テスト", Column = "todo", Position = 0, Progress = 0 });
-        await _context.SaveChangesAsync();
-
-        var dto = new ProgressUpdateDto { Progress = 75 };
-
-        // Act
-        var result = await _service.UpdateProgressAsync("progress-test", dto);
-
-        // Assert
-        Assert.True(result);
-        var ticket = await _context.Tickets.FindAsync("progress-test");
-        Assert.Equal(75, ticket!.Progress);
-    }
-
-    [Fact]
-    public async Task UpdateProgressAsync_ClampsOver100()
-    {
-        // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "clamp-over", Id = 1, Title = "クランプ上", Column = "todo", Position = 0, Progress = 0 });
-        await _context.SaveChangesAsync();
-
-        var dto = new ProgressUpdateDto { Progress = 150 };
-
-        // Act
-        await _service.UpdateProgressAsync("clamp-over", dto);
-
-        // Assert
-        var ticket = await _context.Tickets.FindAsync("clamp-over");
-        Assert.Equal(100, ticket!.Progress);
-    }
-
-    [Fact]
-    public async Task UpdateProgressAsync_ClampsUnder0()
-    {
-        // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "clamp-under", Id = 1, Title = "クランプ下", Column = "todo", Position = 0, Progress = 50 });
-        await _context.SaveChangesAsync();
-
-        var dto = new ProgressUpdateDto { Progress = -20 };
-
-        // Act
-        await _service.UpdateProgressAsync("clamp-under", dto);
-
-        // Assert
-        var ticket = await _context.Tickets.FindAsync("clamp-under");
-        Assert.Equal(0, ticket!.Progress);
-    }
-
-    [Fact]
-    public async Task UpdateProgressAsync_NonExistentTicket_ReturnsFalse()
-    {
-        // Arrange
-        var dto = new ProgressUpdateDto { Progress = 50 };
-
-        // Act
-        var result = await _service.UpdateProgressAsync("non-existent", dto);
-
-        // Assert
-        Assert.False(result);
-    }
-
     // ===== UpdateChildTaskAsync テスト =====
 
     [Fact]
@@ -522,7 +455,7 @@ public class TicketServiceTests : IDisposable
         var childId = Guid.NewGuid().ToString("N");
         _context.Tickets.Add(new Ticket
         {
-            TicketId = "child-update", Id = 1, Title = "子タスク更新", Column = "todo", Position = 0,
+            TicketId = "child-update", Title = "子タスク更新", Column = "todo", Position = 0,
             ChildTasks = new List<ChildTask> { new() { Id = childId, Text = "タスク1", Done = false } }
         });
         await _context.SaveChangesAsync();
@@ -556,7 +489,7 @@ public class TicketServiceTests : IDisposable
         // Arrange
         _context.Tickets.Add(new Ticket
         {
-            TicketId = "child-missing", Id = 1, Title = "子なし", Column = "todo", Position = 0,
+            TicketId = "child-missing", Title = "子なし", Column = "todo", Position = 0,
             ChildTasks = new List<ChildTask> { new() { Id = "valid-id", Text = "タスク", Done = false } }
         });
         await _context.SaveChangesAsync();
@@ -603,7 +536,7 @@ public class TicketServiceTests : IDisposable
         // Arrange: 設定なし、チケットにラベルあり
         _context.Tickets.Add(new Ticket
         {
-            TicketId = "label-ticket", Id = 1, Title = "ラベルテスト", Column = "todo", Position = 0,
+            TicketId = "label-ticket", Title = "ラベルテスト", Column = "todo", Position = 0,
             Labels = new List<string> { "チケットラベル" }
         });
         await _context.SaveChangesAsync();
@@ -623,22 +556,6 @@ public class TicketServiceTests : IDisposable
         var result = await _service.GetLabelsSuggestAsync();
 
         // Assert
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public async Task GetLabelsSuggestAsync_InvalidJson_ShouldNotThrow()
-    {
-        // Arrange: 無効なJSON
-        _context.Tickets.Add(new Ticket
-        {
-            TicketId = "bad-json", Id = 1, Title = "無効JSON", Column = "todo", Position = 0,
-            LabelsJson = "invalid-json"
-        });
-        await _context.SaveChangesAsync();
-
-        // Act & Assert: 例外なし
-        var result = await _service.GetLabelsSuggestAsync();
         Assert.Empty(result);
     }
 
@@ -672,7 +589,7 @@ public class TicketServiceTests : IDisposable
         // Arrange: 設定なし、チケットに担当者あり
         _context.Tickets.Add(new Ticket
         {
-            TicketId = "assignee-ticket", Id = 1, Title = "担当者テスト", Column = "todo", Position = 0,
+            TicketId = "assignee-ticket", Title = "担当者テスト", Column = "todo", Position = 0,
             Assignees = new List<string> { "山田" }
         });
         await _context.SaveChangesAsync();
@@ -695,19 +612,4 @@ public class TicketServiceTests : IDisposable
         Assert.Empty(result);
     }
 
-    [Fact]
-    public async Task GetAssigneesSuggestAsync_InvalidJson_ShouldNotThrow()
-    {
-        // Arrange: 無効なJSON
-        _context.Tickets.Add(new Ticket
-        {
-            TicketId = "bad-assignee-json", Id = 1, Title = "無効JSON", Column = "todo", Position = 0,
-            AssigneesJson = "{invalid"
-        });
-        await _context.SaveChangesAsync();
-
-        // Act & Assert: 例外なし
-        var result = await _service.GetAssigneesSuggestAsync();
-        Assert.Empty(result);
-    }
 }

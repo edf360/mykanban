@@ -57,7 +57,6 @@ public class TicketTests : IDisposable
         var ticket = new Ticket
         {
             TicketId = Guid.NewGuid().ToString("N"),
-            Id = 1,
             Title = "テストチケット",
             Column = "todo",
             Position = 0,
@@ -79,8 +78,8 @@ public class TicketTests : IDisposable
     public async Task GetTickets_ShouldReturnOrderedTickets()
     {
         // Arrange
-        _context.Tickets.Add(new Ticket { TicketId = "a", Id = 1, Title = "Bチケット", Column = "todo", Position = 1 });
-        _context.Tickets.Add(new Ticket { TicketId = "b", Id = 2, Title = "Aチケット", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "a", Title = "Bチケット", Column = "todo", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "b", Title = "Aチケット", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         // Act
@@ -96,7 +95,7 @@ public class TicketTests : IDisposable
     public async Task UpdateTicket_ShouldModifyAllFields()
     {
         // Arrange
-        var ticket = new Ticket { TicketId = "update-test", Id = 1, Title = "元タイトル", Column = "todo", Position = 0 };
+        var ticket = new Ticket { TicketId = "update-test", Title = "元タイトル", Column = "todo", Position = 0 };
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync();
 
@@ -118,7 +117,7 @@ public class TicketTests : IDisposable
     public async Task DeleteTicket_ShouldRemoveFromDatabase()
     {
         // Arrange
-        var ticket = new Ticket { TicketId = "delete-test", Id = 1, Title = "削除対象", Column = "todo", Position = 0 };
+        var ticket = new Ticket { TicketId = "delete-test", Title = "削除対象", Column = "todo", Position = 0 };
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync();
 
@@ -136,11 +135,10 @@ public class TicketTests : IDisposable
     {
         // Arrange
         var labels = new List<string> { "フロントエンド", "バックエンド" };
-        var ticket = new Ticket 
-        { 
-            TicketId = "label-test", 
-            Id = 1, 
-            Title = "ラベルテスト", 
+        var ticket = new Ticket
+         {
+             TicketId = "label-test",
+             Title = "ラベルテスト",
             Column = "todo", 
             Position = 0,
             Labels = labels
@@ -161,36 +159,10 @@ public class TicketTests : IDisposable
 
 
     [Fact]
-    public async Task Progress_ShouldBeClampedBetween0And100()
-    {
-        // Arrange
-        var ticket = new Ticket { TicketId = "progress-test", Id = 1, Title = "進捗テスト", Column = "todo", Position = 0, Progress = 50 };
-        _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        // Act - 100超え
-        var found = await _context.Tickets.FindAsync("progress-test");
-        found!.Progress = Math.Max(0, Math.Min(100, 150));
-        await _context.SaveChangesAsync();
-
-        // Assert
-        var updated = await _context.Tickets.FindAsync("progress-test");
-        Assert.Equal(100, updated!.Progress);
-
-        // Act - 負の値
-        found.Progress = Math.Max(0, Math.Min(100, -10));
-        await _context.SaveChangesAsync();
-
-        // Assert
-        updated = await _context.Tickets.FindAsync("progress-test");
-        Assert.Equal(0, updated!.Progress);
-    }
-
-    [Fact]
     public async Task ColumnMove_ShouldUpdateColumnAndPosition()
     {
         // Arrange
-        var ticket = new Ticket { TicketId = "move-test", Id = 1, Title = "移動テスト", Column = "todo", Position = 0 };
+        var ticket = new Ticket { TicketId = "move-test", Title = "移動テスト", Column = "todo", Position = 0 };
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync();
 
@@ -207,26 +179,15 @@ public class TicketTests : IDisposable
     }
 
     [Fact]
-    public async Task EmptyLabels_ShouldSerializeAsEmptyArray()
+    public async Task ColumnMove_ShouldRepositionRemainingTickets()
     {
-        // Arrange
-        var ticket = new Ticket
-        {
-            TicketId = "empty-labels-test",
-            Id = 1,
-            Title = "空ラベルテスト",
-            Column = "todo",
-            Position = 0,
-            Labels = new List<string>()
-        };
-
-        // Act
-        _context.Tickets.Add(ticket);
-        _context.Tickets.Add(new Ticket { TicketId = "reposition-a", Id = 1, Title = "A", Column = "todo", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "reposition-b", Id = 2, Title = "B", Column = "todo", Position = 1 });
+        // Arrange: todoカラムに3つのチケット（Position 0, 1, 2）
+        _context.Tickets.Add(new Ticket { TicketId = "reposition-a", Title = "A", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "reposition-b", Title = "B", Column = "todo", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "reposition-c", Title = "C", Column = "todo", Position = 2 });
         await _context.SaveChangesAsync();
 
-        // Act: Aをdoingに移動（旧カラムのPosition再編号をシミュレート）
+        // Act: Aをdoingに移動
         var ticketA = await _context.Tickets.FindAsync("reposition-a");
         ticketA!.Column = "doing";
         ticketA.Position = 0;
@@ -240,20 +201,22 @@ public class TicketTests : IDisposable
         }
         await _context.SaveChangesAsync();
 
-        // Assert: BのPositionは0に再編号されている
+        // Assert: BのPositionは0に、CのPositionは1に再編号されている
         var ticketB = await _context.Tickets.FindAsync("reposition-b");
+        var ticketC = await _context.Tickets.FindAsync("reposition-c");
         Assert.Equal(0, ticketB!.Position);
+        Assert.Equal(1, ticketC!.Position);
     }
 
     [Fact]
     public async Task ColumnMove_ShouldShiftNewColumnPositions()
     {
         // Arrange: doingに2つのチケット（Position 0, 1）
-        _context.Tickets.Add(new Ticket { TicketId = "shift-a", Id = 1, Title = "A", Column = "doing", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "shift-b", Id = 2, Title = "B", Column = "doing", Position = 1 });
+        _context.Tickets.Add(new Ticket { TicketId = "shift-a", Title = "A", Column = "doing", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "shift-b", Title = "B", Column = "doing", Position = 1 });
         
         // todoから新しいチケットをPosition 0に挿入
-        var newTicket = new Ticket { TicketId = "shift-new", Id = 3, Title = "New", Column = "todo", Position = 0 };
+        var newTicket = new Ticket { TicketId = "shift-new", Title = "New", Column = "todo", Position = 0 };
         _context.Tickets.Add(newTicket);
         await _context.SaveChangesAsync();
 
@@ -280,56 +243,10 @@ public class TicketTests : IDisposable
     }
 
     [Fact]
-    public async Task Progress_BoundaryValues()
-    {
-        // Arrange
-        var ticket = new Ticket { TicketId = "boundary-test", Id = 1, Title = "境界値テスト", Column = "todo", Position = 0 };
-        _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        // Act & Assert: 各境界値でクランプ動作を検証
-        var testCases = new (int input, int expected)[]
-        {
-            (-10, 0),
-            (0, 0),
-            (50, 50),
-            (100, 100),
-            (150, 100)
-        };
-
-        foreach (var (input, expected) in testCases)
-        {
-            var found = await _context.Tickets.FindAsync("boundary-test");
-            found!.Progress = Math.Max(0, Math.Min(100, input));
-            await _context.SaveChangesAsync();
-
-            var updated = await _context.Tickets.FindAsync("boundary-test");
-            Assert.Equal(expected, updated!.Progress);
-        }
-    }
-
-    [Fact]
-    public async Task AutoIncrementId_ShouldAssignNextId()
-    {
-        // Arrange: 3つのチケットを追加
-        _context.Tickets.Add(new Ticket { TicketId = "id-a", Id = 1, Title = "A", Column = "todo", Position = 0 });
-        _context.Tickets.Add(new Ticket { TicketId = "id-b", Id = 2, Title = "B", Column = "todo", Position = 1 });
-        _context.Tickets.Add(new Ticket { TicketId = "id-c", Id = 3, Title = "C", Column = "todo", Position = 2 });
-        await _context.SaveChangesAsync();
-
-        // Act: 最大Idを取得して+1（コントローラーのロジックと同じ）
-        var maxId = await _context.Tickets.MaxAsync(t => (int?)t.Id) ?? 0;
-        var nextId = maxId + 1;
-
-        // Assert
-        Assert.Equal(4, nextId);
-    }
-
-    [Fact]
     public async Task ColumnMove_SingleTicketInColumn()
     {
         // Arrange: カラムに1つのチケットのみ
-        _context.Tickets.Add(new Ticket { TicketId = "single-a", Id = 1, Title = "Single", Column = "todo", Position = 0 });
+        _context.Tickets.Add(new Ticket { TicketId = "single-a", Title = "Single", Column = "todo", Position = 0 });
         await _context.SaveChangesAsync();
 
         // Act: そのチケットをdoingカラムのPosition 0に移動（コントローラー経由）
@@ -366,7 +283,6 @@ public class TicketTests : IDisposable
         _context.Tickets.Add(new Ticket
         {
             TicketId = "long-title",
-            Id = 1,
             Title = longTitle,
             Column = "todo",
             Position = 0
@@ -421,89 +337,6 @@ public class TicketTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task ArchiveAndRestore_ShouldPreserveOriginalColumn()
-    {
-        // Arrange
-        var ticket = new Ticket
-        {
-            TicketId = "archive-restore-test",
-            Id = 1,
-            Title = "アーカイブテスト",
-            Column = "doing",
-            Position = 500,
-            IsArchived = false
-        };
-        _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        // Act - アーカイブ
-        var found = await _context.Tickets.FindAsync("archive-restore-test");
-        found!.PreviousColumn = found.Column;
-        found.IsArchived = true;
-        found.Column = "archive";
-        found.Position = 0;
-        await _context.SaveChangesAsync();
-
-        // Assert - アーカイブ状態
-        var archived = await _context.Tickets.FindAsync("archive-restore-test");
-        Assert.True(archived!.IsArchived);
-        Assert.Equal("archive", archived.Column);
-        Assert.Equal("doing", archived.PreviousColumn);
-        Assert.Equal(0, archived.Position);
-
-        // Act - リストア
-        var restoreColumn = !string.IsNullOrEmpty(archived.PreviousColumn)
-            ? archived.PreviousColumn
-            : "todo";
-        archived.IsArchived = false;
-        archived.Column = restoreColumn;
-        archived.Position = 1500;
-        archived.PreviousColumn = null;
-        await _context.SaveChangesAsync();
-
-        // Assert - リストア状態
-        var restored = await _context.Tickets.FindAsync("archive-restore-test");
-        Assert.False(restored!.IsArchived);
-        Assert.Equal("doing", restored.Column);
-        Assert.Null(restored.PreviousColumn);
-        Assert.Equal(1500, restored.Position);
-    }
-
-    [Fact]
-    public async Task RestoreWithoutPreviousColumn_ShouldUseTodo()
-    {
-        // Arrange - PreviousColumnが設定されていないアーカイブチケット
-        var ticket = new Ticket
-        {
-            TicketId = "no-prev-column-test",
-            Id = 1,
-            Title = "PreviousColumnなしテスト",
-            Column = "archive",
-            Position = 0,
-            IsArchived = true,
-            PreviousColumn = null
-        };
-        _context.Tickets.Add(ticket);
-        await _context.SaveChangesAsync();
-
-        // Act - リストア
-        var found = await _context.Tickets.FindAsync("no-prev-column-test");
-        var restoreColumn = !string.IsNullOrEmpty(found!.PreviousColumn)
-            ? found.PreviousColumn
-            : "todo";
-        found.IsArchived = false;
-        found.Column = restoreColumn;
-        found.Position = 1000;
-        found.PreviousColumn = null;
-        await _context.SaveChangesAsync();
-
-        // Assert - デフォルトでtodoに復元
-        var restored = await _context.Tickets.FindAsync("no-prev-column-test");
-        Assert.False(restored!.IsArchived);
-        Assert.Equal("todo", restored.Column);
-        Assert.Null(restored.PreviousColumn);
-    }
 }
 
 public class TicketDtoTests
@@ -543,7 +376,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "json-test",
-            Id = 1,
             Title = "JSONテスト",
             Column = "todo",
             Position = 0,
@@ -572,7 +404,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "empty-test",
-            Id = 1,
             Title = "空ラベル",
             Column = "todo",
             Position = 0,
@@ -597,7 +428,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "optional-test",
-            Id = 1,
             Title = "オプショナルテスト",
             Column = "todo",
             Position = 0,
@@ -626,7 +456,6 @@ public class JsonSerializationTests
         var ticketNull = new Ticket
         {
             TicketId = "null-test",
-            Id = 2,
             Title = "Nullテスト",
             Column = "todo",
             Position = 0
@@ -653,7 +482,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "special-test",
-            Id = 1,
             Title = "Quote \" and \\ Backslash",
             Column = "todo",
             Position = 0
@@ -671,12 +499,13 @@ public class JsonSerializationTests
         Assert.Equal(ticket.Title, deserialized!.Title);
     }
 
+    [Fact]
+    public void Ticket_MixedLabelsSerializeCorrectly()
     {
         // Arrange: 日本語/英語/数字の混合ラベル
         var ticket = new Ticket
         {
             TicketId = "mixed-labels",
-            Id = 1,
             Title = "混合ラベルテスト",
             Column = "todo",
             Position = 0,
@@ -708,7 +537,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "empty-child-text",
-            Id = 1,
             Title = "空テキストテスト",
             Column = "todo",
             Position = 0,
@@ -744,7 +572,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "minimal-ticket",
-            Id = 1,
             Title = "",
             Column = "todo",
             Position = 0,
@@ -788,7 +615,6 @@ public class JsonSerializationTests
         var ticket = new Ticket
         {
             TicketId = "large-child-tasks",
-            Id = 1,
             Title = "大量子タスクテスト",
             Column = "todo",
             Position = 0,

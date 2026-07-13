@@ -3,8 +3,8 @@
  * チケット要素の生成・描画・更新
  */
 
-import { API_BASE, state, escapeHtml, labelColorCacheInvalidated, getSettings, getAllTickets, getTicket, setTicket, removeTicket, updateTicketField, emit, setDraggedTicket, getDraggedTicket } from './state.js';
-import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { API_BASE, state, escapeHtml, labelColorCacheInvalidated, getSettings, getAllTickets, getTicket, setTicket, removeTicket, updateTicketField, emit, setDraggedTicket, getDraggedTicket, getTicketProgress } from './state.js';
+import { loadUserSettings, isTicketCollapsed, updateCollapsedTickets } from './userSettings.js';
 import { apiRequest, loadTickets } from './api.js';
 import { renderProgressChart } from './charts.js';
 import { updateMemoColumn } from './memo.js';
@@ -195,8 +195,7 @@ export function createTicketElement(data) {
     setTicket(data.ticketId, data);
     
     // 折り畳み状態の復元（ユーザー設定から）
-    const userSettings = loadUserSettings();
-    if (userSettings.collapsedTickets && userSettings.collapsedTickets.includes(data.ticketId)) {
+    if (isTicketCollapsed(data.ticketId)) {
         ticket.classList.add('collapsed');
     }
 
@@ -256,7 +255,7 @@ export function createTicketElement(data) {
         childTasksHtml = '<div class="ticket-child-tasks">';
         visibleChildTasks.forEach((task) => {
             const childId = task.id || '';
-            const progress = task.progress || 0;
+            const progress = getTicketProgress(data.ticketId, task.id);
             const reviewState = task.reviewState || 'none';
             const reviewIcons = {
                 'none': '📄',
@@ -306,7 +305,7 @@ export function createTicketElement(data) {
         <div class="ticket-title-row">
             ${showCollapseBtn ? '<button class="ticket-collapse-btn" title="折り畳む/展開">▼</button>' : ''}
             <div class="ticket-content"${ticketMemoTitle}>${titleHtml}</div>
-            <span class="progress-text" title="${(data.childTasks && data.childTasks.length > 0) ? '子タスクがあるため直接編集できません' : 'クリックして進捗率を変更'}">${data.progress || 0}%</span>
+            <span class="progress-text" title="${(data.childTasks && data.childTasks.length > 0) ? '子タスクがあるため直接編集できません' : 'クリックして進捗率を変更'}">${getTicketProgress(data.ticketId)}%</span>
             ${effortBadge}
         </div>
         ${childTasksHtml}
@@ -325,20 +324,18 @@ export function createTicketElement(data) {
             e.stopPropagation();
             ticket.classList.toggle('collapsed');
             // 折り畳み状態をユーザー設定に保存
-            const userSettings = loadUserSettings();
-            if (!userSettings.collapsedTickets) {
-                userSettings.collapsedTickets = [];
-            }
             const ticketId = ticket.dataset.id;
             const isCollapsed = ticket.classList.contains('collapsed');
-            if (isCollapsed) {
-                if (!userSettings.collapsedTickets.includes(ticketId)) {
-                    userSettings.collapsedTickets.push(ticketId);
+            updateCollapsedTickets(list => {
+                if (isCollapsed) {
+                    if (!list.includes(ticketId)) {
+                        list.push(ticketId);
+                    }
+                } else {
+                    return list.filter(id => id !== ticketId);
                 }
-            } else {
-                userSettings.collapsedTickets = userSettings.collapsedTickets.filter(id => id !== ticketId);
-            }
-            saveUserSettings(userSettings);
+                return list;
+            });
         });
     }
     
@@ -355,10 +352,10 @@ export function createTicketElement(data) {
         const ticketId = ticket.dataset.id;
         apiRequest('GET', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, null)
             .then(actuals => {
-                renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, actuals);
+                renderProgressChart(chartEl, data.startDate, data.endDate, getTicketProgress(ticketId), actuals);
             })
             .catch(() => {
-                renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, []);
+                renderProgressChart(chartEl, data.startDate, data.endDate, getTicketProgress(ticketId), []);
             });
     }
     
@@ -381,7 +378,7 @@ export function createTicketElement(data) {
             
             // 今日の進捗・実績時間を取得
             let currentHours = 0;
-            let currentProgress = data.progress || 0;
+            let currentProgress = getTicketProgress(ticketId);
             try {
                 const actuals = await apiRequest('GET', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, null);
                 const todayActual = actuals.find(a => {
@@ -397,20 +394,13 @@ export function createTicketElement(data) {
             }
             
             showProgressSlider(progressText, currentProgress, async (newProgress, newHours) => {
-                const oldProgress = data.progress || 0;
                 try {
-                    // 実績時間を保存
+                    // 実績データを保存（進捗率は実績のみで管理）
                     await apiRequest('POST', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
                         date: today,
                         hours: newHours,
                         progressRate: newProgress
                     });
-                    
-                    // 進捗率を更新
-                    if (newProgress !== oldProgress) {
-                        await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticketId)}/progress`, { progress: newProgress });
-                        updateTicketField(ticketId, 'progress', newProgress);
-                    }
                     
                     // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
                     renderAllTickets();
@@ -457,16 +447,13 @@ export function createTicketElement(data) {
             
             showProgressSlider(span, progress, async (newProgress, newHours) => {
                 try {
-                    // 実績時間を保存
+                    // 実績データを保存（進捗率は実績のみで管理）
                     await apiRequest('POST', `${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
                         date: today,
                         hours: newHours,
                         progressRate: newProgress,
-                        childTaskIndex: childTaskIndex >= 0 ? childTaskIndex : undefined
+                        childTaskId: childId
                     });
-                    
-                    const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticketId)}/child-task/${encodeURIComponent(childId)}`, { done: false, progress: newProgress });
-                    setTicket(ticketId, updated);
                     
                     // SignalRのデバウンスにより再描画がスキップされる可能性があるため明示的に再描画
                     renderAllTickets();
@@ -525,7 +512,6 @@ export function createTicketElement(data) {
                 try {
                     const updated = await apiRequest('PATCH', `${API_BASE}/${encodeURIComponent(ticketId)}/child-task/${encodeURIComponent(childId)}`, {
                         done: childTask.done,
-                        progress: childTask.progress,
                         reviewState: state
                     });
                     setTicket(ticketId, updated);
@@ -550,8 +536,8 @@ export function recreateTicket(ticketEl, data, column) {
     data.ticketId = oldId;
     const newTicket = createTicketElement(data);
     
-    // 新しいデータの進捗値を使用（古いDOMの値を無視）
-    const percentage = data.progress || 0;
+    // 実績キャッシュから進捗値を取得
+    const percentage = getTicketProgress(data.ticketId);
     const progressText = newTicket.querySelector('.progress-text');
     if (progressText) progressText.textContent = `${percentage}%`;
     
@@ -559,12 +545,12 @@ export function recreateTicket(ticketEl, data, column) {
     if (data.startDate && data.endDate) {
         const chartEl = newTicket.querySelector('.ticket-chart');
         if (chartEl) {
-            apiRequest('GET', `${API_BASE}/${encodeURIComponent(data.id)}/actuals`, null)
+            apiRequest('GET', `${API_BASE}/${encodeURIComponent(data.ticketId)}/actuals`, null)
                 .then(actuals => {
-                    renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, actuals);
+                    renderProgressChart(chartEl, data.startDate, data.endDate, getTicketProgress(data.ticketId), actuals);
                 })
                 .catch(() => {
-                    renderProgressChart(chartEl, data.startDate, data.endDate, data.progress || 0, []);
+                    renderProgressChart(chartEl, data.startDate, data.endDate, getTicketProgress(data.ticketId), []);
                 });
         }
     }

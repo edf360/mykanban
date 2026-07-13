@@ -4,7 +4,7 @@
  * Proxyベースの変更通知 + Mutation関数による安全な状態管理
  */
 
-import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { updateHiddenChildTasks, loadUserSettings } from './userSettings.js';
 
 // APIベースURL
 export const API_BASE = '/api/tickets';
@@ -684,9 +684,7 @@ export function formatDateWithDay(date) {
  * 子タスク非表示状態を保存
  */
 function saveHiddenChildTasks() {
-    const settings = loadUserSettings();
-    settings.childTasks = { hidden: Array.from(internal.ui.hiddenChildTasks) };
-    saveUserSettings(settings);
+    updateHiddenChildTasks(list => Array.from(internal.ui.hiddenChildTasks));
 }
 
 /**
@@ -772,4 +770,98 @@ export function setDraggedTicket(ticket) {
  */
 export function getDraggedTicket() {
     return draggedTicket;
+}
+
+// ===== 実績キャッシュ =====
+
+/**
+ * 実績データキャッシュ
+ * key: ticketId (親) または "ticketId:childTaskId" (子タスク)
+ * value: TicketActual[] (日付降順)
+ */
+const actualCache = new Map();
+
+/**
+ * 複数のチケットの実績を一括取得してキャッシュに保存
+ * @param {string[]} ticketIds - チケットID配列
+ */
+export async function loadAllActuals(ticketIds) {
+    if (!ticketIds || ticketIds.length === 0) return;
+    try {
+        const query = ticketIds.map(id => `ticketIds=${encodeURIComponent(id)}`).join('&');
+        const response = await fetch(`${API_BASE}/actuals/batch?${query}`, {
+            headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (!response.ok) return;
+        const allActuals = await response.json();
+        
+        // キャッシュをクリアして再構築
+        actualCache.clear();
+        
+        // ticketIdごとにグループ化
+        for (const actual of allActuals) {
+            const key = actual.childTaskId
+                ? `${actual.ticketId}:${actual.childTaskId}`
+                : actual.ticketId;
+            if (!actualCache.has(key)) {
+                actualCache.set(key, []);
+            }
+            actualCache.get(key).push(actual);
+        }
+        
+        // 各キャッシュを日付降順にソート
+        for (const [, actuals] of actualCache) {
+            actuals.sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+    } catch (e) {
+        console.warn('[state] Failed to load actuals:', e);
+    }
+}
+
+/**
+ * チケットの最新進捗率を取得（実績キャッシュから）
+ * @param {string} ticketId - チケットID
+ * @param {string} [childTaskId] - 子タスクID（省略可）
+ * @returns {number} 進捗率 (0-100)、実績なしの場合は0
+ */
+export function getTicketProgress(ticketId, childTaskId) {
+    const key = childTaskId ? `${ticketId}:${childTaskId}` : ticketId;
+    const actuals = actualCache.get(key);
+    if (!actuals || actuals.length === 0) return 0;
+    // 最新のProgressRateを返す（日付降順でソート済み）
+    const latest = actuals.find(a => a.progressRate !== null && a.progressRate !== undefined);
+    return latest ? latest.progressRate : 0;
+}
+
+/**
+ * 単一チケットの実績をキャッシュに保存
+ * @param {string} ticketId - チケットID
+ * @param {Array} actuals - 実績データ
+ */
+export function cacheActualsForTicket(ticketId, actuals) {
+    if (!actuals || !Array.isArray(actuals)) return;
+    // 日付降順にソート
+    actuals.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    for (const actual of actuals) {
+        const key = actual.childTaskId
+            ? `${ticketId}:${actual.childTaskId}`
+            : ticketId;
+        if (!actualCache.has(key)) {
+            actualCache.set(key, []);
+        }
+        actualCache.get(key).push(actual);
+    }
+    
+    // 各キャッシュを日付降順に再ソート
+    for (const [, items] of actualCache) {
+        items.sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+}
+
+/**
+ * 実績キャッシュをクリア
+ */
+export function clearActualCache() {
+    actualCache.clear();
 }

@@ -34,12 +34,6 @@ public class ChildTask
     public bool Done { get; set; }
 
     /// <summary>
-    /// 進捗率 (0-100)
-    /// </summary>
-    [JsonPropertyName("progress")]
-    public int Progress { get; set; }
-
-    /// <summary>
     /// カテゴリ
     /// </summary>
     [JsonPropertyName("category")]

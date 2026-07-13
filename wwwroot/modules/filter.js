@@ -5,7 +5,7 @@
 
 import { setFilter, getFilterAssignee, getAssigneeSuggestions, getLabelSuggestions, emit } from './state.js';
 import { updateMemoColumn } from './memo.js';
-import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { loadUserSettings, updateFilterState, updateMemoVisibility } from './userSettings.js';
 
 // ===== DOM要素を一元化 =====
 const elements = {
@@ -94,11 +94,7 @@ function hideMemoColumn() {
         memoToggleBtn.classList.remove('active');
     }
     // 保存された設定も更新
-    const settings = loadUserSettings();
-    if (settings.memo) {
-        settings.memo.visible = false;
-        saveUserSettings(settings);
-    }
+    updateMemoVisibility(false);
 }
 
 // ===== 検索入力ハンドラー（debounce適用） =====
@@ -210,15 +206,13 @@ export function populateAssigneeFilter() {
  * フィルター状態を保存
  */
 function saveFilterState() {
-    const settings = loadUserSettings();
-    settings.filter = {
+    updateFilterState({
         visible: !elements.filterArea?.classList.contains('hidden'),
         assignee: elements.assigneeSelect?.value || '',
         keyword: elements.searchInput?.value || '',
         label: elements.labelSelect?.value || '',
         mainOnly: elements.mainAssigneeCheckbox?.checked || false
-    };
-    saveUserSettings(settings);
+    });
 }
 
 /**

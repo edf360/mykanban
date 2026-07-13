@@ -5,7 +5,7 @@
 import { getFilterAssignee } from './state.js';
 import { renderAssigneeChart } from './charts.js';
 import { getUsername } from './auth.js';
-import { loadUserSettings, saveUserSettings } from './userSettings.js';
+import { loadUserSettings, updateMemoVisibility } from './userSettings.js';
 import { apiRequest } from './api.js';
 
 // ===== Storage層 =====
@@ -64,9 +64,7 @@ let memoInitialized = false;
  * メモカラムの表示状態を保存
  */
 function saveMemoVisibility(visible) {
-    const settings = loadUserSettings();
-    settings.memo = { visible };
-    saveUserSettings(settings);
+    updateMemoVisibility(visible);
 }
 
 /**

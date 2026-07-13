@@ -199,7 +199,6 @@ public class SettingsControllerTests : IDisposable
         var ticket = new Ticket
         {
             TicketId = "rename-test",
-            Id = 1,
             Title = "テスト",
             Assignees = new List<string> { "田中" }
         };
@@ -218,10 +217,11 @@ public class SettingsControllerTests : IDisposable
         // Assert
         Assert.IsType<NoContentResult>(result);
         
-        // チケットの担当者も更新されている
-        var updatedTicket = await _context.Tickets.FirstAsync(t => t.TicketId == "rename-test");
-        Assert.Single(updatedTicket.Assignees);
-        Assert.Equal("田中太郎", updatedTicket.Assignees[0]);
+        // ExecuteUpdateAsyncはDbContextキャッシュを更新しないため、中間テーブルを直接確認
+        var assignee = await _context.TicketAssignees
+            .FirstOrDefaultAsync(a => a.TicketId == "rename-test");
+        Assert.NotNull(assignee);
+        Assert.Equal("田中太郎", assignee.Assignee);
     }
 
     // ===== ラベル名変更の反映 =====
@@ -241,7 +241,6 @@ public class SettingsControllerTests : IDisposable
         var ticket = new Ticket
         {
             TicketId = "label-rename-test",
-            Id = 1,
             Title = "テスト",
             Labels = new List<string> { "バグ" }
         };
@@ -260,9 +259,11 @@ public class SettingsControllerTests : IDisposable
         // Assert
         Assert.IsType<NoContentResult>(result);
         
-        var updatedTicket = await _context.Tickets.FirstAsync(t => t.TicketId == "label-rename-test");
-        Assert.Single(updatedTicket.Labels);
-        Assert.Equal("Bug", updatedTicket.Labels[0]);
+        // ExecuteUpdateAsyncはDbContextキャッシュを更新しないため、中間テーブルを直接確認
+        var label = await _context.TicketLabels
+            .FirstOrDefaultAsync(l => l.TicketId == "label-rename-test");
+        Assert.NotNull(label);
+        Assert.Equal("Bug", label.Label);
     }
 
     // ===== Export =====
@@ -274,7 +275,6 @@ public class SettingsControllerTests : IDisposable
         var ticket = new Ticket
         {
             TicketId = "export-test",
-            Id = 1,
             Title = "エクスポートテスト",
             Column = "todo"
         };
@@ -422,7 +422,6 @@ public class SettingsControllerTests : IDisposable
         var existing = new Ticket
         {
             TicketId = "update-csv",
-            Id = 1,
             Title = "旧タイトル",
             Column = "todo",
             Assignees = new List<string> { "旧担当者" }

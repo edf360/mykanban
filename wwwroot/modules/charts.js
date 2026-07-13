@@ -3,7 +3,7 @@
  * 進捗予実グラフと担当者累積工数グラフのSVG描画
  */
 
-import { state, formatDateWithDay, getAllTickets } from './state.js';
+import { state, formatDateWithDay, getAllTickets, getTicketProgress } from './state.js';
 
 // タイムライン行のカスタム順序（ドラッグで並び替え）
 let timelineRowOrder = null;
@@ -217,7 +217,7 @@ export function renderAssigneeChart(container, assigneeName) {
         _start: parseDate(t.startDate),
         _end: parseDate(t.endDate),
         _effort: sanitizeNum(t.effort, 0),
-        _progress: sanitizeNum(t.progress, 0)
+        _progress: sanitizeNum(getTicketProgress(t.ticketId), 0)
     })).filter(t => !isNaN(t._start.getTime()) && !isNaN(t._end.getTime()));
 
     // 日付キー生成関数（toISOString のタイムゾーンずれ回避）
@@ -518,8 +518,8 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
             // 両方とも新規の場合は進捗率順
             const aTickets = categoryMap.get(a);
             const bTickets = categoryMap.get(b);
-            const aAvg = aTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / aTickets.length;
-            const bAvg = bTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / bTickets.length;
+            const aAvg = aTickets.reduce((sum, t) => sum + sanitizeNum(getTicketProgress(t.ticketId), 0), 0) / aTickets.length;
+            const bAvg = bTickets.reduce((sum, t) => sum + sanitizeNum(getTicketProgress(t.ticketId), 0), 0) / bTickets.length;
             return bAvg - aAvg;
         });
     } else {
@@ -528,8 +528,8 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
             const aTickets = categoryMap.get(a);
             const bTickets = categoryMap.get(b);
             // 各カテゴリの全チケットの平均進捗率を計算
-            const aAvgProgress = aTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / aTickets.length;
-            const bAvgProgress = bTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / bTickets.length;
+            const aAvgProgress = aTickets.reduce((sum, t) => sum + sanitizeNum(getTicketProgress(t.ticketId), 0), 0) / aTickets.length;
+            const bAvgProgress = bTickets.reduce((sum, t) => sum + sanitizeNum(getTicketProgress(t.ticketId), 0), 0) / bTickets.length;
             // 進捗率の高い順（降順）。同率の場合はカラム順でソート
             if (Math.abs(aAvgProgress - bAvgProgress) > 0.01) {
                 return bAvgProgress - aAvgProgress;
@@ -658,7 +658,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
                 td.appendChild(span);
             } else {
                 const avgProgress = Math.round(
-                    categoryTickets.reduce((sum, t) => sum + sanitizeNum(t.progress, 0), 0) / categoryTickets.length
+                    categoryTickets.reduce((sum, t) => sum + sanitizeNum(getTicketProgress(t.ticketId), 0), 0) / categoryTickets.length
                 );
                 const color = getProgressColor(avgProgress);
                 
@@ -704,7 +704,7 @@ export function renderProgressMatrix(container, labelName, excludedTicketIds = [
                             return cCat === ctCat && (c.text || '無題') === (ct.text || '無題');
                         });
                         if (found) {
-                            childProgress = found.progress;
+                            childProgress = getTicketProgress(t.ticketId, found.id);
                             break;
                         }
                     }
@@ -1121,7 +1121,7 @@ function renderGanttChart(container, tickets, assignees) {
         const end = parseDate(ticket.endDate);
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
-        const progress = Math.min(100, Math.max(0, sanitizeNum(ticket.progress, 0)));
+        const progress = Math.min(100, Math.max(0, sanitizeNum(getTicketProgress(ticket.ticketId), 0)));
         const colors = getAssigneeColor(rowInfo.assigneeIdx);
 
         const startKey = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`;
@@ -1183,7 +1183,7 @@ function renderTimelineTable(container, tickets, assignees) {
     html += '<thead><tr><th>チケット</th><th>担当者</th><th>進捗</th></tr></thead>';
     html += '<tbody>';
     tickets.forEach(t => {
-        const progress = sanitizeNum(t.progress, 0);
+        const progress = sanitizeNum(getTicketProgress(t.ticketId), 0);
         const color = getProgressColor(progress);
         const assigneeText = t.assignees ? t.assignees.map(escapeHtml).join(', ') : '—';
         html += `<tr>
@@ -1252,8 +1252,8 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
     
     // チケットをソート（進捗率降順、同率ならカラム順）
     const sortedTickets = [...tickets].sort((a, b) => {
-        const aProgress = sanitizeNum(a.progress, 0);
-        const bProgress = sanitizeNum(b.progress, 0);
+        const aProgress = sanitizeNum(getTicketProgress(a.ticketId), 0);
+        const bProgress = sanitizeNum(getTicketProgress(b.ticketId), 0);
         if (Math.abs(aProgress - bProgress) > 0.01) {
             return bProgress - aProgress;
         }
@@ -1350,7 +1350,7 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
         
         // 進捗率セル
         const tdProgress = document.createElement('td');
-        const progress = sanitizeNum(ticket.progress, 0);
+        const progress = sanitizeNum(getTicketProgress(ticket.ticketId), 0);
         const color = getProgressColor(progress);
         
         const cellDiv = document.createElement('div');
@@ -1386,7 +1386,7 @@ export function renderTicketProgress(container, labelName, excludedTicketIds = [
             
             if (ticketChildren.length > 0) {
                 // 進捗率の平均を計算
-                const avgProgress = ticketChildren.reduce((sum, ct) => sum + sanitizeNum(ct.progress, 0), 0) / ticketChildren.length;
+                const avgProgress = ticketChildren.reduce((sum, ct) => sum + sanitizeNum(getTicketProgress(ticket.id, ct.id), 0), 0) / ticketChildren.length;
                 const cColor = getProgressColor(avgProgress);
                 const cDiv = document.createElement('div');
                 cDiv.className = 'progress-bar-cell';

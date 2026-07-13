@@ -51,7 +51,6 @@ public class TicketService
                 Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                 Text = ct.Text,
                 Done = ct.Done,
-                Progress = ct.Progress,
                 Category = ct.Category,
                 Memo = ct.Memo,
                 ReviewState = ct.ReviewState ?? "none",
@@ -67,7 +66,6 @@ public class TicketService
             Title = dto.Title,
             Column = column,
             Position = 0,
-            Progress = 0,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Effort = dto.Effort,
@@ -112,7 +110,6 @@ public class TicketService
                 TicketId = ticket.TicketId,
                 Text = ct.Text,
                 Done = ct.Done,
-                Progress = ct.Progress,
                 Category = ct.Category,
                 Memo = ct.Memo,
                 ReviewState = ct.ReviewState ?? "none",
@@ -196,7 +193,6 @@ public class TicketService
                     Id = string.IsNullOrEmpty(ct.Id) ? Guid.NewGuid().ToString("N") : ct.Id,
                     Text = ct.Text,
                     Done = ct.Done,
-                    Progress = ct.Progress,
                     Category = ct.Category,
                     Memo = ct.Memo,
                     ReviewState = ct.ReviewState ?? "none"
@@ -226,7 +222,6 @@ public class TicketService
                     // 更新
                     existing.Text = ct.Text;
                     existing.Done = ct.Done;
-                    existing.Progress = ct.Progress;
                     existing.Category = ct.Category;
                     existing.Memo = ct.Memo;
                     existing.ReviewState = ct.ReviewState ?? "none";
@@ -241,7 +236,6 @@ public class TicketService
                         TicketId = ticketId,
                         Text = ct.Text,
                         Done = ct.Done,
-                        Progress = ct.Progress,
                         Category = ct.Category,
                         Memo = ct.Memo,
                         ReviewState = ct.ReviewState ?? "none",
@@ -438,28 +432,6 @@ public class TicketService
         return true;
     }
 
-    public async Task<bool> UpdateProgressAsync(string ticketId, ProgressUpdateDto dto, string? username = null)
-    {
-        var ticket = await _context.Tickets.FindAsync(ticketId);
-        if (ticket == null) return false;
-
-        // 監査列の更新
-        ticket.UpdatedAt = DateTime.Now;
-        ticket.UpdatedBy = username;
-
-        // 子タスクがある場合は進捗を直接更新できない
-        if (ticket.ChildTasksEntities != null && ticket.ChildTasksEntities.Count > 0)
-        {
-            return false;
-        }
-
-        var oldProgress = ticket.Progress;
-        ticket.Progress = Math.Max(0, Math.Min(100, dto.Progress));
-
-        await _context.SaveChangesAsync();
-        return true;
-    }
-
     public async Task<Ticket?> UpdateChildTaskAsync(string ticketId, string childId, ChildTaskUpdateDto dto, string? username = null)
     {
         var ticket = await _context.Tickets
@@ -475,26 +447,12 @@ public class TicketService
         var childTask = childTasks?.FirstOrDefault(ct => ct.Id == childId);
         if (childTask == null) return null;
 
-        var oldChildProgress = childTask.Progress;
-        var oldTicketProgress = ticket.Progress;
-
         childTask.Done = dto.Done;
-        if (dto.Progress.HasValue)
-        {
-            var newProgress = Math.Max(0, Math.Min(100, dto.Progress.Value));
-            childTask.Progress = newProgress;
-        }
         if (!string.IsNullOrEmpty(dto.ReviewState))
         {
             childTask.ReviewState = dto.ReviewState;
         }
         childTask.UpdatedAt = DateTime.Now;
-
-        // 子タスクの進捗からメインタスクの進捗を平均値で計算
-        if (childTasks != null && childTasks.Count > 0)
-        {
-            ticket.Progress = (int)Math.Round(childTasks.Average(ct => ct.Progress));
-        }
 
         await _context.SaveChangesAsync();
 

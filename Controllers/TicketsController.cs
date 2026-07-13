@@ -183,21 +183,6 @@ public class TicketsController : ControllerBase
     }
 
     /// <summary>
-    /// 進捗を更新
-    /// </summary>
-    [HttpPatch("{id}/progress")]
-    public async Task<IActionResult> UpdateProgress(string id, [FromBody] ProgressUpdateDto? dto)
-    {
-        if (dto is null)
-            return BadRequest(new { error = "Request body is required" });
-        var success = await _ticketService.UpdateProgressAsync(id, dto, GetUsername());
-        if (!success)
-            return NotFound(new { error = "Ticket not found" });
-        await NotifyTicketChanged();
-        return NoContent();
-    }
-
-    /// <summary>
     /// 子タスクの完了状態を更新（IDベース）
     /// </summary>
     [HttpPatch("{id}/child-task/{childId}")]
@@ -296,35 +281,6 @@ public class TicketsController : ControllerBase
                 .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == childTaskIndex);
         }
 
-        // チケットの進捗率を更新
-        if (dto.ProgressRate.HasValue)
-        {
-            if (childTaskId == null && childTaskIndex is null)
-            {
-                // 親タスクの進捗率を更新
-                ticket.Progress = (int)dto.ProgressRate;
-            }
-            else if (childTaskId != null)
-            {
-                // 子タスク（独立テーブル）の進捗率を更新
-                var childTask = await _dbContext.ChildTasks.FindAsync(childTaskId);
-                if (childTask != null)
-                {
-                    childTask.Progress = (int)dto.ProgressRate;
-                    childTask.UpdatedAt = DateTime.Now;
-                }
-            }
-            else
-            {
-                // 子タスク（独立テーブル）の進捗率を更新
-                var childTaskEntity = await _dbContext.ChildTasks
-                    .Where(ct => ct.TicketId == id)
-                    .ElementAtAsync(childTaskIndex.Value);
-                childTaskEntity.Progress = (int)dto.ProgressRate;
-                childTaskEntity.UpdatedAt = DateTime.Now;
-            }
-        }
-
         if (existing != null)
         {
             // 更新
@@ -346,64 +302,6 @@ public class TicketsController : ControllerBase
                 CreatedAt = DateTime.Now
             };
             _dbContext.TicketActuals.Add(actual);
-        }
-
-        // 子タスクの実績保存時、親チケットの進捗を子タスクの平均で更新
-        if (dto.ChildTaskIndex is not null)
-        {
-            var childTasks = await _dbContext.ChildTasks
-                .Where(ct => ct.TicketId == id)
-                .ToListAsync();
-            if (childTasks.Count > 0)
-            {
-                int sum = 0, count = 0;
-                for (int i = 0; i < childTasks.Count; i++)
-                {
-                    // 実績から最新の進捗率を取得
-                    var latestActual = await _dbContext.TicketActuals
-                        .Where(a => a.TicketId == id && a.ChildTaskIndex == i && a.ProgressRate.HasValue)
-                        .OrderByDescending(a => a.Date)
-                        .FirstOrDefaultAsync();
-
-                    if (latestActual != null)
-                    {
-                        sum += latestActual.ProgressRate ?? 0;
-                        count++;
-                    }
-                    else
-                    {
-                        // 実績なしの場合は子タスクエンティティの Progress を使用
-                        sum += childTasks[i].Progress;
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    int averageProgress = sum / count;
-                    ticket.Progress = averageProgress;
-
-                    // その日付の親チケット実績も更新/作成
-                    var parentActual = await _dbContext.TicketActuals
-                        .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == null);
-
-                    if (parentActual != null)
-                    {
-                        parentActual.ProgressRate = averageProgress;
-                    }
-                    else
-                    {
-                        var newParentActual = new TicketActual
-                        {
-                            TicketId = id,
-                            Date = dto.Date.Date,
-                            Hours = 0,
-                            ProgressRate = averageProgress,
-                            ChildTaskIndex = null
-                        };
-                        _dbContext.TicketActuals.Add(newParentActual);
-                    }
-                }
-            }
         }
 
         await _dbContext.SaveChangesAsync();
@@ -434,35 +332,6 @@ public class TicketsController : ControllerBase
         // ChildTaskIdを優先
         string? targetChildTaskId = childTaskId ?? dto.ChildTaskId;
         int? targetChildTaskIndex = targetChildTaskId == null ? childTaskIndex ?? dto.ChildTaskIndex : null;
-
-        // チケットの進捗率を更新
-        if (dto.ProgressRate.HasValue)
-        {
-            if (targetChildTaskId == null && targetChildTaskIndex is null)
-            {
-                // 親タスクの進捗率を更新
-                ticket.Progress = (int)dto.ProgressRate;
-            }
-            else if (targetChildTaskId != null)
-            {
-                // 子タスク（独立テーブル）の進捗率を更新
-                var childTask = await _dbContext.ChildTasks.FindAsync(targetChildTaskId);
-                if (childTask != null)
-                {
-                    childTask.Progress = (int)dto.ProgressRate;
-                    childTask.UpdatedAt = DateTime.Now;
-                }
-            }
-            else
-            {
-                // 子タスク（独立テーブル）の進捗率を更新
-                var childTaskEntity = await _dbContext.ChildTasks
-                    .Where(ct => ct.TicketId == id)
-                    .ElementAtAsync(targetChildTaskIndex.Value);
-                childTaskEntity.Progress = (int)dto.ProgressRate;
-                childTaskEntity.UpdatedAt = DateTime.Now;
-            }
-        }
 
         DateTime targetDate;
         if (!DateTime.TryParseExact(date, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out targetDate))

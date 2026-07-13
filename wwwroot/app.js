@@ -3,8 +3,8 @@
  * 各モジュールを統合して初期化
  */
 
-import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback, on, emit, invalidateLabelColorCache } from './modules/state.js';
-import { loadUserSettings, saveUserSettings } from './modules/userSettings.js';
+import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback, on, emit, invalidateLabelColorCache, loadAllActuals, getAllTickets } from './modules/state.js';
+import { loadUserSettings, updateGraphSettings, updateGraphSettingsSync, flushPendingSettings } from './modules/userSettings.js';
 import { loadTickets, loadSuggestions } from './modules/api.js';
 import { renderAllTickets } from './modules/renderer.js';
 import { setupDropZones } from './modules/dragdrop.js';
@@ -161,6 +161,11 @@ async function initApp() {
     await Promise.all([loadTickets(), loadSuggestions()]);
     logInfo('[app] loadTickets done, tickets: ' + state.allTickets.length);
     logInfo('[app] loadSuggestions done, assigneeSuggestions: ' + JSON.stringify(state.assigneeSuggestions));
+    
+    // 実績データをバッチ取得してキャッシュ
+    const ticketIds = getAllTickets().map(t => t.ticketId);
+    await loadAllActuals(ticketIds);
+    logInfo('[app] loadAllActuals done');
 
     // フィルターをpopulate
     populateAssigneeFilter();
@@ -600,16 +605,14 @@ function initGraphPanelInternal() {
 
   // グラフ設定を保存
   let saveGraphSettings = function() {
-    const settings = loadUserSettings();
-    settings.graph = {
+    updateGraphSettingsSync({
       visible: isGraphPanelOpen(),
       label: graphLabelSelect?.value || '',
       viewType: graphViewSelect?.value || 'matrix',
       assignees: state.graphAssignees || [],
       excludedTicketIds: Array.from(excludedTicketSet),
       height: graphPanel?.style.height || '20vh'
-    };
-    saveUserSettings(settings);
+    });
   };
   // 外部から呼び出せるように公開
   window.saveGraphSettings = saveGraphSettings;
@@ -679,10 +682,9 @@ function initGraphPanelInternal() {
     const savedSettings = loadUserSettings();
     const savedLabel = savedSettings?.graph?.label || '';
     const savedViewType = savedSettings?.graph?.viewType || 'matrix';
-    // 後方互換: 旧単一文字列形式 (assignee) も対応
     const savedAssignees = Array.isArray(savedSettings?.graph?.assignees)
       ? savedSettings.graph.assignees
-      : (savedSettings?.graph?.assignee ? [savedSettings.graph.assignee] : []);
+      : [];
     const savedExcludedIds = savedSettings?.graph?.excludedTicketIds || [];
     const savedHeight = savedSettings?.graph?.height || '20vh';
     
@@ -730,7 +732,7 @@ function initGraphPanelInternal() {
   const initSavedSettings = loadUserSettings();
   const initSavedAssignees = Array.isArray(initSavedSettings?.graph?.assignees)
     ? initSavedSettings.graph.assignees
-    : (initSavedSettings?.graph?.assignee ? [initSavedSettings.graph.assignee] : []);
+    : [];
   const initValidAssignees = initSavedAssignees.filter(a => (state.assigneeSuggestions || []).includes(a));
   state.graphAssignees = initValidAssignees;
   // ラベルリストを設定
@@ -999,6 +1001,9 @@ function startSignalRConnection() {
       try {
         await loadTickets();
         console.log('[SignalR] Tickets loaded successfully');
+        // 実績キャッシュも更新
+        const ticketIds = getAllTickets().map(t => t.ticketId);
+        await loadAllActuals(ticketIds);
         renderAllTickets();
         console.log('[SignalR] Tickets rendered successfully');
         // グラフパネルが開いている場合はグラフも更新
@@ -1029,8 +1034,10 @@ function stopSignalRConnection() {
   }
 }
 
-// ===== イベントコントローラーのクリーンアップ =====
+// ===== ページ離脱時のクリーンアップ =====
 window.addEventListener('beforeunload', () => {
+  // 保留中のユーザー設定を即時保存
+  flushPendingSettings();
   eventController?.abort();
   stopSignalRConnection();
 });

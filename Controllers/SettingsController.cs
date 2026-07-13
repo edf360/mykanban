@@ -154,14 +154,13 @@ public class SettingsController : ControllerBase
             t.IsArchived,
             t.Column,
             t.Position,
-            t.Progress,
             t.StartDate,
             t.EndDate,
             t.Effort,
             assignees = t.Assignees,
             labels = t.Labels,
             t.Memo,
-            childTasks = allChildTasks.Where(ct => ct.TicketId == t.TicketId).Select(ct => new { ct.Text, ct.Progress, ct.Done }).ToList(),
+            childTasks = allChildTasks.Where(ct => ct.TicketId == t.TicketId).Select(ct => new { ct.Text, ct.Done }).ToList(),
         }).ToList();
 
         var exportData = new
@@ -226,7 +225,6 @@ public class SettingsController : ControllerBase
                         IsArchived = t.IsArchived,
                         Column = t.Column,
                         Position = t.Position,
-                        Progress = t.Progress,
                         StartDate = t.StartDate,
                         EndDate = t.EndDate,
                         Effort = t.Effort,
@@ -355,9 +353,6 @@ public class SettingsController : ControllerBase
             ticket.Title = title;
             // CSVインポート時はタイトルを集計IDに設定
             ticket.Category = title;
-            // バケット進捗は一時的に保持（子タスクから計算があれば上書き）
-            var bucketProgress = ParseProgress(csv.GetField(columnIndexes["バケット"]) ?? "");
-            ticket.Progress = bucketProgress;
             ticket.Column = MapStateToColumn(csv.GetField(columnIndexes["状態"]) ?? "");
             ticket.IsArchived = false;
             
@@ -395,12 +390,6 @@ public class SettingsController : ControllerBase
                 _context.ChildTasks.Add(ct);
             }
 
-            // 子タスクに【X%】指定があればバケットを無視して子タスクから進捗率を計算
-            if (HasProgressAnnotation(checklistItems))
-            {
-                var totalProgress = childTaskList.Sum(ct => ct.Progress);
-                ticket.Progress = (int)(totalProgress / childTaskList.Count);
-            }
 
             // ラベルの処理
             var labelsStr = csv.GetField(columnIndexes["ラベル"]) ?? "";
@@ -507,7 +496,6 @@ public class SettingsController : ControllerBase
             // 【X%】表記から進捗率をパース（0%〜100%）
             if (TryExtractProgress(item, out var progress))
             {
-                ct.Progress = progress;
                 // タイトルから【X%】表記を除去
                 ct.Text = System.Text.RegularExpressions.Regex.Replace(item, @"【[0-9０-９]+[%％]】", "").TrimStart();
                 // 100%なら完了済み
