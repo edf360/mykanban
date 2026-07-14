@@ -52,12 +52,6 @@ public class ChildTask
     public string ReviewState { get; set; } = "none";
 
     /// <summary>
-    /// 進捗率 (0-100)
-    /// </summary>
-    [JsonPropertyName("progress")]
-    public int Progress { get; set; }
-
-    /// <summary>
     /// 順序インデックス
     /// </summary>
     [JsonPropertyName("orderIndex")]

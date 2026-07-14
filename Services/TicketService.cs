@@ -56,7 +56,6 @@ public class TicketService
                 Category = ct.Category,
                 Memo = ct.Memo,
                 ReviewState = ct.ReviewState ?? "none",
-                Progress = 0,
                 OrderIndex = index
             })
             .ToList();
@@ -69,7 +68,6 @@ public class TicketService
             Title = dto.Title,
             Column = column,
             Position = 0,
-            Progress = 0,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Effort = dto.Effort,
@@ -117,7 +115,6 @@ public class TicketService
                 Category = ct.Category,
                 Memo = ct.Memo,
                 ReviewState = ct.ReviewState ?? "none",
-                Progress = 0,
                 OrderIndex = ct.OrderIndex,
                 CreatedAt = DateTime.Now
             });
@@ -202,8 +199,7 @@ public class TicketService
                     Done = ct.Done,
                     Category = ct.Category,
                     Memo = ct.Memo,
-                    ReviewState = ct.ReviewState ?? "none",
-                    Progress = 0
+                    ReviewState = ct.ReviewState ?? "none"
                 })
                 .ToList();
 
@@ -247,7 +243,6 @@ public class TicketService
                         Category = ct.Category,
                         Memo = ct.Memo,
                         ReviewState = ct.ReviewState ?? "none",
-                        Progress = 0,
                         OrderIndex = validChildTasks.IndexOf(ct),
                         CreatedAt = DateTime.Now
                     });
