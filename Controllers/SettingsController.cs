@@ -305,6 +305,11 @@ public class SettingsController : ControllerBase
             try
             {
                 // 全データを削除してからインポート（完全上書き）
+                // 【BUG-01修正】関連テーブルも明示的に削除してオーファンデータを防止
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM TicketActuals");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM ChildTasks");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM TicketAssignees");
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM TicketLabels");
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM Tickets");
                 await _context.Database.ExecuteSqlRawAsync("DELETE FROM Settings");
 
@@ -321,7 +326,6 @@ public class SettingsController : ControllerBase
                         StartDate = t.StartDate,
                         EndDate = t.EndDate,
                         Effort = t.Effort,
-                        Assignees = t.Assignees ?? new List<string>(),
                         Labels = t.Labels ?? new List<string>(),
                         Memo = t.Memo ?? string.Empty,
                     };
@@ -341,6 +345,20 @@ public class SettingsController : ControllerBase
                                 Done = ct.Done,
                                 OrderIndex = i,
                                 CreatedAt = DateTime.Now
+                            });
+                        }
+                    }
+
+                    // 【BUG-02修正】担当者をTicketAssigneesに直接追加（IsPrimary情報を保持）
+                    if (t.Assignees != null && t.Assignees.Count > 0)
+                    {
+                        for (int i = 0; i < t.Assignees.Count; i++)
+                        {
+                            _context.TicketAssignees.Add(new TicketAssignee
+                            {
+                                TicketId = ticket.TicketId,
+                                Assignee = t.Assignees[i],
+                                IsPrimary = i == 0
                             });
                         }
                     }
@@ -470,12 +488,23 @@ public class SettingsController : ControllerBase
                 ticket.IsArchived = false;
                 
                 // 担当者の処理（;区切りで複数対応）
+                // 【BUG-02修正】TicketAssigneesに直接追加してIsPrimary情報を保持
+                // 既存チケットの場合は既存担当者を削除してから新しい担当者を追加
+                if (existingTicket != null)
+                {
+                    ticket.TicketAssignees.Clear();
+                }
                 var assigneesStr = csv.GetField(columnIndexes["担当者"]) ?? "";
                 var assignees = ParseSemicolonSeparated(assigneesStr);
-                ticket.Assignees = assignees;
-                foreach (var a in assignees)
+                for (int i = 0; i < assignees.Count; i++)
                 {
-                    discoveredAssignees.Add(a);
+                    discoveredAssignees.Add(assignees[i]);
+                    ticket.TicketAssignees.Add(new TicketAssignee
+                    {
+                        TicketId = ticket.TicketId,
+                        Assignee = assignees[i],
+                        IsPrimary = i == 0
+                    });
                 }
 
                 // 日付の処理
@@ -630,10 +659,16 @@ public class SettingsController : ControllerBase
     private static bool TryExtractProgress(string text, out int progress)
     {
         var match = System.Text.RegularExpressions.Regex.Match(text, @"【([0-9０-９]+)[%％]】");
-        if (match.Success && int.TryParse(match.Groups[1].Value, out var p))
+        if (match.Success)
         {
-            progress = Math.Clamp(p, 0, 100);
-            return true;
+            // 【BUG-04修正】全角数字を半角に変換してからパース
+            var halfWidth = new string(match.Groups[1].Value.Select(c =>
+                c >= '\uFF10' && c <= '\uFF19' ? (char)(c - '\uFF10' + '0') : c).ToArray());
+            if (int.TryParse(halfWidth, out var p))
+            {
+                progress = Math.Clamp(p, 0, 100);
+                return true;
+            }
         }
         progress = 0;
         return false;

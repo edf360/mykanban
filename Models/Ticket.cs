@@ -54,6 +54,8 @@ public class Ticket
     public virtual ICollection<TicketLabel> TicketLabels { get; set; } = new List<TicketLabel>();
 
     // 担当者配列（APIレスポンス用）
+    // 【注意】このsetterはIsPrimary情報を保持できません。
+    // IsPrimaryを設定する場合はTicketAssigneesを直接操作してください。
     [JsonPropertyName("assignees")]
     public List<string> Assignees
     {
@@ -61,9 +63,10 @@ public class Ticket
         set
         {
             TicketAssignees = new List<TicketAssignee>();
-            foreach (var assignee in value)
+            for (int i = 0; i < value.Count; i++)
             {
-                TicketAssignees.Add(new TicketAssignee { Assignee = assignee });
+                // 【BUG-02修正】最初の担当者をIsPrimaryとして設定
+                TicketAssignees.Add(new TicketAssignee { Assignee = value[i], IsPrimary = i == 0 });
             }
         }
     }

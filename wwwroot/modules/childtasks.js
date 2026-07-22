@@ -41,12 +41,12 @@ function resetDragState() {
 const REVIEW_ICONS = {
     'none': '📄',
     'editing': '📝',
-    'requested': '📑',
+    'waiting': '⌛',
     'completed': '✅',
     'thumbsup': '👍',
     'happy': '😄',
     'sad': '😥',
-    'shock': '😱'
+    'sorry': '🙇‍♂️'
 };
 
 /**

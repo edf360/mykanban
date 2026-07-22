@@ -14,12 +14,12 @@ let reviewIconPopupController = null;
 export const REVIEW_ICONS = [
     { state: 'none', icon: '📄' },
     { state: 'editing', icon: '📝' },
-    { state: 'requested', icon: '📑' },
+    { state: 'waiting', icon: '⌛' },
     { state: 'completed', icon: '✅' },
     { state: 'thumbsup', icon: '👍' },
     { state: 'happy', icon: '😄' },
     { state: 'sad', icon: '😥' },
-    { state: 'shock', icon: '😱' }
+    { state: 'sorry', icon: '🙇‍♂️' }
 ];
 
 /**

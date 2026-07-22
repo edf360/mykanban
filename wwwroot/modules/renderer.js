@@ -260,12 +260,12 @@ export function createTicketElement(data) {
             const reviewIcons = {
                 'none': '📄',
                 'editing': '📝',
-                'requested': '📑',
+                'waiting': '⌛',
                 'completed': '✅',
                 'thumbsup': '👍',
                 'happy': '😄',
                 'sad': '😥',
-                'shock': '😱'
+                'sorry': '🙇‍♂️'
             };
             const reviewIcon = reviewIcons[reviewState] || '📄';
             const memoTooltip = task.memo ? ` title="${escapeHtml(task.memo)}"` : '';
