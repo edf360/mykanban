@@ -13,6 +13,24 @@ public class AuthController : ControllerBase
     private const string AdminUsername = "admin";
     private static readonly string AdminPassword = Environment.GetEnvironmentVariable("KANBAN_ADMIN_PASSWORD") ?? "clsw";
 
+    // 【BUG-09修正】一般ユーザーの認証に許可されたユーザ名リストを追加
+    // 環境変数 KANBAN_USERNAMES からカンマ区切りで読み込み（デフォルトは空）
+    private static readonly HashSet<string> ValidUsernames = LoadValidUsernames();
+
+    private static HashSet<string> LoadValidUsernames()
+    {
+        var usernamesEnv = Environment.GetEnvironmentVariable("KANBAN_USERNAMES");
+        if (string.IsNullOrWhiteSpace(usernamesEnv))
+        {
+            // デフォルト：任意のユーザ名を許可しない（空セット）
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+        return new HashSet<string>(
+            usernamesEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            StringComparer.OrdinalIgnoreCase
+        );
+    }
+
     // 一般ユーザーのパスワード（環境変数から読み込み、デフォルト値を備える）
     private static readonly string UserPassword = Environment.GetEnvironmentVariable("KANBAN_USER_PASSWORD") ?? "clsw";
 
@@ -42,8 +60,10 @@ public class AuthController : ControllerBase
             return Ok(new { token, isAdmin = true, username = request.Username });
         }
 
-        // 一般ユーザーチェック（ユーザ名は任意、パスワードが一致すればOK）
-        if (request.Password == UserPassword)
+        // 【BUG-09修正】一般ユーザーチェック：パスワードとユーザ名の両方を検証
+        // ValidUsernamesが空の場合、後方互換性のためパスワードのみで認証（既存動作維持）
+        bool usernameValid = ValidUsernames.Count == 0 || ValidUsernames.Contains(request.Username);
+        if (request.Password == UserPassword && usernameValid)
         {
             var token = _tokenStore.CreateToken(request.Username, isAdmin: false);
             return Ok(new { token, isAdmin = false, username = request.Username });

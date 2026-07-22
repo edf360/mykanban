@@ -56,7 +56,9 @@ public class TokenStore
             {
                 if (DateTimeOffset.TryParse(item.Expiry, out var expiry))
                 {
-                    if (now <= expiry)
+                    // 【BUG-03修正】ValidateToken() と一貫させるため >= を使用
+                    // now >= expiry の場合（有効期限切れ）は読み込まない
+                    if (now < expiry)
                     {
                         _tokens[item.Token] = new TokenInfo(item.Username, item.IsAdmin, expiry);
                     }
@@ -118,8 +120,9 @@ public class TokenStore
     {
         if (_tokens.TryGetValue(token, out var info))
         {
-            // 有効期限チェック
-            if (DateTimeOffset.UtcNow > info.Expiry)
+            // 【BUG-03修正】LoadTokens() と一貫させるため >= に変更
+            // 有効期限の瞬間 itself も無効とする
+            if (DateTimeOffset.UtcNow >= info.Expiry)
             {
                 _tokens.TryRemove(token, out _);
                 SaveTokens();
@@ -144,13 +147,24 @@ public class TokenStore
     /// </summary>
     private static void CleanupExpiredTokens()
     {
+        // 【BUG-03修正】LoadTokens()/ValidateToken() と一貫させるため >= に変更
         var now = DateTimeOffset.UtcNow;
         foreach (var kvp in _tokens)
         {
-            if (now > kvp.Value.Expiry)
+            if (now >= kvp.Value.Expiry)
             {
                 _tokens.TryRemove(kvp.Key, out _);
             }
         }
+    }
+
+    /// <summary>
+    /// 【BUG-15修正】タイマーをDisposeし、リソースリークを防ぐ
+    /// アプリケーション終了時に呼び出される
+    /// </summary>
+    public static void Cleanup()
+    {
+        _cleanupTimer?.Stop();
+        _cleanupTimer?.Dispose();
     }
 }

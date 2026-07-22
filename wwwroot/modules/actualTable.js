@@ -6,6 +6,7 @@ import { loadUserSettings, updateActualSettingsSync } from './userSettings.js';
 import { showActualProgressPopup } from './progressSliderPopup.js';
 import { getToken } from './auth.js';
 import { openEditModal } from './modal.js';
+import { escapeHtml } from './utils/escapeHtml.js';
 
 const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -491,8 +492,3 @@ function isOutOfRange(cellDate, ticket) {
     return false;
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}

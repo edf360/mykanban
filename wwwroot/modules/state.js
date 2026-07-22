@@ -568,20 +568,22 @@ export function getSuggestions() {
 }
 
 // ===== 後方互換用 state オブジェクト（読み取りのみ） =====
+// 注意: setter は internal のネストされたプロパティを直接変更するため、
+// Proxy は変更を検出できない。各 setter で emit() を明示的に呼び出す。
 const backwardCompatState = {
     get ticketCounter() { return internal.ticketCounter; },
     get currentLabels() { return [...internal.modal.currentLabels]; },
-    set currentLabels(v) { internal.modal.currentLabels = [...v]; },
+    set currentLabels(v) { internal.modal.currentLabels = [...v]; emit('state-changed', { property: 'currentLabels', value: v }); },
     get currentAssignees() { return [...internal.modal.currentAssignees]; },
-    set currentAssignees(v) { internal.modal.currentAssignees = [...v]; },
+    set currentAssignees(v) { internal.modal.currentAssignees = [...v]; emit('state-changed', { property: 'currentAssignees', value: v }); },
     get mainAssignee() { return internal.modal.mainAssignee; },
-    set mainAssignee(v) { internal.modal.mainAssignee = v; },
+    set mainAssignee(v) { internal.modal.mainAssignee = v; emit('state-changed', { property: 'mainAssignee', value: v }); },
     get currentChildTasks() { return internal.modal.currentChildTasks; },
-    set currentChildTasks(v) { internal.modal.currentChildTasks = v; },
+    set currentChildTasks(v) { internal.modal.currentChildTasks = v; emit('state-changed', { property: 'currentChildTasks', value: v }); },
     get editingTicketId() { return internal.modal.editingTicketId; },
-    set editingTicketId(v) { internal.modal.editingTicketId = v; },
+    set editingTicketId(v) { internal.modal.editingTicketId = v; emit('state-changed', { property: 'editingTicketId', value: v }); },
     get newTicketColumn() { return internal.modal.newTicketColumn; },
-    set newTicketColumn(v) { internal.modal.newTicketColumn = v; },
+    set newTicketColumn(v) { internal.modal.newTicketColumn = v; emit('state-changed', { property: 'newTicketColumn', value: v }); },
     get allTickets() { return getAllTickets(); },
     set allTickets(v) {
         initTickets(v);
@@ -597,25 +599,25 @@ const backwardCompatState = {
         console.warn('Direct currentTicketData assignment is deprecated. Use setTicket().');
     },
     get labelSuggestions() { return [...internal.suggestions.labels]; },
-    set labelSuggestions(v) { internal.suggestions.labels = [...v]; },
+    set labelSuggestions(v) { internal.suggestions.labels = [...v]; emit('state-changed', { property: 'labelSuggestions', value: v }); },
     get assigneeSuggestions() { return [...internal.suggestions.assignees]; },
-    set assigneeSuggestions(v) { internal.suggestions.assignees = [...v]; },
+    set assigneeSuggestions(v) { internal.suggestions.assignees = [...v]; emit('state-changed', { property: 'assigneeSuggestions', value: v }); },
     get searchKeyword() { return internal.filter.keyword; },
-    set searchKeyword(v) { internal.filter.keyword = v; },
+    set searchKeyword(v) { internal.filter.keyword = v; emit('state-changed', { property: 'searchKeyword', value: v }); },
     get filterAssignee() { return internal.filter.assignee; },
-    set filterAssignee(v) { internal.filter.assignee = v; },
+    set filterAssignee(v) { internal.filter.assignee = v; emit('state-changed', { property: 'filterAssignee', value: v }); },
     get filterMainOnly() { return internal.filter.mainOnly; },
-    set filterMainOnly(v) { internal.filter.mainOnly = v; },
+    set filterMainOnly(v) { internal.filter.mainOnly = v; emit('state-changed', { property: 'filterMainOnly', value: v }); },
     get filterLabel() { return internal.filter.label; },
-    set filterLabel(v) { internal.filter.label = v; },
+    set filterLabel(v) { internal.filter.label = v; emit('state-changed', { property: 'filterLabel', value: v }); },
     get mainAssigneeOnly() { return internal.filter.mainOnly; },
-    set mainAssigneeOnly(v) { internal.filter.mainOnly = v; },
+    set mainAssigneeOnly(v) { internal.filter.mainOnly = v; emit('state-changed', { property: 'mainAssigneeOnly', value: v }); },
     get graphPanelOpen() { return internal.ui.graphPanelOpen; },
-    set graphPanelOpen(v) { internal.ui.graphPanelOpen = v; },
+    set graphPanelOpen(v) { internal.ui.graphPanelOpen = v; emit('state-changed', { property: 'graphPanelOpen', value: v }); },
     get ticketLocked() { return internal.ui.ticketLocked; },
-    set ticketLocked(v) { internal.ui.ticketLocked = v; },
+    set ticketLocked(v) { internal.ui.ticketLocked = v; emit('state-changed', { property: 'ticketLocked', value: v }); },
     get graphAssignees() { return [...internal.ui.graphAssignees]; },
-    set graphAssignees(v) { internal.ui.graphAssignees = [...v]; }
+    set graphAssignees(v) { internal.ui.graphAssignees = [...v]; emit('state-changed', { property: 'graphAssignees', value: v }); }
 };
 
 export const state = backwardCompatState;

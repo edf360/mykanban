@@ -35,14 +35,16 @@ builder.Services.AddSingleton<TokenStore>();
 // チケットサービス
 builder.Services.AddScoped<TicketService>();
 
-// CORS設定 - LAN内からのアクセスを許可するため常にAllowAnyOrigin
+// 【BUG-10修正】CORS設定：メソッド/ヘッダーを制限しつつ、LAN内からのアクセスも許可
+// WithOrigins は厳格なオリジンチェックを行うが、LANアクセス時はブラウザがOriginを送信しない場合がある
+// そのため、AllowAnyOrigin() を使用しつつ、メソッドとヘッダーは制限する
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("RestrictedPolicy", policy =>
     {
         policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+              .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+              .WithHeaders("Content-Type", "Authorization", "Accept");
     });
 });
 
@@ -63,8 +65,8 @@ builder.Services.AddSignalR(options =>
 
 var app = builder.Build();
 
-// 1. CORSを有効化（常にAllowAll）
-app.UseCors("AllowAll");
+// 【BUG-10修正】制限付きCORSポリシーを適用
+app.UseCors("RestrictedPolicy");
 
 // 2. wwwrootからの静的ファイル配信（APIの前に配置）
 var wwwRootPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
@@ -115,6 +117,12 @@ app.MapFallback(async context =>
     }
 });
 
+// アプリケーション終了時にリソースをクリーンアップ
+using var cancellationRegistration = app.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.Register(() =>
+{
+    TokenStore.Cleanup();
+});
+
 app.Run();
 
 /// <summary>
@@ -126,5 +134,25 @@ public class LocalDateTimeConverter : JsonConverter<DateTime>
         => reader.GetDateTime();
 
     public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
-        => writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture));
+    {
+        // 【BUG-17修正】DateTime.Kindに応じて適切に処理
+        string result;
+        switch (value.Kind)
+        {
+            case DateTimeKind.Local:
+                // ローカル時間：オフセットを付与
+                result = value.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture);
+                break;
+            case DateTimeKind.Utc:
+                // UTC時間：Zサフィックスを付与
+                result = value.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+                break;
+            case DateTimeKind.Unspecified:
+            default:
+                // 未指定：ローカル時間として扱う（既存動作維持）
+                result = value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture);
+                break;
+        }
+        writer.WriteStringValue(result);
+    }
 }

@@ -281,17 +281,19 @@ public class TicketsController : ControllerBase
                 .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == childTaskIndex);
         }
 
+        TicketActual actualEntity;
         if (existing != null)
         {
             // 更新
             existing.Hours = dto.Hours;
             existing.ProgressRate = dto.ProgressRate;
             existing.UpdatedAt = DateTime.Now;
+            actualEntity = existing;
         }
         else
         {
             // 新規作成
-            var actual = new TicketActual
+            actualEntity = new TicketActual
             {
                 TicketId = id,
                 Date = dto.Date.Date,
@@ -301,17 +303,14 @@ public class TicketsController : ControllerBase
                 ChildTaskId = childTaskId,
                 CreatedAt = DateTime.Now
             };
-            _dbContext.TicketActuals.Add(actual);
+            _dbContext.TicketActuals.Add(actualEntity);
         }
 
         await _dbContext.SaveChangesAsync();
         await NotifyTicketChanged();
         
-        if (existing != null)
-        {
-            return Ok(existing);
-        }
-        return Ok(new { message = "Created" });
+        // 常にTicketActualエンティティを返す（レスポンス形式を統一）
+        return Ok(actualEntity);
     }
 
     /// <summary>

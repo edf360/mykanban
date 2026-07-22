@@ -612,6 +612,11 @@ body {
     z-index: 10000;
 }
 
+/* 設定モーダルもグラフパネル (z-index: 9999) より上に表示 */
+#settingsModal {
+    z-index: 10000;
+}
+
 .modal {
     background: #fff;
     border-radius: 16px;
@@ -1623,6 +1628,12 @@ body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
 
 /* チケット編集モーダル表示中は左下ボタンを無効化 */
 body:has(#ticketModal.active) .bottom-left-buttons .floating-icon-btn {
+    pointer-events: none;
+    opacity: 0.4;
+}
+
+/* 設定モーダル表示中は左下ボタンをグレーアウト（クリックで設定画面を閉じる） */
+body:has(#settingsModal.active) .bottom-left-buttons .floating-icon-btn {
     pointer-events: none;
     opacity: 0.4;
 }

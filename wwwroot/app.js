@@ -1069,7 +1069,9 @@ function startSignalRConnection() {
  */
 function stopSignalRConnection() {
   if (signalRConnection) {
-    signalRConnection.stop();
+    signalRConnection.stop().catch(err => {
+      console.error('[SignalR] Error stopping connection:', err);
+    });
     signalRConnection = null;
     console.log('[SignalR] Disconnected');
   }

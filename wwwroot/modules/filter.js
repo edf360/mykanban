@@ -160,8 +160,13 @@ function adjustBoardForFilter() {
 }
 
 // ===== 初期調整（ページ読み込み時） =====
+// DOM描画が完了するのを待ってから実行（requestAnimationFrame使用）
 export function adjustBoardForFilterOnInit() {
-    adjustBoardForFilter();
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => adjustBoardForFilter());
+    } else {
+        adjustBoardForFilter();
+    }
 }
 
 /**

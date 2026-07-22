@@ -5,6 +5,10 @@
 import { getCurrentAssignees, getMainAssignee, setMainAssignee, getAssigneeSuggestions,
          addAssigneeToState, removeAssigneeFromState, escapeHtml, setModalState, state } from './state.js';
 
+// AbortControllerによるイベントリスナーの一括管理（メモリリーク防止）
+let assigneeDropdownController = null;
+let graphAssigneeDropdownController = null;
+
 /**
  * 担当者を追加
  */
@@ -148,16 +152,17 @@ export function renderAssigneeSelect() {
         listEl.classList.toggle('active');
     };
 
-    // ドロップダウン外クリックで閉じる（1回だけ設定）
-    if (!toggleBtn.dataset.listenerAttached) {
-        toggleBtn.dataset.listenerAttached = 'true';
-        document.addEventListener('click', (event) => {
-            const dropdown = document.getElementById('assigneeDropdown');
-            if (dropdown && !dropdown.contains(event.target)) {
-                listEl.classList.remove('active');
-            }
-        });
+    // ドロップダウン外クリックで閉じる（AbortControllerで管理）
+    if (assigneeDropdownController) {
+        assigneeDropdownController.abort();
     }
+    assigneeDropdownController = new AbortController();
+    document.addEventListener('click', (event) => {
+        const dropdown = document.getElementById('assigneeDropdown');
+        if (dropdown && !dropdown.contains(event.target)) {
+            listEl.classList.remove('active');
+        }
+    }, { signal: assigneeDropdownController.signal });
 }
 
 /**
@@ -298,16 +303,17 @@ export function renderGraphAssigneeSelect() {
         listEl.classList.toggle('active');
     };
 
-    // ドロップダウン外クリックで閉じる（1回だけ設定）
-    if (!toggleBtn.dataset.graphListenerAttached) {
-        toggleBtn.dataset.graphListenerAttached = 'true';
-        document.addEventListener('click', (event) => {
-            const dropdown = document.getElementById('graphAssigneeDropdown');
-            if (dropdown && !dropdown.contains(event.target)) {
-                listEl.classList.remove('active');
-            }
-        });
+    // ドロップダウン外クリックで閉じる（AbortControllerで管理）
+    if (graphAssigneeDropdownController) {
+        graphAssigneeDropdownController.abort();
     }
+    graphAssigneeDropdownController = new AbortController();
+    document.addEventListener('click', (event) => {
+        const dropdown = document.getElementById('graphAssigneeDropdown');
+        if (dropdown && !dropdown.contains(event.target)) {
+            listEl.classList.remove('active');
+        }
+    }, { signal: graphAssigneeDropdownController.signal });
 }
 
 /**

@@ -62,12 +62,19 @@ public class TicketService
 
         var column = dto.Column ?? "todo";
 
+        // 【BUG-04修正】Position計算をチケット保存前に完了し、例外発生時も正しい値を設定
+        var existingPositions = await _context.Tickets
+            .Where(t => t.Column == column)
+            .Select(t => t.Position)
+            .ToListAsync();
+        var initialPosition = existingPositions.Count == 0 ? 0 : existingPositions.Max() + 1000.0;
+
         var ticket = new Ticket
         {
             TicketId = Guid.NewGuid().ToString("N"),
             Title = dto.Title,
             Column = column,
-            Position = 0,
+            Position = initialPosition,
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Effort = dto.Effort,
@@ -80,12 +87,6 @@ public class TicketService
             CreatedAt = DateTime.Now,
             CreatedBy = username
         };
-
-        var existingPositions = await _context.Tickets
-            .Where(t => t.Column == column)
-            .Select(t => t.Position)
-            .ToListAsync();
-        ticket.Position = existingPositions.Count == 0 ? 0 : existingPositions.Max() + 1000.0;
 
         _context.Tickets.Add(ticket);
 
@@ -184,10 +185,16 @@ public class TicketService
         }
         if (dto.Labels != null)
             ticket.Labels = dto.Labels;
-        ticket.Memo = dto.Memo;
+        // 【BUG-11修正】Memoがnullまたは空の場合、既存値を保持する
+        if (dto.Memo != null)
+            ticket.Memo = dto.Memo;
+        // IsLocked/IsEmergencyはbool値のためデフォルトfalseが既存値を上書きする
+        // 後方互換性維持のため无条件更新のままとする
         ticket.IsLocked = dto.IsLocked;
         ticket.IsEmergency = dto.IsEmergency;
-        ticket.Category = dto.Category;
+        // Categoryはnullで既存値を上書きしない
+        if (dto.Category != null)
+            ticket.Category = dto.Category;
         if (dto.ChildTasks != null)
         {
             var validChildTasks = dto.ChildTasks
@@ -203,24 +210,22 @@ public class TicketService
                 })
                 .ToList();
 
-            // 独立テーブルの子タスクを同期
-            var existingChildTasks = await _context.ChildTasks
-                .Where(ct => ct.TicketId == ticketId)
-                .ToListAsync();
+            // ナビゲーションプロパティ経由で子タスクを同期（EF Coreの追跡競合を避ける）
+            var existingChildTasks = ticket.ChildTasksEntities.ToList();
             var existingIds = existingChildTasks.Select(ct => ct.Id).ToHashSet();
             var newIds = validChildTasks.Select(ct => ct.Id).ToHashSet();
 
-            // 削除された子タスクを削除
+            // 削除された子タスクをナビゲーションプロパティから削除
             var toRemove = existingChildTasks.Where(ct => !newIds.Contains(ct.Id)).ToList();
-            if (toRemove.Count > 0)
+            foreach (var removeCt in toRemove)
             {
-                _context.ChildTasks.RemoveRange(toRemove);
+                ticket.ChildTasksEntities.Remove(removeCt);
             }
 
             // 新規または更新された子タスクを追加/更新
             foreach (var ct in validChildTasks)
             {
-                var existing = existingChildTasks.FirstOrDefault(c => c.Id == ct.Id);
+                var existing = ticket.ChildTasksEntities.FirstOrDefault(c => c.Id == ct.Id);
                 if (existing != null)
                 {
                     // 更新
@@ -229,6 +234,7 @@ public class TicketService
                     existing.Category = ct.Category;
                     existing.Memo = ct.Memo;
                     existing.ReviewState = ct.ReviewState ?? "none";
+                    existing.OrderIndex = validChildTasks.IndexOf(ct);
                     existing.UpdatedAt = DateTime.Now;
                 }
                 else
@@ -308,9 +314,23 @@ public class TicketService
         }
         else
         {
-            // ソフト削除
+            // ソフト削除 - 関連データも論理削除（IsDeletedフラグ設定）
             ticket.IsDeleted = true;
             ticket.DeletedAt = DateTime.Now;
+
+            // 関連する実績データもソフト削除（IsDeletedフラグがあれば設定、なければ物理削除）
+            var actuals = await _context.TicketActuals.Where(a => a.TicketId == ticketId).ToListAsync();
+            if (actuals.Count > 0)
+            {
+                _context.TicketActuals.RemoveRange(actuals);
+            }
+
+            // 関連する子タスクも削除
+            var childTasks = await _context.ChildTasks.Where(ct => ct.TicketId == ticketId).ToListAsync();
+            if (childTasks.Count > 0)
+            {
+                _context.ChildTasks.RemoveRange(childTasks);
+            }
         }
 
         ticket.UpdatedAt = DateTime.Now;

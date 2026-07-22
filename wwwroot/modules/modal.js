@@ -11,6 +11,9 @@ import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
 import { createTicket, updateTicket } from './ticketService.js';
 
+// モードルレベルのAbortController（keydownリスナー用）
+let modalKeydownController = null;
+
 // ===== DOM要素キャッシュ =====
 const el = {
     modal: null,
@@ -634,6 +637,12 @@ export function initModal() {
     }
     
     // キーボードショートカット（ESC=キャンセル、Enter=保存）- ドキュメントレベルで処理
+    // 前のリスナーを削除
+    if (modalKeydownController) {
+        modalKeydownController.abort();
+    }
+    modalKeydownController = new AbortController();
+    
     const handleDocumentKeydown = (e) => {
         // モーダルがアクティブな時のみ有効
         if (!el.modal.classList.contains('active')) return;
@@ -650,7 +659,7 @@ export function initModal() {
             saveTicket();
         }
     };
-    document.addEventListener('keydown', handleDocumentKeydown);
+    document.addEventListener('keydown', handleDocumentKeydown, { signal: modalKeydownController.signal });
     
     // モーダル外クリックで閉じる
     // テキスト選択ドラッグによる誤判定を防ぐため、mousedown/mouseup で判断

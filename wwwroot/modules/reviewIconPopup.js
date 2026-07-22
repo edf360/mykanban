@@ -5,6 +5,9 @@
 
 import { showPopupOverlay, hidePopupOverlay } from './popupOverlay.js';
 
+// AbortControllerによるイベントリスナー管理（メモリリーク防止）
+let reviewIconPopupController = null;
+
 /**
  * レビューアイコンの定義
  */
@@ -26,9 +29,14 @@ export const REVIEW_ICONS = [
  * @param {Function} onSelect - 選択時のコールバック (state) => void
  */
 export function showReviewIconPopup(anchorElement, currentState, onSelect) {
-    // 既存ポップアップを削除
+    // 既存ポップアップとリスナーを削除（AbortController使用）
     const existingPopup = document.querySelector('.review-icon-popup');
     if (existingPopup) existingPopup.remove();
+    if (reviewIconPopupController) {
+        reviewIconPopupController.abort();
+    }
+    reviewIconPopupController = new AbortController();
+    const { signal } = reviewIconPopupController;
     
     // ポップアップ作成
     const popup = document.createElement('div');
@@ -43,9 +51,9 @@ export function showReviewIconPopup(anchorElement, currentState, onSelect) {
         item.textContent = icon;
         item.addEventListener('click', (e) => {
             e.stopPropagation();
+            reviewIconPopupController.abort();
             popup.remove();
             hidePopupOverlay();
-            document.removeEventListener('click', onClickOutside);
             onSelect(state);
         });
         popup.appendChild(item);
@@ -85,16 +93,17 @@ export function showReviewIconPopup(anchorElement, currentState, onSelect) {
     
     const onClickOutside = (e) => {
         if (!popup.contains(e.target)) {
+            reviewIconPopupController.abort();
             popup.remove();
             hidePopupOverlay();
-            document.removeEventListener('click', onClickOutside);
         }
     };
     
-    setTimeout(() => document.addEventListener('click', onClickOutside), 0);
+    document.addEventListener('click', onClickOutside, { signal });
     
     // オーバーレイを表示
     showPopupOverlay(() => {
+        reviewIconPopupController.abort();
         popup.remove();
         hidePopupOverlay();
     });

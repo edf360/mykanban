@@ -4,6 +4,7 @@
  */
 
 import { state, formatDateWithDay, getAllTickets, getTicketProgress } from './state.js';
+import { escapeHtml } from './utils/escapeHtml.js';
 
 // タイムライン行のカスタム順序（ドラッグで並び替え）
 let timelineRowOrder = null;
@@ -1268,18 +1269,6 @@ function renderTimelineTable(container, tickets, assignees) {
     container.innerHTML += html;
 }
 
-/**
- * HTMLエスケープ
- */
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&')
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
-        .replace(/"/g, '"')
-        .replace(/'/g, "\u0026#39;");
-}
 
 // チケットプログレス表の列順序（カスタム並び替え用）
 let ticketProgressColumnOrder = null;

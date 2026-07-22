@@ -108,7 +108,10 @@ public class SettingsController : ControllerBase
             return BadRequest(new { error = "Assignee is required" });
 
         var setting = await GetOrCreateSettingAsync();
-        setting.Memos[dto.Assignee] = dto.Memo ?? string.Empty;
+        // 【BUG-13修正】Memos getter は毎回新しいDictionaryを返すため、setterで再代入してMemosJsonを更新する
+        var currentMemos = setting.Memos;
+        currentMemos[dto.Assignee] = dto.Memo ?? string.Empty;
+        setting.Memos = currentMemos;
         await _context.SaveChangesAsync();
         return NoContent();
     }
@@ -135,16 +138,30 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
-    /// データベースをJSONでエクスポート
+    /// 有効なカラム名のリスト
+    /// </summary>
+    private static readonly HashSet<string> ValidColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "todo", "doing", "done", "archive"
+    };
+
+    /// <summary>
+    /// データベースをJSONまたはCSVでエクスポート
     /// </summary>
     [HttpPost("export")]
-    public async Task<IActionResult> Export()
+    public async Task<IActionResult> Export([FromQuery] string format = "json")
     {
         var tickets = await _context.Tickets.ToListAsync();
         var settings = await _context.Settings.ToListAsync();
 
         // 子タスクをチケットごとにグループ化
         var allChildTasks = await _context.ChildTasks.ToListAsync();
+
+        // 【BUG-20修正】CSV形式のエクスポートをサポート
+        if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ExportCsv(tickets, allChildTasks);
+        }
 
         // TicketのJSONフィールドを直接シリアライズするために特別処理
         var exportTickets = tickets.Select(t => new
@@ -186,6 +203,71 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
+    /// CSV形式でエクスポート（BUG-20修正追加）
+    /// </summary>
+    private async Task<IActionResult> ExportCsv(List<Ticket> tickets, List<ChildTask> allChildTasks)
+    {
+        using var memoryStream = new MemoryStream();
+        using var writer = new StreamWriter(memoryStream, System.Text.Encoding.UTF8);
+        using var csv = new CsvHelper.CsvWriter(writer, CultureInfo.InvariantCulture);
+
+        // ヘッダーを書き出し（BOM付きUTF-8でExcel互換）
+        csv.WriteField("タスクID");
+        csv.WriteField("タスク名");
+        csv.WriteField("状態");
+        csv.WriteField("担当者");
+        csv.WriteField("開始日");
+        csv.WriteField("期限");
+        csv.WriteField("ラベル");
+        csv.WriteField("メモ");
+        csv.WriteField("チェックリスト項目");
+        csv.NextRecord();
+
+        foreach (var ticket in tickets)
+        {
+            csv.WriteField(ticket.TicketId);
+            csv.WriteField(ticket.Title);
+            csv.WriteField(MapColumnToState(ticket.Column));
+            csv.WriteField(string.Join(";", ticket.Assignees));
+            csv.WriteField(ticket.StartDate?.ToString("yyyy-MM-dd") ?? "");
+            csv.WriteField(ticket.EndDate?.ToString("yyyy-MM-dd") ?? "");
+            csv.WriteField(string.Join(";", ticket.Labels));
+            csv.WriteField(ticket.Memo ?? "");
+
+            // チェックリスト項目を;区切りで出力
+            var childTasks = allChildTasks
+                .Where(ct => ct.TicketId == ticket.TicketId)
+                .OrderBy(ct => ct.OrderIndex)
+                .Select(ct => ct.Done ? $"[完了]{ct.Text}" : ct.Text)
+                .ToList();
+            csv.WriteField(string.Join(";", childTasks));
+            csv.NextRecord();
+        }
+
+        await writer.FlushAsync();
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var filename = $"kanban_export_{timestamp}.csv";
+        // BOM付きUTF-8バイト配列を生成
+        var bytes = System.Text.Encoding.UTF8.GetPreamble().Concat(memoryStream.ToArray()).ToArray();
+        return File(bytes, "text/csv;charset=utf-8", filename);
+    }
+
+    /// <summary>
+    /// カラム名をCSV用の状態名に変換
+    /// </summary>
+    private static string MapColumnToState(string column)
+    {
+        return column.Trim().ToLowerInvariant() switch
+        {
+            "todo" => "開始前",
+            "doing" => "処理中",
+            "done" => "完了済み",
+            "archive" => "アーカイブ",
+            _ => column
+        };
+    }
+
+    /// <summary>
     /// JSONからデータベースをインポート（完全上書き）
     /// </summary>
     [HttpPost("import")]
@@ -207,6 +289,17 @@ public class SettingsController : ControllerBase
             var importData = JsonSerializer.Deserialize<ImportData>(json);
             if (importData == null)
                 return BadRequest(new { error = "無効なファイル形式です" });
+
+            // 【BUG-06修正】インポート前にColumn値を検証し、存在しないカラムの場合にエラーを返す
+            var invalidColumns = (importData.Tickets ?? new List<ImportTicket>())
+                .Select(t => t.Column)
+                .Where(c => !string.IsNullOrEmpty(c) && !ValidColumns.Contains(c))
+                .Distinct()
+                .ToList();
+            if (invalidColumns.Count > 0)
+            {
+                return BadRequest(new { error = $"存在しないカラムが指定されています: {string.Join(", ", invalidColumns)}" });
+            }
 
             using var tx = await _context.Database.BeginTransactionAsync();
             try
@@ -231,9 +324,26 @@ public class SettingsController : ControllerBase
                         Assignees = t.Assignees ?? new List<string>(),
                         Labels = t.Labels ?? new List<string>(),
                         Memo = t.Memo ?? string.Empty,
-                        // ChildTasksは独立テーブルへインポート
                     };
                     _context.Tickets.Add(ticket);
+
+                    // 【BUG-05修正】子タスクもインポートする
+                    if (t.ChildTasks != null && t.ChildTasks.Count > 0)
+                    {
+                        for (int i = 0; i < t.ChildTasks.Count; i++)
+                        {
+                            var ct = t.ChildTasks[i];
+                            _context.ChildTasks.Add(new ChildTask
+                            {
+                                Id = Guid.NewGuid().ToString("N"),
+                                TicketId = ticket.TicketId,
+                                Text = ct.Text,
+                                Done = ct.Done,
+                                OrderIndex = i,
+                                CreatedAt = DateTime.Now
+                            });
+                        }
+                    }
                 }
 
                 // 設定をインポート
@@ -288,6 +398,9 @@ public class SettingsController : ControllerBase
         // CsvHelperでCSVをパース
         try
         {
+            // 【BUG-01修正】CSVインポート処理をトランザクションで囲み、データ整合性を保証する
+            using var tx = await _context.Database.BeginTransactionAsync();
+
             using var csvStream = file.OpenReadStream();
             using var csvReader = new StreamReader(csvStream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             using var csv = new CsvReader(csvReader, CultureInfo.InvariantCulture);
@@ -297,139 +410,139 @@ public class SettingsController : ControllerBase
             if (csv.HeaderRecord == null)
                 return BadRequest(new { error = "CSVヘッダーが見つかりません" });
 
-        // ヘッダー行からカラムインデックスを構築
-        var columnIndexes = new Dictionary<string, int>();
-        for (int i = 0; i < csv.HeaderRecord.Length; i++)
-        {
-            columnIndexes[csv.HeaderRecord[i].Trim()] = i;
-        }
-
-        // 必須列の確認
-        var requiredColumns = new[] { "タスクID", "タスク名" };
-        foreach (var col in requiredColumns)
-        {
-            if (!columnIndexes.ContainsKey(col))
-                return BadRequest(new { error = $"必須列「{col}」が見つかりません" });
-        }
-
-        var imported = 0;
-        var skipped = 0;
-
-        // CSVから発見した担当者とラベルを収集
-        var discoveredAssignees = new HashSet<string>();
-        var discoveredLabels = new HashSet<string>();
-
-        // 既存チケットを事前ロード（N+1問題回避）
-        var existingTicketsDict = await _context.Tickets.ToDictionaryAsync(t => t.TicketId);
-
-        // カラム別最大Positionを事前計算（ループ中のDBアクセスを回避）
-        // TicketService.CreateAsync と同じロジックで -1000 をベースにする
-        var maxPositionByColumn = await _context.Tickets
-            .GroupBy(t => t.Column)
-            .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1000);
-
-        while (csv.Read())
-        {
-            // 空行をスキップ
-            var ticketIdRaw = csv.GetField(columnIndexes["タスクID"]);
-            if (string.IsNullOrWhiteSpace(ticketIdRaw))
-                continue;
-
-            var ticketId = ticketIdRaw.Trim();
-            var title = csv.GetField(columnIndexes["タスク名"])?.Trim() ?? "";
-            
-            if (string.IsNullOrEmpty(title))
+            // ヘッダー行からカラムインデックスを構築
+            var columnIndexes = new Dictionary<string, int>();
+            for (int i = 0; i < csv.HeaderRecord.Length; i++)
             {
-                skipped++;
-                continue;
+                columnIndexes[csv.HeaderRecord[i].Trim()] = i;
             }
 
-            // 既存チケットをDictionaryから検索（インポート中に追加/更新したチケットも含まれる）
-            existingTicketsDict.TryGetValue(ticketId, out var existingTicket);
-            var originalColumn = existingTicket?.Column;
-
-            var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
-            
-            ticket.Title = title;
-            // CSVインポート時はタイトルを集計IDに設定
-            ticket.Category = title;
-            ticket.Column = MapStateToColumn(csv.GetField(columnIndexes["状態"]) ?? "");
-            ticket.IsArchived = false;
-            
-            // 担当者の処理（;区切りで複数対応）
-            var assigneesStr = csv.GetField(columnIndexes["担当者"]) ?? "";
-            var assignees = ParseSemicolonSeparated(assigneesStr);
-            ticket.Assignees = assignees;
-            foreach (var a in assignees)
+            // 必須列の確認
+            var requiredColumns = new[] { "タスクID", "タスク名" };
+            foreach (var col in requiredColumns)
             {
-                discoveredAssignees.Add(a);
+                if (!columnIndexes.ContainsKey(col))
+                    return BadRequest(new { error = $"必須列「{col}」が見つかりません" });
             }
 
-            // 日付の処理
-            ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
-            ticket.EndDate = ParseDate(csv.GetField(columnIndexes["期限"]) ?? "");
+            var imported = 0;
+            var skipped = 0;
 
-            // チェックリストの処理（独立テーブルへ登録）
-            var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
-            var childTaskList = ParseChecklist(checklistItems);
-            // 各子タスクのCategoryにテキストを設定
-            foreach (var ct in childTaskList)
-            {
-                ct.Category = ct.Text;
-            }
-            // 既存チケットの場合は既存子タスクを削除してから新しい子タスクを追加
-            if (existingTicket != null)
-            {
-                var existingChildTasks = _context.ChildTasks.Where(ct => ct.TicketId == ticketId).ToList();
-                _context.ChildTasks.RemoveRange(existingChildTasks);
-            }
-            // 子タスクを独立テーブルへ追加
-            foreach (var ct in childTaskList)
-            {
-                ct.TicketId = ticket.TicketId;
-                _context.ChildTasks.Add(ct);
-            }
+            // CSVから発見した担当者とラベルを収集
+            var discoveredAssignees = new HashSet<string>();
+            var discoveredLabels = new HashSet<string>();
 
+            // 既存チケットを事前ロード（N+1問題回避）
+            var existingTicketsDict = await _context.Tickets.ToDictionaryAsync(t => t.TicketId);
 
-            // ラベルの処理
-            var labelsStr = csv.GetField(columnIndexes["ラベル"]) ?? "";
-            var labels = ParseSemicolonSeparated(labelsStr);
-            ticket.Labels = labels;
-            foreach (var label in labels)
+            // カラム別最大Positionを事前計算（ループ中のDBアクセスを回避）
+            // TicketService.CreateAsync と同じロジックで -1000 をベースにする
+            var maxPositionByColumn = await _context.Tickets
+                .GroupBy(t => t.Column)
+                .ToDictionaryAsync(g => g.Key, g => g.Max(t => (double?)t.Position) ?? -1000);
+
+            while (csv.Read())
             {
-                discoveredLabels.Add(label);
-            }
+                // 空行をスキップ
+                var ticketIdRaw = csv.GetField(columnIndexes["タスクID"]);
+                if (string.IsNullOrWhiteSpace(ticketIdRaw))
+                    continue;
 
-            // メモの処理
-            ticket.Memo = csv.GetField(columnIndexes["メモ"]) ?? "";
-
-            if (existingTicket == null)
-            {
-                // 新規チケットのPosition設定（事前計算値を使用）
-                if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
-                    maxPos = -1000;
-                ticket.Position = maxPos + 1000.0;
-                maxPositionByColumn[ticket.Column] = ticket.Position;
-                _context.Tickets.Add(ticket);
-
-                // Dictionaryに追加して同一IDの重複インポートを防ぐ
-                existingTicketsDict[ticket.TicketId] = ticket;
-            }
-            else
-            {
-                if (!string.Equals(originalColumn, ticket.Column, StringComparison.Ordinal))
+                var ticketId = ticketIdRaw.Trim();
+                var title = csv.GetField(columnIndexes["タスク名"])?.Trim() ?? "";
+                
+                if (string.IsNullOrEmpty(title))
                 {
+                    skipped++;
+                    continue;
+                }
+
+                // 既存チケットをDictionaryから検索（インポート中に追加/更新したチケットも含まれる）
+                existingTicketsDict.TryGetValue(ticketId, out var existingTicket);
+                var originalColumn = existingTicket?.Column;
+
+                var ticket = existingTicket ?? new Ticket { TicketId = ticketId };
+                
+                ticket.Title = title;
+                // CSVインポート時はタイトルを集計IDに設定
+                ticket.Category = title;
+                ticket.Column = MapStateToColumn(csv.GetField(columnIndexes["状態"]) ?? "");
+                ticket.IsArchived = false;
+                
+                // 担当者の処理（;区切りで複数対応）
+                var assigneesStr = csv.GetField(columnIndexes["担当者"]) ?? "";
+                var assignees = ParseSemicolonSeparated(assigneesStr);
+                ticket.Assignees = assignees;
+                foreach (var a in assignees)
+                {
+                    discoveredAssignees.Add(a);
+                }
+
+                // 日付の処理
+                ticket.StartDate = ParseDate(csv.GetField(columnIndexes["開始日"]) ?? "");
+                ticket.EndDate = ParseDate(csv.GetField(columnIndexes["期限"]) ?? "");
+
+                // チェックリストの処理（独立テーブルへ登録）
+                var checklistItems = csv.GetField(columnIndexes["チェックリスト項目"]) ?? "";
+                var childTaskList = ParseChecklist(checklistItems);
+                // 各子タスクのCategoryにテキストを設定
+                foreach (var ct in childTaskList)
+                {
+                    ct.Category = ct.Text;
+                }
+                // 既存チケットの場合は既存子タスクを削除してから新しい子タスクを追加
+                if (existingTicket != null)
+                {
+                    var existingChildTasks = _context.ChildTasks.Where(ct => ct.TicketId == ticketId).ToList();
+                    _context.ChildTasks.RemoveRange(existingChildTasks);
+                }
+                // 子タスクを独立テーブルへ追加
+                foreach (var ct in childTaskList)
+                {
+                    ct.TicketId = ticket.TicketId;
+                    _context.ChildTasks.Add(ct);
+                }
+
+
+                // ラベルの処理
+                var labelsStr = csv.GetField(columnIndexes["ラベル"]) ?? "";
+                var labels = ParseSemicolonSeparated(labelsStr);
+                ticket.Labels = labels;
+                foreach (var label in labels)
+                {
+                    discoveredLabels.Add(label);
+                }
+
+                // メモの処理
+                ticket.Memo = csv.GetField(columnIndexes["メモ"]) ?? "";
+
+                if (existingTicket == null)
+                {
+                    // 新規チケットのPosition設定（事前計算値を使用）
                     if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
-                    {
                         maxPos = -1000;
-                    }
                     ticket.Position = maxPos + 1000.0;
                     maxPositionByColumn[ticket.Column] = ticket.Position;
-                }
-            }
+                    _context.Tickets.Add(ticket);
 
-            imported++;
-        }
+                    // Dictionaryに追加して同一IDの重複インポートを防ぐ
+                    existingTicketsDict[ticket.TicketId] = ticket;
+                }
+                else
+                {
+                    if (!string.Equals(originalColumn, ticket.Column, StringComparison.Ordinal))
+                    {
+                        if (!maxPositionByColumn.TryGetValue(ticket.Column, out var maxPos))
+                        {
+                            maxPos = -1000;
+                        }
+                        ticket.Position = maxPos + 1000.0;
+                        maxPositionByColumn[ticket.Column] = ticket.Position;
+                    }
+                }
+
+                imported++;
+            }
 
             // 発見した担当者とラベルを設定に追加
             await MergeDiscoveredSettingsAsync(discoveredAssignees, discoveredLabels);
@@ -438,6 +551,10 @@ public class SettingsController : ControllerBase
             RepositionAllColumns();
 
             await _context.SaveChangesAsync();
+            
+            // 【BUG-01修正】トランザクションをコミット
+            await tx.CommitAsync();
+            
             return Ok(new { message = "インポートが完了しました", count = imported, skipped = skipped });
         }
         catch (Exception ex)
@@ -588,19 +705,25 @@ public class SettingsController : ControllerBase
 
     /// <summary>
     /// 各カラムのPositionを再配置（重複を解消）
+    /// 【BUG-18修正】_context.Tickets.Local の代わりに Entries から追跡中のTicketを取得。
+    /// Localビューは大量データ時やコンテキストクリア時に問題が発生する可能性があるため、
+    /// ChangeTracker.Entries() を使用してより堅牢な実装にする。
     /// </summary>
     private void RepositionAllColumns()
     {
-        // Localビューを使用し、DBに保存されていない新規チケットも含める
-        // アーカイブチケットは除外（Position=0に固定）
-        var localTickets = _context.Tickets.Local
+        // EF CoreのChangeTrackerから追跡中の全Ticketエンティティを取得
+        // （DB既存分 + 新規追加/更新分の両方を含む）
+        var trackedTickets = _context.ChangeTracker
+            .Entries<Ticket>()
+            .Select(e => e.Entity)
             .Where(t => !t.IsArchived)
             .ToList();
-        var columns = localTickets.Select(t => t.Column).Distinct().ToList();
+
+        var columns = trackedTickets.Select(t => t.Column).Distinct().ToList();
         foreach (var column in columns)
         {
             // Position降順でソート（大きい値が先頭＝上部に表示）
-            var tickets = localTickets
+            var tickets = trackedTickets
                 .Where(t => t.Column == column)
                 .OrderByDescending(t => t.Position)
                 .ThenBy(t => t.CreatedAt)

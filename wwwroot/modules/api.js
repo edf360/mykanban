@@ -4,7 +4,7 @@
  */
 
 import { API_BASE, initTickets, setLabelSuggestions, setAssigneeSuggestions } from './state.js';
-import { getToken } from './auth.js';
+import { getToken, clearAuth } from './auth.js';
 import { logApiRequest, logApiResponse, logApiError } from './logger.js';
 
 /**
@@ -74,9 +74,11 @@ export async function apiRequest(method, url, body) {
         // 401: 認証失敗 → ログイン画面に戻る（replaceで履歴に残らないように）
         if (response.status === 401) {
             console.warn('[api] Unauthorized - redirecting to login');
-            logApiError(method, url, new UnauthorizedError());
+            // 認証情報をクリアしてログイン画面に戻る
+            clearAuth();
             window.location.replace('/');
-            throw new UnauthorizedError();
+            // ページ遷移後はコード実行が止まるため、ここではreturnのみ
+            return;
         }
 
         if (!response.ok) {
@@ -101,12 +103,8 @@ export async function apiRequest(method, url, body) {
         return parseResponseBody(response);
     } catch (error) {
         // fetch 自体が失敗した場合（ネットワークエラー等）
-        // UnauthorizedError は既にログ出力済みなのでスキップ
-        if (error instanceof UnauthorizedError) {
-            throw error;
-        }
         const message = getErrorMessage(error);
-        if (!message.includes('Unauthorized') && !message.includes('API request failed')) {
+        if (!message.includes('API request failed')) {
             logApiError(method, url, error);
         }
         throw error;

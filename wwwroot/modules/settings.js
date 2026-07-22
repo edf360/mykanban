@@ -24,6 +24,10 @@ window.Settings = {
 let dragItemId = null;
 let dragType = null; // 'users' or 'labels'
 
+// AbortControllerによるドラッグ＆ドロップイベントリスナー管理（メモリリーク防止）
+let labelsDragController = null;
+let usersDragController = null;
+
 // インライン編集状態（外部ステート管理）
 let editingState = {
     type: null,    // 'label' | 'user' | null
@@ -178,6 +182,8 @@ function renderUsers(admin) {
         const item = createUserItem(user, admin);
         container.appendChild(item);
     });
+    // コンテナレベルのイベント委譲（AbortControllerで管理）
+    setupUsersDragDelegation(container);
 }
 
 /**
@@ -191,6 +197,8 @@ function renderLabels(admin) {
         const item = createLabelItem(label, admin);
         container.appendChild(item);
     });
+    // コンテナレベルのイベント委譲（AbortControllerで管理）
+    setupLabelsDragDelegation(container);
 }
 
 /**
@@ -325,54 +333,9 @@ function createLabelItem(label, admin) {
 
     item.appendChild(actions);
 
-    // ドラッグ＆ドロップイベント（IDベース）
+    // ドラッグ属性のみ設定（イベントはコンテナ委譲で処理）
     item.draggable = !isEditing;
-    item.addEventListener('dragstart', (e) => {
-        if (isEditing) {
-            e.preventDefault();
-            return;
-        }
-        dragItemId = id;
-        dragType = 'labels';
-        item.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-    });
-
-    item.addEventListener('dragend', () => {
-        item.classList.remove('dragging');
-        dragItemId = null;
-        dragType = null;
-    });
-
-    item.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        if (dragType === 'labels' && dragItemId !== id) {
-            e.dataTransfer.dropEffect = 'move';
-            item.style.borderTop = '2px solid #3b82f6';
-        }
-    });
-
-    item.addEventListener('dragleave', () => {
-        item.style.borderTop = '';
-    });
-
-    item.addEventListener('drop', (e) => {
-        e.preventDefault();
-        item.style.borderTop = '';
-        if (dragType === 'labels' && dragItemId !== null && dragItemId !== id) {
-            // IDベースで位置を交換
-            const fromIndex = settings.labels.findIndex(l => l.id === dragItemId);
-            const toIndex = settings.labels.findIndex(l => l.id === id);
-            if (fromIndex !== -1 && toIndex !== -1) {
-                const [moved] = settings.labels.splice(fromIndex, 1);
-                settings.labels.splice(toIndex, 0, moved);
-                renderLabels(currentAdminState);
-                save();
-                invalidateLabelColorCache();
-                emit('render-tickets');
-            }
-        }
-    });
+    item.dataset.itemId = id;
 
     nameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -381,6 +344,141 @@ function createLabelItem(label, admin) {
     });
 
     return item;
+}
+
+// ===== コンテナレベルのドラッグ＆ドロップイベント委譲 =====
+/**
+ * ラベルリストのドラッグ＆ドロップイベントをコンテナレベルで処理
+ */
+function setupLabelsDragDelegation(container) {
+    if (labelsDragController) {
+        labelsDragController.abort();
+    }
+    labelsDragController = new AbortController();
+    const { signal } = labelsDragController;
+
+    container.addEventListener('dragstart', (e) => {
+        const item = e.target.closest('.settings-item');
+        if (!item || !item.draggable) {
+            e.preventDefault();
+            return;
+        }
+        dragItemId = item.dataset.itemId;
+        dragType = 'labels';
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    }, { signal });
+
+    container.addEventListener('dragend', (e) => {
+        const item = e.target.closest('.settings-item');
+        if (item) {
+            item.classList.remove('dragging');
+        }
+        dragItemId = null;
+        dragType = null;
+    }, { signal });
+
+    container.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const item = e.target.closest('.settings-item');
+        if (item && dragType === 'labels' && dragItemId !== item.dataset.itemId) {
+            e.dataTransfer.dropEffect = 'move';
+            item.style.borderTop = '2px solid #3b82f6';
+        }
+    }, { signal });
+
+    container.addEventListener('dragleave', (e) => {
+        const item = e.target.closest('.settings-item');
+        if (item) {
+            item.style.borderTop = '';
+        }
+    }, { signal });
+
+    container.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const item = e.target.closest('.settings-item');
+        if (item) {
+            item.style.borderTop = '';
+        }
+        if (!item || dragType !== 'labels' || !dragItemId || dragItemId === item.dataset.itemId) return;
+        const fromIndex = settings.labels.findIndex(l => l.id === dragItemId);
+        const toIndex = settings.labels.findIndex(l => l.id === item.dataset.itemId);
+        if (fromIndex !== -1 && toIndex !== -1) {
+            const [moved] = settings.labels.splice(fromIndex, 1);
+            settings.labels.splice(toIndex, 0, moved);
+            renderLabels(currentAdminState);
+            save();
+            invalidateLabelColorCache();
+            emit('render-tickets');
+        }
+    }, { signal });
+}
+
+/**
+ * ユーザーリストのドラッグ＆ドロップイベントをコンテナレベルで処理
+ */
+function setupUsersDragDelegation(container) {
+    if (usersDragController) {
+        usersDragController.abort();
+    }
+    usersDragController = new AbortController();
+    const { signal } = usersDragController;
+
+    container.addEventListener('dragstart', (e) => {
+        const item = e.target.closest('.settings-item');
+        if (!item || !item.draggable) {
+            e.preventDefault();
+            return;
+        }
+        dragItemId = item.dataset.itemId;
+        dragType = 'users';
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    }, { signal });
+
+    container.addEventListener('dragend', (e) => {
+        const item = e.target.closest('.settings-item');
+        if (item) {
+            item.classList.remove('dragging');
+        }
+        dragItemId = null;
+        dragType = null;
+    }, { signal });
+
+    container.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const item = e.target.closest('.settings-item');
+        if (item && dragType === 'users' && dragItemId !== item.dataset.itemId) {
+            e.dataTransfer.dropEffect = 'move';
+            item.style.borderTop = '2px solid #3b82f6';
+        }
+    }, { signal });
+
+    container.addEventListener('dragleave', (e) => {
+        const item = e.target.closest('.settings-item');
+        if (item) {
+            item.style.borderTop = '';
+        }
+    }, { signal });
+
+    container.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const item = e.target.closest('.settings-item');
+        if (item) {
+            item.style.borderTop = '';
+        }
+        if (!item || dragType !== 'users' || !dragItemId || dragItemId === item.dataset.itemId) return;
+        const fromIndex = settings.users.findIndex(u => u.id === dragItemId);
+        const toIndex = settings.users.findIndex(u => u.id === item.dataset.itemId);
+        if (fromIndex !== -1 && toIndex !== -1) {
+            const [moved] = settings.users.splice(fromIndex, 1);
+            settings.users.splice(toIndex, 0, moved);
+            renderUsers(currentAdminState);
+            save();
+            invalidateLabelColorCache();
+            emit('render-tickets');
+        }
+    }, { signal });
 }
 
 /**
@@ -535,55 +633,10 @@ function createUserItem(user, admin) {
     }
     item.appendChild(actions);
 
-    // ドラッグ＆ドロップイベント（管理者のみ、IDベース）
+    // ドラッグ属性のみ設定（イベントはコンテナ委譲で処理）
     if (admin) {
         item.draggable = !isEditing;
-        item.addEventListener('dragstart', (e) => {
-            if (isEditing) {
-                e.preventDefault();
-                return;
-            }
-            dragItemId = id;
-            dragType = 'users';
-            item.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        });
-
-        item.addEventListener('dragend', () => {
-            item.classList.remove('dragging');
-            dragItemId = null;
-            dragType = null;
-        });
-
-        item.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            if (dragType === 'users' && dragItemId !== id) {
-                e.dataTransfer.dropEffect = 'move';
-                item.style.borderTop = '2px solid #3b82f6';
-            }
-        });
-
-        item.addEventListener('dragleave', () => {
-            item.style.borderTop = '';
-        });
-
-        item.addEventListener('drop', (e) => {
-            e.preventDefault();
-            item.style.borderTop = '';
-            if (dragType === 'users' && dragItemId !== null && dragItemId !== id) {
-                // IDベースで位置を交換
-                const fromIndex = settings.users.findIndex(u => u.id === dragItemId);
-                const toIndex = settings.users.findIndex(u => u.id === id);
-                if (fromIndex !== -1 && toIndex !== -1) {
-                    const [moved] = settings.users.splice(fromIndex, 1);
-                    settings.users.splice(toIndex, 0, moved);
-                    renderUsers(currentAdminState);
-                    save();
-                    invalidateLabelColorCache();
-                    emit('render-tickets');
-                }
-            }
-        });
+        item.dataset.itemId = id;
     }
 
     nameInput.addEventListener('keydown', (e) => {
