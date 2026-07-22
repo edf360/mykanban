@@ -86,6 +86,9 @@ export function updateChildTask(id, updates) {
  * 子タスクを削除（IDベース）
  */
 export function removeChildTask(id) {
+    if (!confirm('この子タスクを削除してもよろしいですか？')) {
+        return;
+    }
     removeChildTaskFromState(id);
     renderChildTasks();
 }
@@ -152,7 +155,6 @@ function addChildTaskToDom(task) {
     progressSpan.title = 'クリックして進捗率を変更';
     progressSpan.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (isTicketLocked()) return;
         showChildTaskProgressModal(task, div);
     });
 
@@ -164,7 +166,6 @@ function addChildTaskToDom(task) {
     reviewIcon.title = 'クリックしてアイコンを選択';
     reviewIcon.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (isTicketLocked()) return;
         showChildTaskReviewModal(task, div);
     });
 

@@ -462,6 +462,8 @@ function initGraphPanelInternal() {
   const matrixContainer = document.getElementById('matrixTableContainer');
   const mainContainer = document.querySelector('.main-container');
   const bottomLeftButtons = document.querySelector('.bottom-left-buttons');
+  const graphDayWidthSlider = document.getElementById('graphDayWidthSlider');
+  const graphDayWidthValue = document.getElementById('graphDayWidthValue');
 
   if (!graphPanel) {
     logError('[app] graphPanel not found in DOM');
@@ -543,8 +545,9 @@ function initGraphPanelInternal() {
     }
     populateExcludeTicketsSelect(labelName);
     const excludedIds = getExcludedTicketIds();
+    const currentDayWidth = graphDayWidthSlider ? parseInt(graphDayWidthSlider.value, 10) : 30;
     if (viewType === 'timeline') {
-      renderTimelineView(matrixContainer, labelName, excludedIds, assigneeFilter);
+      renderTimelineView(matrixContainer, labelName, excludedIds, assigneeFilter, currentDayWidth);
     } else if (viewType === 'ticketProgress') {
       renderTicketProgress(matrixContainer, labelName, excludedIds, assigneeFilter);
     } else {
@@ -583,7 +586,8 @@ function initGraphPanelInternal() {
       // 現在のビュータイプに応じて適切な関数を呼び出す
       if (graphViewSelect) {
         if (graphViewSelect.value === 'timeline') {
-          renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
+          const resizeDayWidth = graphDayWidthSlider ? parseInt(graphDayWidthSlider.value, 10) : 30;
+          renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter, resizeDayWidth);
         } else if (graphViewSelect.value === 'ticketProgress') {
           renderTicketProgress(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter);
         } else {
@@ -611,7 +615,8 @@ function initGraphPanelInternal() {
       viewType: graphViewSelect?.value || 'matrix',
       assignees: state.graphAssignees || [],
       excludedTicketIds: Array.from(excludedTicketSet),
-      height: graphPanel?.style.height || '20vh'
+      height: graphPanel?.style.height || '20vh',
+      dayWidth: graphDayWidthSlider ? parseInt(graphDayWidthSlider.value, 10) : 30
     });
   };
   // 外部から呼び出せるように公開
@@ -687,6 +692,13 @@ function initGraphPanelInternal() {
       : [];
     const savedExcludedIds = savedSettings?.graph?.excludedTicketIds || [];
     const savedHeight = savedSettings?.graph?.height || '20vh';
+    const savedDayWidth = Number(savedSettings?.graph?.dayWidth) || 30;
+    
+    // dayWidth スライダーを復元
+    if (graphDayWidthSlider) {
+      graphDayWidthSlider.value = savedDayWidth;
+      if (graphDayWidthValue) graphDayWidthValue.textContent = savedDayWidth + 'px';
+    }
     
     const labels = getLabelSuggestions();
     if (graphLabelSelect && labels && labels.length > 0) {
@@ -777,6 +789,21 @@ function initGraphPanelInternal() {
     graphViewSelect.addEventListener('change', () => {
       updateGraphPanel();
       saveGraphSettings();
+    });
+  }
+
+  // dayWidth スライダーイベント
+  if (graphDayWidthSlider) {
+    graphDayWidthSlider.addEventListener('input', () => {
+      const val = graphDayWidthSlider.value;
+      if (graphDayWidthValue) graphDayWidthValue.textContent = val + 'px';
+      saveGraphSettings();
+      // タイムラインビューの場合のみ再描画
+      if (graphViewSelect && graphViewSelect.value === 'timeline' && graphLabelSelect && graphLabelSelect.value) {
+        const excludedIds = getExcludedTicketIds();
+        const assigneeFilter = state.graphAssignees || [];
+        renderTimelineView(matrixContainer, graphLabelSelect.value, excludedIds, assigneeFilter, parseInt(val, 10));
+      }
     });
   }
 
@@ -957,6 +984,20 @@ function initActualTablePanel() {
   if (savedSettings?.actual?.visible) {
     actualModalOverlay.classList.add('active');
     initActualTable();
+  }
+
+  // 他のトグルボタンをクリックしたときにも実績画面を閉じる
+  // initActualTablePanel() はページ読み込み時に1度のみ呼び出されるため、重複登録の心配なし
+  const bottomLeftButtons = document.querySelector('.bottom-left-buttons');
+  if (bottomLeftButtons) {
+    bottomLeftButtons.addEventListener('click', (e) => {
+      const btn = e.target.closest('.floating-icon-btn');
+      // 実績入力ボタン自身は除外（自分自身で開閉する処理は上記で独立して処理）
+      if (btn && btn.id !== 'actualInputBtn' && actualModalOverlay.classList.contains('active')) {
+        actualModalOverlay.classList.remove('active');
+        saveActualState();
+      }
+    });
   }
 }
 

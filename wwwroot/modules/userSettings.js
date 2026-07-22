@@ -34,7 +34,7 @@ export function getDefaultSettings() {
   return {
     _version: SCHEMA_VERSION,
     filter: { visible: true, assignee: '', keyword: '', label: '', mainOnly: false },
-    graph: { visible: false, label: '', viewType: 'matrix', excludedTicketIds: [], height: null, assignees: [] },
+    graph: { visible: false, label: '', viewType: 'matrix', excludedTicketIds: [], height: null, assignees: [], dayWidth: 30 },
     archive: { visible: false },
     memo: { visible: false },
     childTasks: { hidden: [] },

@@ -161,22 +161,45 @@ export function showActualProgressPopup(anchorElement, ticketId, date, childTask
         childTaskIndex,
         onSave: async (progress, hours) => {
             try {
-                const body = { date, hours, progressRate: progress, childTaskIndex: childTaskIndex ?? undefined };
-                const response = await fetch(`${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${getToken()}`
-                    },
-                    body: JSON.stringify(body)
-                });
+                // 進捗率0% かつ 実績工数0h の場合、実績データを削除
+                if (progress === 0 && hours === 0) {
+                    const deleteParams = new URLSearchParams();
+                    if (childTaskIndex !== null && childTaskIndex !== undefined) {
+                        deleteParams.append('childTaskIndex', childTaskIndex);
+                    }
+                    const deleteUrl = `${API_BASE}/${encodeURIComponent(ticketId)}/actuals/${date}?${deleteParams.toString()}`;
+                    const response = await fetch(deleteUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${await getToken()}`
+                        }
+                    });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
 
-                if (onSaved) {
-                    await onSaved(progress, hours);
+                    if (onSaved) {
+                        await onSaved(progress, hours, true);
+                    }
+                } else {
+                    const body = { date, hours, progressRate: progress, childTaskIndex: childTaskIndex ?? undefined };
+                    const response = await fetch(`${API_BASE}/${encodeURIComponent(ticketId)}/actuals`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${await getToken()}`
+                        },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    if (onSaved) {
+                        await onSaved(progress, hours, false);
+                    }
                 }
             } catch (error) {
                 console.error('[ActualProgress] 保存失敗:', error);

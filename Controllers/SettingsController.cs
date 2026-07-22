@@ -543,6 +543,50 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
+    /// 派手でないランダムな色をHSL色彩空間で生成（彩度30-60%, 明度40-70%）
+    /// </summary>
+    private static string GenerateSoftRandomColor()
+    {
+        // Random.Shared は .NET 6+ でスレッドセーフな共有インスタンス
+        double hue = Random.Shared.NextDouble() * 360;               // 0-360°
+        double saturation = 30.0 + Random.Shared.NextDouble() * 30.0;  // 30-60%
+        double lightness = 40.0 + Random.Shared.NextDouble() * 30.0;   // 40-70%
+        return HslToHex(hue, saturation, lightness);
+    }
+
+    /// <summary>
+    /// HSLをHEX色コードに変換
+    /// </summary>
+    private static string HslToHex(double h, double s, double l)
+    {
+        s /= 100.0;
+        l /= 100.0;
+        
+        double c = (1.0 - Math.Abs(2.0 * l - 1.0)) * s;  // 色差
+        double x = c * (1.0 - Math.Abs((h / 60.0) % 2.0 - 1.0));
+        double m = l - c / 2.0;
+        
+        double r, g, b;
+        
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        
+        int ri = (int)Math.Round((r + m) * 255);
+        int gi = (int)Math.Round((g + m) * 255);
+        int bi = (int)Math.Round((b + m) * 255);
+        
+        ri = Math.Clamp(ri, 0, 255);
+        gi = Math.Clamp(gi, 0, 255);
+        bi = Math.Clamp(bi, 0, 255);
+        
+        return $"#{ri:X2}{gi:X2}{bi:X2}";
+    }
+
+    /// <summary>
     /// 各カラムのPositionを再配置（重複を解消）
     /// </summary>
     private void RepositionAllColumns()
@@ -615,7 +659,7 @@ public class SettingsController : ControllerBase
             }
         }
 
-        // ラベルを追加（既存重複なし、新規はデフォルトグレー）
+        // ラベルを追加（既存重複なし、新規はランダムな柔らかい色）
         if (labels.Count > 0)
         {
             var existingLabelNames = new HashSet<string>(labelConfigs.Select(l => l.Name));
@@ -623,7 +667,7 @@ public class SettingsController : ControllerBase
             {
                 if (!existingLabelNames.Contains(l))
                 {
-                    labelConfigs.Add(new LabelConfig { Name = l, Color = "#808080" });
+                    labelConfigs.Add(new LabelConfig { Name = l, Color = GenerateSoftRandomColor() });
                     existingLabelNames.Add(l);
                 }
             }

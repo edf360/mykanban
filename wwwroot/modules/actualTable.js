@@ -5,6 +5,7 @@ import { api } from './api.js';
 import { loadUserSettings, updateActualSettingsSync } from './userSettings.js';
 import { showActualProgressPopup } from './progressSliderPopup.js';
 import { getToken } from './auth.js';
+import { openEditModal } from './modal.js';
 
 const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -53,6 +54,7 @@ function isWeekendOrHoliday(date, holidaySet) {
 
 let selectedColumns = new Set(['todo', 'doing', 'done']);
 let actualDataCache = {};
+let showHolidays = false;
 let initialized = false;
 
 export function initActualTable(onFilterChange) {
@@ -101,6 +103,14 @@ export function initActualTable(onFilterChange) {
         renderTable();
     });
 
+    // 休日を表示チェックボックス
+    const showHolidaysCheckbox = document.getElementById('actualShowHolidays');
+    showHolidaysCheckbox?.addEventListener('change', () => {
+        showHolidays = showHolidaysCheckbox.checked;
+        saveActualState();
+        renderTable();
+    });
+
     // 保存された状態を復元（ドロップダウン初期化前に復元）
     restoreActualState();
 
@@ -121,7 +131,8 @@ export function saveActualState() {
         visible: document.getElementById('actualModalOverlay')?.classList.contains('active') || false,
         assignee: assigneeSelect?.value || '',
         columns: Array.from(selectedColumns),
-        month: monthInput?.value || ''
+        month: monthInput?.value || '',
+        showHolidays
     });
 }
 
@@ -150,6 +161,11 @@ function restoreActualState() {
         checkboxes.forEach(cb => {
             cb.checked = selectedColumns.has(cb.value);
         });
+    }
+    if (actual.showHolidays !== undefined) {
+        showHolidays = actual.showHolidays;
+        const checkbox = document.getElementById('actualShowHolidays');
+        if (checkbox) checkbox.checked = showHolidays;
     }
 }
 
@@ -245,20 +261,20 @@ async function renderTable() {
     // 休日セットを取得
     const holidaySet = getHolidaySet();
 
-    // 営業日のみフィルタ
-    const workDays = [];
+    // 日表示対象を決定（休日を表示ON=全日、OFF=営業日のみ）
+    const displayDays = [];
     for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(year, monthNum - 1, day);
-        if (!isWeekendOrHoliday(date, holidaySet)) {
-            workDays.push(day);
+        if (showHolidays || !isWeekendOrHoliday(date, holidaySet)) {
+            displayDays.push(day);
         }
     }
 
     // 表を生成
     let html = '<table class="actual-table"><thead><tr><th class="row-header">チケット / 日付</th>';
 
-    // 日付ヘッダー（営業日のみ）
-    for (const day of workDays) {
+    // 日付ヘッダー
+    for (const day of displayDays) {
         const date = new Date(year, monthNum - 1, day);
         const dayOfWeek = date.getDay();
         const isFriday = dayOfWeek === 5;
@@ -275,9 +291,9 @@ async function renderTable() {
 
     // チケット行
     for (const ticket of tickets) {
-        // チケットヘッダー行
-        html += `<tr class="ticket-header"><td class="row-header ticket-header">${escapeHtml(ticket.title)}</td>`;
-        for (const day of workDays) {
+        // チケットヘッダー行（クリックで編集）
+        html += `<tr class="ticket-header" data-ticket-id="${ticket.ticketId}"><td class="row-header ticket-header clickable-ticket-cell">${escapeHtml(ticket.title)}</td>`;
+        for (const day of displayDays) {
             const dateStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const key = `${ticket.ticketId}_${dateStr}`;
             const data = actualDataCache[key];
@@ -286,6 +302,7 @@ async function renderTable() {
             const cellDayOfWeek = cellDate.getDay();
             let cellClasses = 'actual-cell';
             if (cellDayOfWeek === 5) cellClasses += ' friday-border';
+            if (isOutOfRange(cellDate, ticket)) cellClasses += ' out-of-range';
             html += `<td class="${cellClasses}" data-ticket-id="${ticket.ticketId}" data-date="${dateStr}">${display}</td>`;
         }
         html += '</tr>';
@@ -295,7 +312,7 @@ async function renderTable() {
         for (let childIndex = 0; childIndex < childTasks.length; childIndex++) {
             const child = childTasks[childIndex];
             html += `<tr class="child-task-row"><td class="row-header child-task-row">  ├ ${escapeHtml(child.text || child.name)}</td>`;
-            for (const day of workDays) {
+            for (const day of displayDays) {
                 const dateStr = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const key = `${ticket.ticketId}_${childIndex}_${dateStr}`;
                 const data = actualDataCache[key];
@@ -304,6 +321,7 @@ async function renderTable() {
                 const cellDayOfWeek = cellDate.getDay();
                 let cellClasses = 'actual-cell child-task-cell';
                 if (cellDayOfWeek === 5) cellClasses += ' friday-border';
+                if (isOutOfRange(cellDate, ticket)) cellClasses += ' out-of-range';
                 html += `<td class="${cellClasses}" data-ticket-id="${ticket.ticketId}" data-child-index="${childIndex}" data-date="${dateStr}">${display}</td>`;
             }
             html += '</tr>';
@@ -319,6 +337,21 @@ async function renderTable() {
     // 実績セルのクリックイベント設定
     container.querySelectorAll('.actual-cell').forEach(cell => {
         cell.addEventListener('click', handleCellClick);
+    });
+
+    // チケットヘッダーのクリックで編集モーダルを開く
+    container.querySelectorAll('.ticket-header[data-ticket-id] .clickable-ticket-cell').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+            // 親trからticketIdを取得
+            const row = cell.closest('.ticket-header');
+            if (row) {
+                const ticketId = row.dataset.ticketId;
+                if (ticketId) {
+                    e.stopPropagation();
+                    openEditModal(ticketId);
+                }
+            }
+        });
     });
 }
 
@@ -368,10 +401,16 @@ function handleCellClick(e) {
     const currentProgress = data.progressRate ?? 0;
     const currentHours = data.hours ?? 0;
 
-    showActualProgressPopup(cell, ticketId, date, childIndex, currentProgress, currentHours, async (progress, hours) => {
+    showActualProgressPopup(cell, ticketId, date, childIndex, currentProgress, currentHours, async (progress, hours, deleted) => {
         // 保存後の処理 - キャッシュ更新と表示更新
-        actualDataCache[key] = { hours, progressRate: progress };
-        cell.textContent = formatCellDisplay(progress, hours);
+        if (deleted) {
+            // 削除された場合、キャッシュから削除
+            delete actualDataCache[key];
+            cell.textContent = '';
+        } else {
+            actualDataCache[key] = { hours, progressRate: progress };
+            cell.textContent = formatCellDisplay(progress, hours);
+        }
         
         // 子タスクの進捗保存後、親チケットの進捗セルも更新
         if (childIndex !== null) {
@@ -427,6 +466,29 @@ function getDayColor(dayOfWeek) {
         case 6: return '#2563eb'; // 土曜日
         default: return 'inherit';
     }
+}
+
+/**
+ * 日付オブジェクトをゼロパディングされた文字列に変換 (YYYY-MM-DD)
+ */
+function toDateString(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * セル日付がチケットの開始日・終了日範囲外かどうかをチェック
+ * 日付のみ比較（時刻は無視）
+ */
+function isOutOfRange(cellDate, ticket) {
+    if (ticket.startDate) {
+        const start = new Date(ticket.startDate);
+        if (toDateString(cellDate) < toDateString(start)) return true;
+    }
+    if (ticket.endDate) {
+        const end = new Date(ticket.endDate);
+        if (toDateString(cellDate) > toDateString(end)) return true;
+    }
+    return false;
 }
 
 function escapeHtml(text) {

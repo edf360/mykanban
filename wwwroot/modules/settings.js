@@ -673,6 +673,7 @@ function addLabel() {
         return;
     }
     
+    // カラーピッカーの値を使用
     settings.labels.push({ id: generateLocalId(), name, color: colorInput.value });
     nameInput.value = '';
     colorInput.value = '#808080';

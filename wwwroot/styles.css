@@ -526,6 +526,16 @@ body {
     background-color: #e0e7ff !important;
 }
 
+/* 開始日・終了日範囲外のセルを灰色表示 */
+.actual-cell.out-of-range {
+    background-color: var(--gray-200) !important;
+    color: var(--gray-500);
+}
+
+.actual-cell.out-of-range:hover {
+    background-color: var(--gray-300) !important;
+}
+
 .delete-btn {
     position: absolute;
     top: 8px;
@@ -591,6 +601,16 @@ body {
 }
 
 .modal-overlay.active { opacity: 1; visibility: visible; }
+
+/* チケット編集モーダルはグラフパネル (z-index: 9999) より上に表示 */
+#ticketModal {
+    z-index: 10000;
+}
+
+/* 実績入力画面もグラフパネル (z-index: 9999) より上に表示 */
+#actualModalOverlay {
+    z-index: 10000;
+}
 
 .modal {
     background: #fff;
@@ -835,6 +855,13 @@ body {
 /* ロック時は子タスク設定ボタンをグレー（メニューは開けるが、集計ID編集/削除は無効） */
 .modal.locked .child-task-settings-btn {
     opacity: 0.5;
+}
+
+/* ロック時は集計ID表示をグレーアウト + クリック無効 */
+.modal.locked .category-display {
+    opacity: 0.5;
+    pointer-events: none;
+    cursor: default !important;
 }
 
 .form-group { margin-bottom: 16px; position: relative; }
@@ -1588,8 +1615,14 @@ body {
 
 .floating-icon-btn.active { background: rgb(88, 124, 179); }
 
-/* 実績モーダル表示中は左下ボタンを無効化 */
+/* 実績モーダル表示中は左下ボタンをグレーアウト（クリックで実績画面を閉じる） */
 body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
+    opacity: 0.4;
+    cursor: pointer;
+}
+
+/* チケット編集モーダル表示中は左下ボタンを無効化 */
+body:has(#ticketModal.active) .bottom-left-buttons .floating-icon-btn {
     pointer-events: none;
     opacity: 0.4;
 }
@@ -2223,6 +2256,21 @@ body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* タイムライン倍率スライダー */
+.graph-panel-controls input[type="range"] {
+    width: 120px;
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+#graphDayWidthValue {
+    display: inline-block;
+    min-width: 40px;
+    font-size: 12px;
+    color: #6b7280;
+    text-align: center;
 }
 
 .graph-panel-content {
@@ -3004,4 +3052,50 @@ body:has(#actualModalOverlay.active) .bottom-left-buttons .floating-icon-btn {
     to {
         transform: rotate(360deg);
     }
+}
+
+/* ===== クリック可能なチケットセルのスタイル ===== */
+
+.clickable-ticket-cell {
+    cursor: pointer;
+}
+
+.clickable-ticket-cell:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
+
+/* タイムラインの担当者セル */
+.timeline-assignee-cell.clickable-ticket-cell:hover {
+    background: var(--primary-light);
+    text-decoration: none;
+}
+
+/* 進捗表のデータセル */
+.progress-bar-cell.clickable-ticket-cell:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 4px;
+}
+
+.progress-bar-cell.clickable-ticket-cell:hover .progress-bar-mini-fill {
+    opacity: 0.8;
+}
+
+/* チケットプログレス表のチケット名 */
+.ticket-progress-table .ticket-name-cell.clickable-ticket-cell:hover {
+    color: var(--primary);
+}
+
+/* 実績表のチケットヘッダー */
+.actual-table .clickable-ticket-cell:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* 日付なしテーブルの行 */
+.timeline-no-date-section tbody tr[data-ticket-id]:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.timeline-no-date-section .clickable-ticket-cell:hover {
+    color: var(--primary);
 }

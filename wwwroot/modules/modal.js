@@ -5,7 +5,7 @@
 // モーダルアニメーション完了までの待機時間（ms）
 export const MODAL_ANIMATION_DURATION = 350;
 
-import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, getTicketProgress, on, closeGraphPanel, emit } from './state.js';
+import { state, setModalState, resetModalState, setTicketLocked, isTicketLocked, setTicketEmergency, isTicketEmergency, getTicket, getCurrentAssignees, getCurrentLabels, getMainAssignee, getChildTasks, getNewTicketColumn, getEditingTicketId, getFilterAssignee, getCurrentCategory, getTicketProgress, on, emit } from './state.js';
 import { renderAssigneeTags, renderAssigneeSelect } from './assignees.js';
 import { renderLabelSelect } from './labels.js';
 import { renderChildTasks, saveChildTaskMemoFromPanel, clearChildTaskMemoPanel } from './childtasks.js';
@@ -31,6 +31,9 @@ const el = {
 
 // 集計ID表示のクリックリスナー（重複登録防止）
 let categoryClickHandler = null;
+
+// モーダル開いた時点での初期値（未保存変更検出用）
+let modalInitialValues = null;
 
 /**
  * DOM要素をキャッシュ
@@ -75,11 +78,53 @@ function updateCategoryDisplay() {
 /**
  * 内部用モーダルオープン処理
  */
+function captureInitialValues() {
+    // 現在のDOM/stateの値を撮影して初期値として保存
+    modalInitialValues = {
+        title: el.ticketTitle ? el.ticketTitle.value : '',
+        startDate: el.startDate ? el.startDate.value : '',
+        endDate: el.endDate ? el.endDate.value : '',
+        effort: el.effort ? el.effort.value : '',
+        memo: el.memo ? el.memo.value : '',
+        assignees: normalizeArray(getCurrentAssignees()),
+        labels: normalizeArray(getCurrentLabels()),
+        mainAssignee: getMainAssignee() || null,
+        childTasks: normalizeChildTasks(getChildTasks()),
+        category: getCurrentCategory() || ''
+    };
+}
+
+// 配列をソートして順序に依存しない比較用にする
+function normalizeArray(arr) {
+    if (!arr || !Array.isArray(arr)) return [];
+    return [...arr].sort();
+}
+
+// 子タスク配列をソートしたJSONにして順序に依存しない比較用にする
+function normalizeChildTasks(tasks) {
+    if (!tasks || !Array.isArray(tasks)) return '[]';
+    return JSON.stringify([...tasks].sort((a, b) => (a.id || 0) - (b.id || 0)));
+}
+
+function hasUnsavedChanges() {
+    if (!modalInitialValues) return false;
+    const current = {
+        title: el.ticketTitle ? el.ticketTitle.value : '',
+        startDate: el.startDate ? el.startDate.value : '',
+        endDate: el.endDate ? el.endDate.value : '',
+        effort: el.effort ? el.effort.value : '',
+        memo: el.memo ? el.memo.value : '',
+        assignees: normalizeArray(getCurrentAssignees()),
+        labels: normalizeArray(getCurrentLabels()),
+        mainAssignee: getMainAssignee() || null,
+        childTasks: normalizeChildTasks(getChildTasks()),
+        category: getCurrentCategory() || ''
+    };
+    return JSON.stringify(current) !== JSON.stringify(modalInitialValues);
+}
+
 function _openModal(options) {
     // options: { mode: 'new'|'edit', column?: string, ticketId?: string }
-    
-    // グラフパネルが開いている場合は閉じる
-    closeGraphPanel();
     
     if (options.mode === 'new') {
         // 新規チケット状態
@@ -158,6 +203,9 @@ function _openModal(options) {
     if (el.modal) {
         el.modal.classList.add('active');
     }
+    
+    // 初期値を撮影（未保存変更検出用）
+    captureInitialValues();
     
     // 新規作成時はタイトルにフォーカス
     if (options.mode === 'new') {
@@ -247,6 +295,10 @@ function applyEmergencyToModal() {
  * カテゴリ入力ダイアログを開く
  */
 export function openCategoryDialog() {
+    if (isTicketLocked()) {
+        alert('チケットがロックされているため、集計IDを変更できません。');
+        return;
+    }
     const current = getCurrentCategory() || '';
     const input = prompt('集計IDを入力してください', current);
     if (input !== null) {
@@ -291,7 +343,7 @@ function openHamburgerMenu() {
             <span class="menu-label">緊急チケット</span>
             <span class="menu-check">${isTicketEmergency() ? '✓' : ''}</span>
         </div>
-        <div class="modal-menu-item" data-action="category">
+        <div class="modal-menu-item${isTicketLocked() ? ' disabled' : ''}" data-action="category">
             <span class="menu-icon">🏷️</span>
             <span class="menu-label">集計ID</span>
             <span class="menu-check"></span>
@@ -600,7 +652,7 @@ export function initModal() {
     };
     document.addEventListener('keydown', handleDocumentKeydown);
     
-    // モーダル外クリックで保存
+    // モーダル外クリックで閉じる
     // テキスト選択ドラッグによる誤判定を防ぐため、mousedown/mouseup で判断
     let mouseDownOnOverlay = false;
     
@@ -613,8 +665,14 @@ export function initModal() {
     
     el.modal.addEventListener('mouseup', (e) => {
         if (mouseDownOnOverlay && e.target.id === 'ticketModal') {
-            // オーバーレイ上で mousedown と mouseup の両方があった場合のみ保存
-            saveTicket();
+            // 未保存の変更がある場合は警告を表示
+            if (hasUnsavedChanges()) {
+                if (!confirm('未保存の変更があります。閉じますか？')) {
+                    mouseDownOnOverlay = false;
+                    return;
+                }
+            }
+            closeModal();
         }
         mouseDownOnOverlay = false;
     });
