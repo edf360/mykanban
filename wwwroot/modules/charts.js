@@ -113,10 +113,11 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
         return;
     }
 
-    // グラフの右端は終了日と本日のうち遅い方
-    const graphEnd = today > end ? today : end;
-
     currentProgress = sanitizeNum(currentProgress, 0);
+
+    // グラフの右端は「開始日から10日目」に固定
+    const graphEnd = new Date(start);
+    graphEnd.setDate(graphEnd.getDate() + 9); // 開始日が1日目なので +9 で10日目
 
     // グラフの描画領域
     const graphWidth = width - padding.left - padding.right;
@@ -135,19 +136,48 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
         return graphHeight - (progress / 100) * graphHeight + padding.top;
     };
 
-    // 予定線: 開始日(0%) → 終了日(100%) — 青点線
+    // 週区間の背景色付け
+    // 第一週: 1-4日目、第二週: 5-7日目、第三週: 8-10日目
+    const weekBackgrounds = [];
+    // 第一週 (1-4日目)
+    const w1Start = new Date(start);
+    const w1End = new Date(start); w1End.setDate(w1End.getDate() + 3);
+    weekBackgrounds.push({ start: w1Start, end: w1End, color: '#f0f0f0' });
+    // 第三週 (8-10日目)
+    const w3Start = new Date(start); w3Start.setDate(w3Start.getDate() + 7);
+    const w3End = new Date(start); w3End.setDate(w3End.getDate() + 9);
+    weekBackgrounds.push({ start: w3Start, end: w3End, color: '#f0f0f0' });
+
+    let weekRects = '';
+    weekBackgrounds.forEach(w => {
+        const x1 = xScale(w.start);
+        const x2 = xScale(w.end);
+        const rectWidth = x2 - x1 + 1; // 1px追加で端を含む
+        weekRects += `<rect x="${x1}" y="${padding.top}" width="${rectWidth}" height="${graphHeight}" fill="${w.color}" />`;
+    });
+
+    // 予定線: 開始日(0%) → 10日目(100%) — 青点線
     const plannedLine = `
         <line
             x1="${xScale(start)}" y1="${yScale(0)}"
-            x2="${xScale(end)}" y2="${yScale(100)}"
+            x2="${xScale(graphEnd)}" y2="${yScale(100)}"
             stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,4"
         />
     `;
 
     // 実績線: 実績データベースの折れ線グラフ
-    const actualPoints = extractActualPoints(actuals);
-    if (actualPoints.length === 0) {
-        // 実績データがない場合はグラフを描画しない
+    const allActualPoints = extractActualPoints(actuals);
+
+    // 明日以降の実績は描画しない
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const actualPoints = allActualPoints.filter(p => p.date < tomorrow);
+
+    // 10日間範囲内のみを描画対象とする（範囲外は切り捨て）
+    const clampedPoints = actualPoints.filter(p => p.date >= start && p.date <= graphEnd);
+
+    if (clampedPoints.length === 0) {
+        // 実績データがない、または範囲外の場合はグラフを描画しない
         container.innerHTML = '';
         return;
     }
@@ -155,10 +185,18 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
     let actualLine = '';
     let pathD = '';
     const circles = [];
-    for (let i = 0; i < actualPoints.length; i++) {
-        const p = actualPoints[i];
-        const x = xScale(p.date);
-        const y = yScale(p.progress);
+
+    // 実績線の始点を開始日から描画（開始日より前の最初の実績点は開始日のX位置に配置）
+    for (let i = 0; i < clampedPoints.length; i++) {
+        const p = clampedPoints[i];
+        let x = xScale(p.date);
+        let y = yScale(p.progress);
+
+        // 最初の実績点が開始日より大幅に前なら、開始日の位置から始める
+        if (i === 0 && p.date < start) {
+            x = xScale(start);
+        }
+
         if (pathD === '') {
             pathD = `M ${x} ${y}`;
         } else {
@@ -166,6 +204,19 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
         }
         circles.push(`<circle cx="${x}" cy="${y}" r="2.5" fill="#ef4444"/>`);
     }
+
+    // 100%になっていない場合、最終点から本日まで水平に線を伸ばす
+    const lastPoint = clampedPoints[clampedPoints.length - 1];
+    if (lastPoint.progress < 100) {
+        const lastY = yScale(lastPoint.progress);
+        // 本日がグラフ範囲内なら本日まで、範囲外ならグラフ右端まで
+        const horizontalEnd = (today <= graphEnd) ? today : graphEnd;
+        if (today >= lastPoint.date) {
+            const endX = xScale(horizontalEnd);
+            pathD += ` L ${endX} ${lastY}`;
+        }
+    }
+
     if (pathD) {
         actualLine = `<path d="${pathD}" fill="none" stroke="#ef4444" stroke-width="1.5"/>${circles.join('')}`;
     }
@@ -179,18 +230,39 @@ export function renderProgressChart(container, startDate, endDate, currentProgre
         <line x1="${padding.left}" y1="${yScale(100)}" x2="${width - padding.right}" y2="${yScale(100)}" stroke="#d1d5db" stroke-width="0.5"/>
     `;
 
-    // 日付ラベル — text-anchor修正（左端=start、右端=end）
-    const startDateLabel = formatDateWithDay(start);
-    const rightDateLabel = today > end ? formatDateWithDay(today) : formatDateWithDay(end);
-    const dateLabels = `
-        <text x="${padding.left}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="start">${startDateLabel}</text>
-        <text x="${width - padding.right}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="end">${rightDateLabel}</text>
-    `;
+    // 今日のマーカー
+    let todayMarker = '';
+    if (today >= start && today <= graphEnd) {
+        const todayX = xScale(today);
+        todayMarker = `<line x1="${todayX}" y1="${padding.top}" x2="${todayX}" y2="${graphHeight + padding.top}" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3,3"/>`;
+    }
+
+    // 日付ラベル — 週の先頭日付を中央揃えで描画
+    // 第一週: 1日目、第二週: 5日目、第三週: 8日目
+    const weekStartDates = [
+        { date: new Date(start) },       // 1日目
+        { date: new Date(start) },       // 5日目
+        { date: new Date(start) }        // 8日目
+    ];
+    weekStartDates[1].date.setDate(weekStartDates[1].date.getDate() + 4);
+    weekStartDates[2].date.setDate(weekStartDates[2].date.getDate() + 7);
+
+    let dateLabels = '';
+    weekStartDates.forEach(ws => {
+        // 範囲内(10日間以内)の日付のみ描画
+        if (ws.date >= start && ws.date <= graphEnd) {
+            const x = xScale(ws.date);
+            const dateStr = formatDateWithDay(ws.date);
+            dateLabels += `<text x="${x}" y="${height + labelHeight - 2}" font-size="12" fill="#6b7280" text-anchor="middle">${dateStr}</text>`;
+        }
+    });
 
     container.innerHTML = `
         <svg viewBox="0 0 ${width} ${height + labelHeight}" xmlns="http://www.w3.org/2000/svg">
+            ${weekRects}
             ${gridLines}
             ${plannedLine}
+            ${todayMarker}
             ${actualLine}
             ${dateLabels}
         </svg>
