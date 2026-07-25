@@ -40,8 +40,8 @@ test.describe('設定パネル（管理者）', () => {
     // 設定モーダルがactiveクラスを持つことを確認
     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
-    // 設定ボタンを再度クリックして閉じる（トグル方式）
-    await page.click('#settingsBtn');
+    // オーバーレイクリックで閉じる
+    await page.click('#settingsModal');
     await expect(page.locator('#settingsModal')).not.toHaveClass(/active/);
   });
 

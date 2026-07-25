@@ -77,7 +77,9 @@ public class KanbanDbContext : DbContext
             entity.Property(e => e.Date).IsRequired();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             // TicketId + Date + ChildTaskIndex の複合ユニーク制約（旧互換）
+#pragma warning disable CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskIndex }).IsUnique();
+#pragma warning restore CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             // TicketId + Date + ChildTaskId の複合ユニーク制約（新）
             entity.HasIndex(e => new { e.TicketId, e.Date, e.ChildTaskId }).IsUnique();
         });

@@ -85,10 +85,10 @@ test.describe('設定操作完全フロー', () => {
     await holidayInput.fill('20250101\n20250102\n20251231');
     
     // テキストエリアからフォーカスを外すとblurイベントで保存される
-    await page.click('#settingsBtn', { position: { x: 10, y: 10 } });
+    await page.click('#addUserBtn');
     
-    // 設定パネルを閉じて再度開く
-    await page.click('#settingsBtn');
+    // 設定パネルを閉じて再度開く（オーバーレイクリックで閉じる）
+    await page.click('#settingsModal');
     
     // 休日が保存されていることを確認
     const savedHolidays = await page.locator('#holidaysTextarea').inputValue();
@@ -118,8 +118,8 @@ test.describe('設定操作完全フロー', () => {
     await page.click('#settingsBtn');
     await expect(page.locator('#settingsModal')).toHaveClass(/active/);
     
-    // 設定ボタンを再度クリックして閉じる
-    await page.click('#settingsBtn');
+    // オーバーレイクリックで閉じる
+    await page.click('#settingsModal');
     await expect(page.locator('#settingsModal')).not.toHaveClass(/active/);
   });
 

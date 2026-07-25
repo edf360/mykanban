@@ -127,7 +127,7 @@ test.describe('認証', () => {
     // 一般ユーザーは休日セクションが非表示
     await expect(page.locator('#holidaysTextarea')).not.toBeVisible();
     
-    // 設定パネルを閉じる
-    await page.click('#settingsBtn');
+    // 設定パネルを閉じる（オーバーレイクリック）
+    await page.click('#settingsModal');
   });
 });

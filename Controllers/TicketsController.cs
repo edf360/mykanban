@@ -265,6 +265,7 @@ public class TicketsController : ControllerBase
             return NotFound(new { error = "Ticket not found" });
 
         // ChildTaskIdを優先、ChildTaskIndexは後方互換
+#pragma warning disable CS0618 // 'ActualDto.ChildTaskIndex' is obsolete
         string? childTaskId = dto.ChildTaskId;
         int? childTaskIndex = childTaskId == null ? dto.ChildTaskIndex : null;
 
@@ -277,8 +278,10 @@ public class TicketsController : ControllerBase
         }
         else
         {
+#pragma warning disable CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             existing = await _dbContext.TicketActuals
                 .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == dto.Date.Date && a.ChildTaskIndex == childTaskIndex);
+#pragma warning restore CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
         }
 
         TicketActual actualEntity;
@@ -293,6 +296,7 @@ public class TicketsController : ControllerBase
         else
         {
             // 新規作成
+#pragma warning disable CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             actualEntity = new TicketActual
             {
                 TicketId = id,
@@ -303,6 +307,7 @@ public class TicketsController : ControllerBase
                 ChildTaskId = childTaskId,
                 CreatedAt = DateTime.Now
             };
+#pragma warning restore CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             _dbContext.TicketActuals.Add(actualEntity);
         }
 
@@ -329,6 +334,7 @@ public class TicketsController : ControllerBase
             return NotFound(new { error = "Ticket not found" });
 
         // ChildTaskIdを優先
+#pragma warning disable CS0618 // 'ActualDto.ChildTaskIndex' is obsolete
         string? targetChildTaskId = childTaskId ?? dto.ChildTaskId;
         int? targetChildTaskIndex = targetChildTaskId == null ? childTaskIndex ?? dto.ChildTaskIndex : null;
 
@@ -347,8 +353,10 @@ public class TicketsController : ControllerBase
         }
         else
         {
+#pragma warning disable CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             actual = await _dbContext.TicketActuals
                 .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == targetChildTaskIndex);
+#pragma warning restore CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
         }
         if (actual == null)
             return NotFound(new { error = "Actual not found" });
@@ -386,8 +394,10 @@ public class TicketsController : ControllerBase
         }
         else
         {
+#pragma warning disable CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
             actual = await _dbContext.TicketActuals
                 .FirstOrDefaultAsync(a => a.TicketId == id && a.Date.Date == targetDate.Date && a.ChildTaskIndex == childTaskIndex);
+#pragma warning restore CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
         }
         if (actual == null)
             return NotFound(new { error = "Actual not found" });

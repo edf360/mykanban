@@ -251,7 +251,7 @@ test.describe('担当者メモ', () => {
       await page.click('#addUserBtn');
       await page.waitForTimeout(500);
     }
-    await page.click('#settingsBtn');  // 設定を閉じる
+    await page.click('#settingsModal');  // 設定を閉じる（オーバーレイクリック）
     await page.waitForTimeout(500);
     
     // ページをリロードしてフィルターに反映
@@ -320,7 +320,7 @@ test.describe('担当者メモ', () => {
       await page.click('#addUserBtn');
       await page.waitForTimeout(500);
     }
-    await page.click('#settingsBtn');  // 設定を閉じる
+    await page.click('#settingsModal');  // 設定を閉じる（オーバーレイクリック）
     await page.waitForTimeout(500);
     
     // ページをリロードしてフィルターに反映

@@ -666,14 +666,17 @@ export function initModal() {
     let mouseDownOnOverlay = false;
     
     el.modal.addEventListener('mousedown', (e) => {
-        // オーバーレイ（バックドロップ）上でマウスダウンした場合のみフラグを設定
-        if (e.target.id === 'ticketModal') {
+        // .modal 内をクリックした場合はフラグをリセット（オーバーレイ外）
+        if (e.target.closest('.modal')) {
+            mouseDownOnOverlay = false;
+        } else {
+            // オーバーレイ（バックドロップ）上でマウスダウンした場合のみフラグを設定
             mouseDownOnOverlay = true;
         }
     });
     
     el.modal.addEventListener('mouseup', (e) => {
-        if (mouseDownOnOverlay && e.target.id === 'ticketModal') {
+        if (mouseDownOnOverlay && !e.target.closest('.modal')) {
             // 未保存の変更がある場合は警告を表示
             if (hasUnsavedChanges()) {
                 if (!confirm('未保存の変更があります。閉じますか？')) {

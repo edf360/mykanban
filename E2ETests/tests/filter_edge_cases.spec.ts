@@ -127,8 +127,8 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     // 担当者が存在するか確認
     const userCount = await page.locator('#usersList .user-item').count();
     
-    // 設定パネルを閉じる
-    await page.click('#settingsBtn');
+    // 設定パネルを閉じる（オーバーレイクリック）
+    await page.click('#settingsModal');
     
     if (userCount > 0) {
       // 担当者名を取得
@@ -149,7 +149,7 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
       await page.fill('#newUserInput', 'テスト担当者');
       await page.click('#addUserBtn');
     }
-    await page.click('#settingsBtn');  // 設定を閉じる
+    await page.click('#settingsModal');  // 設定を閉じる（オーバーレイクリック）
     
     // ページをリロードしてフィルタードロップダウンに担当者が反映されるまで待機
     await page.reload();
@@ -174,7 +174,7 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     // 「テスト担当者」のトグルスイッチをONにする
     // CSSで #assigneeTags { display: none; } となっているため、
     // 担当者タグは非表示。代わりにcheckboxのchecked状態を確認する。
-    const assigneeItem = page.locator('#assigneeList .assignee-list-item:has(.assignee-item-name:has-text("テスト担当者"))');
+    const assigneeItem = page.locator('#assigneeList .assignee-list-item:has(.assignee-item-name:has-text("テスト担当者"))').first();
     await expect(assigneeItem).toBeVisible({ timeout: 5000 });
     
     // スライダー要素をクリック（label要素と連動してcheckboxが切り替わる）
@@ -219,7 +219,7 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
       await page.fill('#newLabelNameInput', 'テストラベル');
       await page.click('#addLabelBtn');
     }
-    await page.click('#settingsBtn');  // 設定を閉じる
+    await page.click('#settingsModal');  // 設定を閉じる（オーバーレイクリック）
     
     // ページをリロードしてラベル設定がフロントエンドに反映されるまで待機
     await page.reload();
