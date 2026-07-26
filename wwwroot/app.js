@@ -3,7 +3,7 @@
  * 各モジュールを統合して初期化
  */
 
-import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback, on, emit, invalidateLabelColorCache, loadAllActuals, getAllTickets } from './modules/state.js';
+import { state, setGraphPanelOpen, isGraphPanelOpen, getLabelSuggestions, restoreHiddenChildTasks, setCloseGraphPanelCallback, on, emit, invalidateLabelColorCache, loadAllActuals, getAllTickets, getTicketProgress, getActualCacheKeys, getActualCacheForTicket } from './modules/state.js';
 import { loadUserSettings, updateGraphSettings, updateGraphSettingsSync, flushPendingSettings } from './modules/userSettings.js';
 import { loadTickets, loadSuggestions } from './modules/api.js';
 import { renderAllTickets } from './modules/renderer.js';
@@ -166,6 +166,11 @@ async function initApp() {
     const ticketIds = getAllTickets().map(t => t.ticketId);
     await loadAllActuals(ticketIds);
     logInfo('[app] loadAllActuals done');
+
+    // デバッグ用: 実績キャッシュ関連関数をwindowに公開
+    window.__debugGetTicketProgress = getTicketProgress;
+    window.__debugGetActualCacheKeys = getActualCacheKeys;
+    window.__debugGetActualCacheForTicket = getActualCacheForTicket;
 
     // フィルターをpopulate
     populateAssigneeFilter();

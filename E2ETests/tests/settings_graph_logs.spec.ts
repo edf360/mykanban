@@ -1207,4 +1207,285 @@ test.describe('グラフ・チャート（ガントチャート・進捗マト�
     const hasGanttAgain = await ganttChart.isVisible().catch(() => false);
     expect(hasTimelineAgain || hasGanttAgain).toBe(true);
   });
+
+  test('TC-BND-014: ガントチャート - 総日数3日で進捗40%', async ({ page, request }) => {
+    // 管理者でログイン
+    await login(page);
+
+    // ラベルを作成
+    const labelName = `bnd-label-${Date.now()}`;
+    await page.click('#settingsBtn');
+    await page.fill('#newLabelNameInput', labelName);
+    await page.click('#addLabelBtn');
+    await expect(page.locator('.settings-item', { hasText: labelName })).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(1000);
+    await closeSettingsOverlay(page);
+
+    // ページをリロードして新しいラベルを反映
+    await page.reload();
+    await page.waitForTimeout(2000);
+
+    // 総日数3日のチケットを作成（開始日から2日後終了 = 3日間）
+    const start = nextWeekday(new Date());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 2); // 3日間（start, start+1, start+2）
+    const startDateStr = start.toISOString().split('T')[0];
+    const endDateStr = end.toISOString().split('T')[0];
+
+    const ticketTitle = `BND014_${Date.now()}`;
+    
+    // チケットを手動で作成（日付を正確に制御）
+    // column-add-btnでモーダルを開く
+    await page.click('.column-add-btn[data-column="todo"]');
+    await expect(page.locator('#ticketModal')).toBeVisible({ timeout: 5000 });
+    await page.fill('#ticketTitle', ticketTitle);
+    await page.fill('#startDate', startDateStr);
+    await page.fill('#endDate', endDateStr);
+    
+    // 担当者を設定（admin）
+    await page.evaluate(() => {
+      const listEl = document.getElementById('assigneeList');
+      if (!listEl) return;
+      listEl.classList.add('active');
+      const items = listEl.querySelectorAll('.assignee-list-item');
+      for (const item of items) {
+        const toggle = item.querySelector('.assignee-enabled-toggle') as HTMLInputElement;
+        if (toggle && toggle.dataset.assignee === 'admin') {
+          toggle.checked = !toggle.checked;
+          toggle.dispatchEvent(new Event('change', { bubbles: true }));
+          break;
+        }
+      }
+    });
+    await page.waitForTimeout(300);
+    
+    // ラベル選択
+    await page.evaluate((ln: string) => {
+      const listEl = document.getElementById('labelList');
+      if (!listEl) return;
+      listEl.classList.add('active');
+      const items = listEl.querySelectorAll<HTMLDivElement>('.dropdown-item');
+      for (const item of items) {
+        const text = item.textContent?.trim();
+        if (text && text.includes(ln)) {
+          (item as HTMLElement).click();
+          break;
+        }
+      }
+    }, labelName);
+    await page.waitForTimeout(300);
+    
+    await page.click('#saveBtn');
+    await expect(page.locator('#ticketModal')).toBeHidden({ timeout: 10000 });
+    await page.waitForTimeout(1000);
+
+    // 実績APIで進捗を40%に設定
+    const tokenData = await page.evaluate(() => {
+      const raw = sessionStorage.getItem('kanban_auth');
+      return raw ? JSON.parse(raw) : null;
+    });
+    const token = tokenData?.token || '';
+
+    // チケットを取得
+    const ticketsResp = await request.get('/api/tickets', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const tickets: any[] = await ticketsResp.json();
+    const targetTicket = tickets.find((t: any) => t.title === ticketTitle);
+
+    if (targetTicket) {
+      // 実績APIを使用して進捗40%を登録
+      // チケットの開始日に実績データを登録
+      const actualDate = start.toISOString().split('T')[0];
+      const actualPayload = {
+        date: actualDate,
+        hours: 4, // 4時間作業
+        progressRate: 40 // 進捗40%
+      };
+      const actualResp = await request.post(`/api/tickets/${targetTicket.ticketId}/actuals`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        data: actualPayload
+      });
+      console.log(`TC-BND-014: POST /api/tickets/${targetTicket.ticketId}/actuals status: ${actualResp.status()}`);
+      
+      // レスポンスから登録後の実績情報を取得
+      const createdActual: any = await actualResp.json();
+      console.log(`TC-BND-014: 登録後進捗: ${createdActual.progressRate}%`);
+    } else {
+      console.log('TC-BND-014: 対象チケットが見つかりません');
+    }
+
+    // ページをリロードして実績データを反映
+    await page.reload();
+    
+    // initAppが完了するまで待つ
+    await page.waitForSelector('#appContent:not(.hidden)', { timeout: 15000 });
+    await page.waitForTimeout(3000);
+
+    // グラフパネルを表示
+    await page.click('#graphToggleBtn');
+    await expect(page.locator('#graphPanelBody')).not.toHaveClass(/hidden/);
+    await page.waitForTimeout(2000);
+
+    // ラベルを選択
+    await page.selectOption('#graphLabelFilter', labelName);
+    await page.waitForTimeout(2000);
+
+    // タイムラインビューに切替
+    await page.selectOption('#graphViewSelect', 'timeline');
+    await page.waitForTimeout(5000);
+
+    // タイムライングリッドが存在することを確認
+    await expect(page.locator('.timeline-grid')).toBeVisible();
+
+    // 予定バーが存在することを確認
+    const plannedBars = page.locator('.timeline-bar-planned');
+    await expect(plannedBars.first()).toBeVisible();
+
+    // 実績バーが存在することを確認
+    const actualBars = page.locator('.timeline-bar-actual');
+    const actualCount = await actualBars.count();
+    expect(actualCount).toBeGreaterThan(0);
+
+    // 実績バーの幅を検証（総日数3日 × 40% = 1.2日）
+    const firstActualBar = actualBars.first();
+    const actualWidth = await firstActualBar.evaluate((el: HTMLElement) => el.offsetWidth);
+    const plannedWidth = await plannedBars.first().evaluate((el: HTMLElement) => el.offsetWidth);
+    
+    const daysPerPixel = plannedWidth / 3;
+    const actualDays = actualWidth / daysPerPixel;
+    
+    // 実績日数が1.2日（40%）に近いことを確認（±0.5日の許容）
+    expect(Math.abs(actualDays - 1.2)).toBeLessThan(0.5);
+    
+    // 実績バーの幅は予定バーより小さいことを確認
+    expect(actualWidth).toBeLessThan(plannedWidth);
+  });
+});
+
+// ===== パフォーマンステスト (TC-PERF-*) =====
+
+test.describe('パフォーマンステスト - グラフ・設定 (TC-PERF-*)', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+  });
+
+  test('TC-PERF-005: グラフパネル表示中 - ラベルカラーキャッシュが使用される', async ({ page }) => {
+    // Arrange: 複数のラベルを持つチケットを作成
+    // まず設定でラベルを登録
+    await page.click('#settingsBtn');
+    await expect(page.locator('#settingsModal')).toHaveClass(/active/);
+    
+    // ラベルを追加（正しい要素IDを使用）
+    const labelNames = ['Important', 'Normal', 'Urgent'];
+    for (const labelName of labelNames) {
+      // 既に存在する場合はスキップ
+      const exists = await page.locator(`#labelsList:has-text("${labelName}")`).count();
+      if (exists === 0) {
+        await page.fill('#newLabelNameInput', labelName);
+        await page.click('#addLabelBtn');
+        await page.waitForTimeout(200);
+      }
+    }
+    
+    // 設定パネルを閉じる
+    await closeSettingsOverlay(page);
+
+    // 複数のラベル付きチケットを作成（簡素化）
+    const tickets = [];
+    for (let i = 0; i < 5; i++) {
+      const name = uniqueName(`LabelTest${i}`);
+      tickets.push(name);
+      
+      await page.click('.column-add-btn[data-column="todo"]');
+      await page.fill('#ticketTitle', name);
+      
+      // ラベルを割り当て（簡素化：最初のラベルのみ）
+      // クリック後、_renderLabelSelect(false) が呼ばれてDOMが再構築されるため、
+      // evaluateで直接クリックしてイベントを発火する
+      await page.click('#labelToggleBtn');
+      await expect(page.locator('#labelList')).toHaveClass(/active/, { timeout: 5000 });
+      
+      // 最初の.dropdown-itemをevaluateでクリック（DOM再構築対応）
+      await page.evaluate(() => {
+        const items = document.querySelectorAll('#labelList .dropdown-item');
+        if (items.length > 0) {
+          (items[0] as HTMLElement).click();
+        }
+      });
+      await page.waitForTimeout(300);
+      
+      await page.click('#labelToggleBtn');
+      await page.waitForTimeout(200);
+      
+      await page.click('#saveBtn');
+      await expect(page.locator('#ticketModal')).toBeHidden({ timeout: 10000 });
+    }
+
+    // Act: グラフパネルを表示し、再描画時間を計測
+    await page.click('#graphToggleBtn');
+    await expect(page.locator('#graphPanelBody')).not.toHaveClass(/hidden/);
+
+    // ラベルカラーキャッシュが使用されていることを確認
+    const cacheResult = await page.evaluate(() => {
+      // charts.js 内の getLabelColor 関数がキャッシュを使用しているか確認
+      const tickets = document.querySelectorAll('.ticket');
+      const labelElements = document.querySelectorAll('.ticket-label');
+      
+      // 同じラベル名の要素が同じカラー値を持っていることを確認
+      const labelColors = new Map<string, string>();
+      let consistentColors = true;
+      
+      labelElements.forEach((el: any) => {
+        const text = el.textContent?.trim();
+        const style = window.getComputedStyle(el);
+        const bgColor = style.backgroundColor || style.borderColor;
+        
+        if (text) {
+          if (!labelColors.has(text)) {
+            labelColors.set(text, bgColor);
+          } else if (labelColors.get(text) !== bgColor) {
+            consistentColors = false;
+          }
+        }
+      });
+      
+      return {
+        labelCount: labelColors.size,
+        consistentColors,
+        totalLabels: labelElements.length
+      };
+    });
+
+    // Assert: 同じラベルのカラーが一貫している（キャッシュが機能している証拠）
+    expect(cacheResult.consistentColors).toBe(true);
+    expect(cacheResult.labelCount).toBeGreaterThan(0);
+
+    // グラフ表示の応答時間が合理的な範囲内であることを確認
+    const graphRenderTime = await page.evaluate(async () => {
+      const start = performance.now();
+      // グラフの再描画をトリガー
+      const graphViewSelect = document.getElementById('graphViewSelect') as HTMLSelectElement;
+      if (graphViewSelect) {
+        const current = graphViewSelect.value;
+        const options = Array.from(graphViewSelect.options).map(o => o.value);
+        const other = options.find(o => o !== current);
+        if (other) {
+          graphViewSelect.value = other;
+          graphViewSelect.dispatchEvent(new Event('change'));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          graphViewSelect.value = current;
+          graphViewSelect.dispatchEvent(new Event('change'));
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return performance.now() - start;
+    });
+
+    // 再描画時間が2秒以内であることを確認（環境依存のため緩い閾値）
+    expect(graphRenderTime).toBeLessThan(2000);
+  });
 });

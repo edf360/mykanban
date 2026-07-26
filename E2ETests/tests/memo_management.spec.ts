@@ -160,4 +160,106 @@ test.describe('メモ管理（TC-FUNC-070~072）', () => {
     const restoredHidden = await memoColumn.evaluate(el => el.classList.contains('hidden'));
     expect(restoredHidden).toBe(afterToggleHidden);
   });
+
+  // ===== TC-SEC-006: メモ編集権限チェック =====
+  test('TC-SEC-006: ログインユーザー自身のメモのみが編集可能、他ユーザーのメモは読み取り専用', async ({ page }) => {
+    // admin でログインしている前提
+    
+    // メモトグルボタンをクリックして表示
+    const memoToggleBtn = page.locator('#memoToggleBtn');
+    if (await memoToggleBtn.isVisible().catch(() => false)) {
+      await memoToggleBtn.click();
+      await page.waitForTimeout(500);
+    }
+
+    const memoText = page.locator('#assigneeMemoText');
+    await expect(memoText).toBeVisible();
+
+    // 現在のフィルター担当者が admin であることを確認
+    const titleEl = page.locator('#memoColumnTitle');
+    let currentTitle = await titleEl.textContent();
+    
+    // admin のメモが編集可能であることを確認
+    if (currentTitle?.includes('admin')) {
+      // admin のメモなので編集可能
+      const isAdminReadOnly = await memoText.getAttribute('readonly');
+      const isAdminLocked = await memoText.evaluate(el => el.classList.contains('memo-locked'));
+      expect(isAdminReadOnly === null && !isAdminLocked).toBe(true);
+      
+      // 編集を試みる（テキスト入力が可能）
+      await memoText.fill('adminのテストメモ');
+      await page.waitForTimeout(500);
+      const adminValue = await memoText.inputValue();
+      expect(adminValue).toBe('adminのテストメモ');
+    } else {
+      // admin に切り替える
+      const filterToggleBtn = page.locator('#filterToggleBtn');
+      if (await filterToggleBtn.isVisible().catch(() => false)) {
+        await filterToggleBtn.click();
+        await page.waitForTimeout(500);
+        
+        const filterArea = page.locator('#filterArea');
+        if (await filterArea.isVisible().catch(() => false)) {
+          await page.selectOption('#assigneeFilterSelect', { label: 'admin' });
+          await page.waitForTimeout(1000);
+          
+          // admin のメモが編集可能
+          const isAdminReadOnly = await memoText.getAttribute('readonly');
+          const isAdminLocked = await memoText.evaluate(el => el.classList.contains('memo-locked'));
+          expect(isAdminReadOnly === null && !isAdminLocked).toBe(true);
+        }
+      }
+    }
+    
+    // 他ユーザー（taro）のメモが読み取り専用であることを確認
+    const filterToggleBtn = page.locator('#filterToggleBtn');
+    if (await filterToggleBtn.isVisible().catch(() => false)) {
+      await filterToggleBtn.click();
+      await page.waitForTimeout(500);
+      
+      const filterArea = page.locator('#filterArea');
+      if (await filterArea.isVisible().catch(() => false)) {
+        // taro というオプションがあるか確認
+        const hasTaroOption = await page.locator('#assigneeFilterSelect option[label="taro"]').isVisible().catch(() => false);
+        
+        if (hasTaroOption) {
+          // taro に切り替え
+          await page.selectOption('#assigneeFilterSelect', { label: 'taro' });
+          await page.waitForTimeout(1000);
+          
+          currentTitle = await titleEl.textContent();
+          expect(currentTitle).toContain('taro');
+          
+          // taro のメモは読み取り専用
+          const isTaroReadOnly = await memoText.getAttribute('readonly');
+          const isTaroLocked = await memoText.evaluate(el => el.classList.contains('memo-locked'));
+          expect(isTaroReadOnly !== null || isTaroLocked).toBe(true);
+        } else {
+          // taro がいない場合は、admin 以外の最初の担当者を選択
+          const assigneeOptions = page.locator('#assigneeFilterSelect option');
+          const count = await assigneeOptions.count();
+          if (count > 1) {
+            // admin 以外のオプションを選択
+            const options = await assigneeOptions.all();
+            for (const opt of options) {
+              const label = await opt.getAttribute('label');
+              if (label && label !== 'admin') {
+                await page.selectOption('#assigneeFilterSelect', { label });
+                await page.waitForTimeout(1000);
+                
+                currentTitle = await titleEl.textContent();
+                expect(currentTitle).not.toContain('admin');
+                
+                // 他ユーザーのメモは読み取り専用
+                const isOtherReadOnly = await memoText.getAttribute('readonly');
+                const isOtherLocked = await memoText.evaluate(el => el.classList.contains('memo-locked'));
+                expect(isOtherReadOnly !== null || isOtherLocked).toBe(true);
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  });
 });

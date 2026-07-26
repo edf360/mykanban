@@ -5,6 +5,7 @@
  */
 
 import { updateHiddenChildTasks, loadUserSettings } from './userSettings.js';
+import { getToken } from './auth.js';
 
 // APIベースURL
 export const API_BASE = '/api/tickets';
@@ -788,17 +789,46 @@ const actualCache = new Map();
  * @param {string[]} ticketIds - チケットID配列
  */
 export async function loadAllActuals(ticketIds) {
-    if (!ticketIds || ticketIds.length === 0) return;
+    if (!ticketIds || ticketIds.length === 0) {
+        console.log('[state] loadAllActuals: ticketIds为空，跳过');
+        return;
+    }
     try {
-        const query = ticketIds.map(id => `ticketIds=${encodeURIComponent(id)}`).join('&');
-        const response = await fetch(`${API_BASE}/actuals/batch?${query}`, {
-            headers: { 'Cache-Control': 'no-cache' }
-        });
-        if (!response.ok) return;
-        const allActuals = await response.json();
+        // URL長制限（414 URI Too Long）を避けるためにバッチ分割
+        const batchSize = 50;
+        const batches = [];
+        for (let i = 0; i < ticketIds.length; i += batchSize) {
+            batches.push(ticketIds.slice(i, i + batchSize));
+        }
+        console.log('[state] loadAllActuals: ticketIds数量', ticketIds.length, 'バッチ数', batches.length);
         
-        // キャッシュをクリアして再構築
         actualCache.clear();
+        
+        // 各バッチを並列で取得
+        const promises = batches.map(async (batch) => {
+            const query = batch.map(id => `ticketIds=${encodeURIComponent(id)}`).join('&');
+            const url = `${API_BASE}/actuals/batch?${query}`;
+            try {
+                const token = getToken();
+                const headers = { 'Cache-Control': 'no-cache' };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                const response = await fetch(url, { headers });
+                if (!response.ok) {
+                    console.warn('[state] loadAllActuals: バッチAPIエラー', response.status, 'ticketIds数', batch.length);
+                    return [];
+                }
+                return await response.json();
+            } catch (e) {
+                console.warn('[state] loadAllActuals: バッチフェッチ失敗', e, 'ticketIds数', batch.length);
+                return [];
+            }
+        });
+        
+        const results = await Promise.all(promises);
+        const allActuals = results.flat();
+        console.log('[state] loadAllActuals: 取得した実績データ数', allActuals.length);
         
         // ticketIdごとにグループ化
         for (const actual of allActuals) {
@@ -815,6 +845,7 @@ export async function loadAllActuals(ticketIds) {
         for (const [, actuals] of actualCache) {
             actuals.sort((a, b) => new Date(b.date) - new Date(a.date));
         }
+        console.log('[state] loadAllActuals: キャッシュキー数', actualCache.size, 'キー一覧', Array.from(actualCache.keys()).slice(0, 20));
     } catch (e) {
         console.warn('[state] Failed to load actuals:', e);
     }
@@ -866,4 +897,21 @@ export function cacheActualsForTicket(ticketId, actuals) {
  */
 export function clearActualCache() {
     actualCache.clear();
+}
+
+/**
+ * 実績キャッシュの内容をデバッグ用に取得
+ * @param {string} ticketId - チケットID
+ * @returns {Array} 実績データ配列
+ */
+export function getActualCacheForTicket(ticketId) {
+    return actualCache.get(ticketId) || [];
+}
+
+/**
+ * 実績キャッシュの全キーを取得（デバッグ用）
+ * @returns {string[]} キーの配列
+ */
+export function getActualCacheKeys() {
+    return Array.from(actualCache.keys());
 }

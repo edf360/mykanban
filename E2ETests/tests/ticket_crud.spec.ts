@@ -152,6 +152,50 @@ test.describe('チケットCRUD', () => {
     await expect(page.locator('#memo')).toBeEnabled();
   });
 
+  test('TC-STATE-003: ロック済みチケット - ロック解除ボタンクリック', async ({ page }) => {
+    const name = uniqueName('ロック解除テスト');
+
+    // 1. チケットを作成してロック状態で保存
+    await page.click('.column-add-btn[data-column="todo"]');
+    await page.fill('#ticketTitle', name);
+
+    // ハンバーガーメニューからロック設定
+    await page.click('#modalHamburgerBtn');
+    await expect(page.locator('#modalHamburgerMenu')).toHaveClass(/active/);
+    await page.click('[data-action="lock"]');
+
+    // モーダルにlockedクラスが付いていることを確認（ロック状態）
+    await expect(page.locator('#ticketModal .modal')).toHaveClass(/locked/);
+
+    // 保存
+    await page.click('#saveBtn');
+    await expect(page.locator('#ticketModal')).toBeHidden();
+
+    // 2. ロック済みのチケットを再度編集モードで開く
+    const ticket = page.locator('.column[data-column="todo"] .ticket:has-text("' + name + '")').first();
+    await ticket.click();
+    await expect(page.locator('#ticketModal')).toBeVisible();
+
+    // ロック状態が保持されていることを確認（lockedクラスが付いている）
+    await expect(page.locator('#ticketModal .modal')).toHaveClass(/locked/);
+
+    // 3. ロック解除ボタンをクリック
+    await page.click('#modalHamburgerBtn');
+    await expect(page.locator('#modalHamburgerMenu')).toHaveClass(/active/);
+    await page.click('[data-action="lock"]');
+
+    // 4. ロックが解除されたことを確認（isLocked=false になり編集可能になる）
+    // lockedクラスが外れていることを確認
+    await expect(page.locator('#ticketModal .modal')).not.toHaveClass(/locked/);
+
+    // 編集可能になっていることを確認（lockedクラスがないためフィールドは操作可能）
+    await expect(page.locator('#ticketTitle')).toBeEnabled();
+
+    // モーダルを閉じる
+    await page.click('#cancelBtn');
+    await expect(page.locator('#ticketModal')).toBeHidden();
+  });
+
   test('子タスクを追加できる', async ({ page }) => {
     await page.click('.column-add-btn[data-column="todo"]');
     await page.fill('#ticketTitle', uniqueName('子タスクテスト'));

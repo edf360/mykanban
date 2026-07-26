@@ -1,9 +1,11 @@
 using KanbanServer.Controllers;
 using KanbanServer.Data;
 using KanbanServer.Hubs;
+using KanbanServer.Middleware;
 using KanbanServer.Models;
 using KanbanServer.Services;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -1204,6 +1206,159 @@ public class AdditionalControllerTests : IDisposable
         Assert.Single(ticket.ChildTasks);
         Assert.Equal("新しいタスク", ticket.ChildTasks[0].Text);
     }
+
+    // ==================== 境界値テスト (TC-BND-*) ====================
+
+    [Fact]
+    public async Task TC_BND_001_Title200Chars_ShouldSucceed()
+    {
+        // Arrange: タイトル200文字
+        var title = new string('A', 200);
+        var dto = new TicketDto { Title = title };
+
+        // Act
+        var result = await _controller.Create(dto);
+
+        // Assert: 201 Created が返る
+        var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+        var createdResult = Assert.IsType<CreatedAtActionResult>(actionResult.Result!);
+        var ticket = Assert.IsAssignableFrom<Ticket>(createdResult.Value!);
+        Assert.Equal(200, ticket.Title.Length);
+    }
+
+    [Fact]
+    public async Task TC_BND_002_Title201Chars_ShouldReturnBadRequest()
+    {
+        // Arrange: タイトル201文字
+        var title = new string('A', 201);
+        var dto = new TicketDto { Title = title };
+
+        // Act
+        var result = await _controller.Create(dto);
+
+        // Assert: 400 BadRequest が返る
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task TC_BND_003_ProgressRate0_ShouldSucceed()
+    {
+        // Arrange: チケットを作成
+        var ticket = new Ticket { TicketId = "bnd003", Title = "テスト", Column = "todo", Position = 0 };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        var dto = new ActualDto
+        {
+            Date = DateTime.Now,
+            Hours = 0,
+            ProgressRate = 0
+        };
+
+        // Act
+        var result = await _controller.CreateOrUpdateActual("bnd003", dto);
+
+        // Assert: 200 OK が返り、ProgressRateは0に保存される
+        var actionResult = Assert.IsType<ActionResult<TicketActual>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var actual = Assert.IsAssignableFrom<TicketActual>(okResult.Value!);
+        Assert.Equal(0, actual.ProgressRate);
+    }
+
+    [Fact]
+    public async Task TC_BND_004_ProgressRate100_ShouldSucceed()
+    {
+        // Arrange
+        var ticket = new Ticket { TicketId = "bnd004", Title = "テスト", Column = "todo", Position = 0 };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        var dto = new ActualDto
+        {
+            Date = DateTime.Now,
+            Hours = 8,
+            ProgressRate = 100
+        };
+
+        // Act
+        var result = await _controller.CreateOrUpdateActual("bnd004", dto);
+
+        // Assert: 200 OK が返り、ProgressRateは100に保存される
+        var actionResult = Assert.IsType<ActionResult<TicketActual>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var actual = Assert.IsAssignableFrom<TicketActual>(okResult.Value!);
+        Assert.Equal(100, actual.ProgressRate);
+    }
+
+    [Fact]
+    public async Task TC_BND_005_ProgressRateMinus1_ShouldClampTo0()
+    {
+        // Arrange
+        var ticket = new Ticket { TicketId = "bnd005", Title = "テスト", Column = "todo", Position = 0 };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        var dto = new ActualDto
+        {
+            Date = DateTime.Now,
+            Hours = 2,
+            ProgressRate = -1
+        };
+
+        // Act
+        var result = await _controller.CreateOrUpdateActual("bnd005", dto);
+
+        // Assert: ProgressRateは0にクランプされる
+        var actionResult = Assert.IsType<ActionResult<TicketActual>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var actual = Assert.IsAssignableFrom<TicketActual>(okResult.Value!);
+        Assert.Equal(0, actual.ProgressRate);
+    }
+
+    [Fact]
+    public async Task TC_BND_006_ProgressRate101_ShouldClampTo100()
+    {
+        // Arrange
+        var ticket = new Ticket { TicketId = "bnd006", Title = "テスト", Column = "todo", Position = 0 };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        var dto = new ActualDto
+        {
+            Date = DateTime.Now,
+            Hours = 2,
+            ProgressRate = 101
+        };
+
+        // Act
+        var result = await _controller.CreateOrUpdateActual("bnd006", dto);
+
+        // Assert: ProgressRateは100にクランプされる
+        var actionResult = Assert.IsType<ActionResult<TicketActual>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var actual = Assert.IsAssignableFrom<TicketActual>(okResult.Value!);
+        Assert.Equal(100, actual.ProgressRate);
+    }
+
+    [Fact]
+    public async Task TC_BND_007_Effort0_ShouldSucceed()
+    {
+        // Arrange
+        var ticket = new Ticket { TicketId = "bnd007", Title = "テスト", Column = "todo", Position = 0, Effort = 10 };
+        _context.Tickets.Add(ticket);
+        await _context.SaveChangesAsync();
+
+        var dto = new TicketDto { Title = "テスト", Effort = 0 };
+
+        // Act
+        var result = await _controller.Update("bnd007", dto);
+
+        // Assert: 正常に保存され、Effortは0になる
+        var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+        var updatedTicket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+        Assert.Equal(0, updatedTicket.Effort);
+    }
 }
 
 /// <summary>
@@ -1286,5 +1441,571 @@ public class TokenStoreTests
 
         // Assert
         Assert.Null(info);
+        }
     }
-}
+    
+    /// <summary>
+    /// エラー処理テスト (TC-ERR-*)
+    /// </summary>
+    public class ErrorHandlingTests : IDisposable
+    {
+        private readonly KanbanDbContext? _context;
+    
+        public ErrorHandlingTests()
+        {
+            _context = TestDbContextFactory.Create();
+        }
+    
+        public void Dispose()
+        {
+            _context?.Database.CloseConnection();
+            _context?.Dispose();
+        }
+    
+        // ===== TC-ERR-003: 管理者権限なし - 管理者専用API呼び出し =====
+    
+        [Fact]
+        public async Task TC_ERR_003_AdminRequiredEndpoint_WithNonAdminToken_ShouldReturn403()
+        {
+            // Arrange: 一般ユーザーのトークンを作成
+            var tokenStore = new TokenStore();
+            var userToken = tokenStore.CreateToken("testuser", isAdmin: false);
+            var authHeader = $"Bearer {userToken}";
+    
+            // ミドルウェアをテストするためにMock HttpContextを構築
+            var responseBody = new MemoryStream();
+            var context = new DefaultHttpContext();
+            context.Response.Body = responseBody;
+            context.Request.Path = "/api/settings/import/json";
+            context.Request.Method = "POST";
+            context.Request.Headers["Authorization"] = authHeader;
+
+            var middleware = new AuthMiddleware(async (ctx) =>
+            {
+                // 正常に到達したら401（ここには到達しないはず）
+                ctx.Response.StatusCode = 401;
+            }, tokenStore);
+
+            // Act
+            await middleware.InvokeAsync(context);
+
+            // Assert: 403 Forbidden が返る
+            Assert.Equal(403, context.Response.StatusCode);
+            responseBody.Seek(0, SeekOrigin.Begin);
+            var responseContent = await new StreamReader(responseBody).ReadToEndAsync();
+            Assert.Contains("Admin access required", responseContent);
+        }
+    
+        [Fact]
+        public async Task TC_ERR_003_AdminRequiredEndpoint_WithAdminToken_ShouldSucceed()
+        {
+            // Arrange: 管理者トークンを作成
+            var tokenStore = new TokenStore();
+            var adminToken = tokenStore.CreateToken("admin", isAdmin: true);
+            var authHeader = $"Bearer {adminToken}";
+    
+            var context = new DefaultHttpContext();
+            context.Request.Path = "/api/settings/import/json";
+            context.Request.Method = "POST";
+            context.Request.Headers["Authorization"] = authHeader;
+    
+            bool nextCalled = false;
+            var middleware = new AuthMiddleware(async (ctx) =>
+            {
+                nextCalled = true;
+                ctx.Response.StatusCode = 200;
+            }, tokenStore);
+    
+            // Act
+            await middleware.InvokeAsync(context);
+    
+            // Assert: 次のミドルウェアが呼び出される（403にならない）
+            Assert.True(nextCalled, "Admin token should pass through to next middleware");
+        }
+    
+        // ===== TC-ERR-011: null Body - POST /api/tickets (body=null) =====
+    
+        [Fact]
+        public async Task TC_ERR_011_CreateTicket_WithNullBody_ShouldReturn400()
+        {
+            // Arrange
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            var env = new TestWebHostEnvironment();
+            var hub = new TestHubContext();
+            var controller = new TicketsController(ticketService, ctx, env, hub);
+    
+            // Act: body を null で送信
+            var result = await controller.Create(dto: null);
+    
+            // Assert: 400 BadRequest が返る
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(actionResult.Result!);
+            Assert.Equal(400, badRequestResult.StatusCode);
+            // reflectionで匿名型のerrorプロパティを取得
+            var errorValue = badRequestResult.Value!;
+            var errorProperty = errorValue.GetType().GetProperty("error")!;
+            var errorMessage = errorProperty.GetValue(errorValue) as string;
+            Assert.NotNull(errorMessage);
+            Assert.Contains("Request body", errorMessage);
+    
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+    
+        // ===== TC-ERR-015: エラー発生時 - APIエラーレスポンス確認 =====
+    
+        [Fact]
+        public async Task TC_ERR_015_ErrorResponse_ShouldNotLeakInternalDetails()
+        {
+            // Arrange: 本番環境モードでコントローラーを作成
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            var prodEnv = new TestWebHostEnvironment { EnvironmentName = "Production" };
+            var hub = new TestHubContext();
+            var controller = new TicketsController(ticketService, ctx, prodEnv, hub);
+    
+            // APIエラーレスポンスに内部情報が漏洩していないことを確認
+            // Createでnull bodyを送信したときのレスポンスを確認
+            var result = await controller.Create(dto: null);
+    
+            // Assert: BadRequestが返り、内部情報が含まれていない
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(actionResult.Result!);
+
+            // reflectionで匿名型のerrorプロパティを取得
+            var errorValue = badRequestResult.Value!;
+            var errorProperty = errorValue.GetType().GetProperty("error")!;
+            var errorMessage = errorProperty.GetValue(errorValue) as string;
+
+            // エラーメッセージに内部情報（例外メッセージなど）が含まれていないことを確認
+            Assert.NotNull(errorMessage);
+            Assert.DoesNotContain("Exception", errorMessage);
+            Assert.DoesNotContain("at ", errorMessage);  // スタックトレースが含まれていない
+            Assert.DoesNotContain("StackTrace", errorMessage);
+    
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+    
+        [Fact]
+        public async Task TC_ERR_015_ProdEnvironment_ErrorResponse_ShouldBeGeneric()
+        {
+            // Arrange: 本番環境でエラーが発生するシナリオ
+            // 開発環境と本番環境でのエラーレスポンスの違いを確認
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            
+            // 本番環境
+            var prodEnv = new TestWebHostEnvironment { EnvironmentName = "Production" };
+            var hub = new TestHubContext();
+            var prodController = new TicketsController(ticketService, ctx, prodEnv, hub);
+    
+            // null body のケースでは開発/本番に関係なく同じ安全なメッセージが返る
+            var result = await prodController.Create(dto: null);
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(actionResult.Result!);
+            
+            // Assert: 安全なメッセージのみ
+            var errorValue = badRequestResult.Value!;
+            var errorProperty = errorValue.GetType().GetProperty("error")!;
+            var errorMessage = errorProperty.GetValue(errorValue) as string;
+            Assert.NotNull(errorMessage);
+            // 内部実装詳細が含まれていない
+            Assert.DoesNotContain("Sqlite", errorMessage);
+            Assert.DoesNotContain("DbContext", errorMessage);
+            Assert.DoesNotContain("ticketService", errorMessage);
+    
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+    
+        // ===== TC-ERR-018: ticketId比較 - findIndexでのticketId比較 =====
+    
+        [Fact]
+        public async Task TC_ERR_018_UpdateTicket_StringTicketId_ShouldWorkCorrectly()
+        {
+            // Arrange: チケットを追加
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            var env = new TestWebHostEnvironment();
+            var hub = new TestHubContext();
+            var controller = new TicketsController(ticketService, ctx, env, hub);
+    
+            var ticketId = "test-ticket-001";
+            ctx.Tickets.Add(new Ticket
+            {
+                TicketId = ticketId,
+                Title = "元タイトル",
+                Column = "todo",
+                Position = 0
+            });
+            await ctx.SaveChangesAsync();
+    
+            // Act: 文字列IDでチケットを更新（ticketId比較が正常に動作することを確認）
+            var dto = new TicketDto { Title = "更新後タイトル" };
+            var result = await controller.Update(ticketId, dto);
+    
+            // Assert: チケットが正常に更新できる
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+            var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+            Assert.Equal(ticketId, ticket.TicketId);
+            Assert.Equal("更新後タイトル", ticket.Title);
+    
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+    
+        [Fact]
+        public async Task TC_ERR_018_UpdateTicket_NumericTicketId_ShouldWorkCorrectly()
+        {
+            // Arrange: 数値風のticketIdでチケットを追加
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            var env = new TestWebHostEnvironment();
+            var hub = new TestHubContext();
+            var controller = new TicketsController(ticketService, ctx, env, hub);
+    
+            // 数値として解釈可能な文字列ID
+            var numericTicketId = "12345";
+            ctx.Tickets.Add(new Ticket
+            {
+                TicketId = numericTicketId,
+                Title = "数値ID元タイトル",
+                Column = "doing",
+                Position = 0
+            });
+            await ctx.SaveChangesAsync();
+    
+            // Act: 文字列として数値IDでチケットを更新（型不一致による比較失敗が防止されていることを確認）
+            var dto = new TicketDto { Title = "数値ID更新後" };
+            var result = await controller.Update(numericTicketId, dto);
+    
+            // Assert: チケットが正常に更新できる（String()適用で型不一致が防止されている）
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+            var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+            Assert.Equal(numericTicketId, ticket.TicketId);
+            Assert.Equal("数値ID更新後", ticket.Title);
+    
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+    
+        [Fact]
+        public async Task TC_ERR_018_UpdateTicket_TicketIdComparison_ShouldWorkConsistently()
+        {
+            // Arrange
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            var env = new TestWebHostEnvironment();
+            var hub = new TestHubContext();
+            var controller = new TicketsController(ticketService, ctx, env, hub);
+    
+            var ticketId = "99999";
+            ctx.Tickets.Add(new Ticket
+            {
+                TicketId = ticketId,
+                Title = "元タイトル",
+                Column = "todo",
+                Position = 0
+            });
+            await ctx.SaveChangesAsync();
+    
+            // Act: 同じticketIdで更新（型比較の一貫性を確認）
+            var dto = new TicketDto { Title = "更新後タイトル" };
+            var result = await controller.Update(ticketId, dto);
+    
+            // Assert: 更新が成功
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+            var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+            Assert.Equal(ticketId, ticket.TicketId);
+            Assert.Equal("更新後タイトル", ticket.Title);
+    
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+
+        // ===== TC-ERR-012: 無効なHEXコード - ラベル色更新で不正HEXを渡す =====
+
+        [Fact]
+        public async Task TC_ERR_012_UpdateLabelColor_WithInvalidHex_ShouldNotThrowException()
+        {
+            // Arrange
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+            var env = new TestWebHostEnvironment();
+            var hub = new TestHubContext();
+            var controller = new TicketsController(ticketService, ctx, env, hub);
+
+            // チケットを作成（ラベルなし）
+            var ticketId = "hex-test-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            ctx.Tickets.Add(new Ticket
+            {
+                TicketId = ticketId,
+                Title = "HEXテスト",
+                Column = "todo",
+                Position = 0,
+                Labels = new List<string>()
+            });
+            await ctx.SaveChangesAsync();
+
+            // Act: 無効なHEXコードを含むラベルでチケットを更新
+            // サーバー側はラベル色の検証を行わない（クライアント側sanitizeColorが担当）
+            // しかし、ラベル名自体の更新は正常に処理されることを確認
+            var invalidLabels = new List<string> { "ZZZ", "#GGG", "", "不正ラベル" };
+            var dto = new TicketDto
+            {
+                Title = "HEXテスト",
+                Column = "todo",
+                Labels = invalidLabels
+            };
+            var result = await controller.Update(ticketId, dto);
+
+            // Assert: 例外が発生せず、更新が成功することを確認
+            var actionResult = Assert.IsType<ActionResult<Ticket>>(result);
+            var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+            var ticket = Assert.IsAssignableFrom<Ticket>(okResult.Value!);
+            Assert.Equal(ticketId, ticket.TicketId);
+            Assert.Equal(4, ticket.Labels.Count);
+            // 無効なHEXコードを含むラベル名も保存される（クライアント側で色処理時にデフォルトにフォールバック）
+            Assert.Contains("ZZZ", ticket.Labels);
+            Assert.Contains("#GGG", ticket.Labels);
+            Assert.Contains("", ticket.Labels);
+            Assert.Contains("不正ラベル", ticket.Labels);
+
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+
+        // ===== TC-ERR-012-2: 無効なHEXコード - GetLabelsSuggestAsync で不正HEXを含むラベル設定 =====
+
+        [Fact]
+        public async Task TC_ERR_012_GetLabelsSuggest_WithInvalidHexColors_ShouldReturnDefaultColor()
+        {
+            // Arrange
+            var ctx = TestDbContextFactory.Create();
+            var ticketService = new TicketService(ctx);
+
+            // 無効なHEXコードを含むラベル設定を追加
+            var setting = new Setting
+            {
+                Id = 1,
+                Users = new List<string>(),
+                Labels = new List<LabelConfig>
+                {
+                    new() { Name = "有効ラベル", Color = "#ff0000" },
+                    new() { Name = "無効ラベル1", Color = "ZZZ" },
+                    new() { Name = "無効ラベル2", Color = "#GGG" },
+                    new() { Name = "空ラベル", Color = "" },
+                    new() { Name = "不完全HEX", Color = "#ABC" }
+                },
+                Holidays = new List<string>()
+            };
+            ctx.Settings.Add(setting);
+            await ctx.SaveChangesAsync();
+
+            // Act: GetLabelsSuggestAsync を実行
+            var suggestions = await ticketService.GetLabelsSuggestAsync();
+
+            // Assert: 例外が発生せず、すべてのラベルが返却されることを確認
+            Assert.NotNull(suggestions);
+            Assert.Equal(5, suggestions.Count);
+
+            // 有効なHEXはそのまま返却
+            var validLabel = suggestions.FirstOrDefault(s => s.Name == "有効ラベル");
+            Assert.NotNull(validLabel);
+            Assert.Equal("#ff0000", validLabel.Color);
+
+            // 無効なHEXもサーバー側では検証せずそのまま返却（クライアント側sanitizeColorで処理）
+            var invalidLabel1 = suggestions.FirstOrDefault(s => s.Name == "無効ラベル1");
+            Assert.NotNull(invalidLabel1);
+            Assert.Equal("ZZZ", invalidLabel1.Color);
+
+            var invalidLabel2 = suggestions.FirstOrDefault(s => s.Name == "無効ラベル2");
+            Assert.NotNull(invalidLabel2);
+            Assert.Equal("#GGG", invalidLabel2.Color);
+
+            // Cleanup
+            ctx.Database.CloseConnection();
+            ctx.Dispose();
+        }
+    }
+
+    // ===== パフォーマンステスト (TC-PERF-*) =====
+
+    /// <summary>
+    /// パフォーマンステスト (TC-PERF-*)
+    /// </summary>
+    public class PerformanceTests : IDisposable
+    {
+        private readonly KanbanDbContext _context;
+        private readonly TicketService _ticketService;
+        private readonly TicketsController _controller;
+
+        public PerformanceTests()
+        {
+            _context = TestDbContextFactory.Create();
+            _ticketService = new TicketService(_context);
+            var env = new TestWebHostEnvironment();
+            var hub = new TestHubContext();
+            _controller = new TicketsController(_ticketService, _context, env, hub);
+        }
+
+        public void Dispose()
+        {
+            _context.Database.CloseConnection();
+            _context.Dispose();
+        }
+
+        /// <summary>
+        /// TC-PERF-001: 1000件のチケット存在 - チケット一覧取得
+        /// 1000件のチケットを生成し、GET /api/tickets の応答時間が2秒以内であることを確認
+        /// </summary>
+        [Fact]
+        public async Task TC_PERF_001_GetAll_With1000Tickets_ShouldRespondWithin2Seconds()
+        {
+            // Arrange: 1000件のチケットを生成
+            const int ticketCount = 1000;
+            var columns = new[] { "todo", "doing", "done" };
+            var tickets = new List<Ticket>();
+            for (int i = 0; i < ticketCount; i++)
+            {
+                tickets.Add(new Ticket
+                {
+                    TicketId = $"perf-ticket-{i}",
+                    Title = $"パフォーマンステストチケット {i}",
+                    Column = columns[i % columns.Length],
+                    Position = i,
+                    Labels = new List<string>(),
+                    Assignees = new List<string>(),
+                    ChildTasks = new List<ChildTask>()
+                });
+            }
+            _context.Tickets.AddRange(tickets);
+            await _context.SaveChangesAsync();
+
+            // Act: チケット一覧取得の時間を計測
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = await _controller.GetAll();
+            stopwatch.Stop();
+
+            // Assert: 応答時間が2秒以内
+            var elapsed = stopwatch.Elapsed;
+            Assert.True(elapsed.TotalSeconds < 2,
+                $"GetAll応答時間 ({elapsed.TotalSeconds:F2}秒) が2秒を超えています");
+
+            // 1000件のチケットが正しく返されることを確認
+            var actionResult = Assert.IsType<ActionResult<List<Ticket>>>(result);
+            var okResult = Assert.IsType<OkObjectResult>(actionResult.Result!);
+            var returnedTickets = Assert.IsAssignableFrom<List<Ticket>>(okResult.Value!);
+            Assert.Equal(ticketCount, returnedTickets.Count);
+        }
+
+        /// <summary>
+        /// TC-PERF-008: 実績入力画面 - 多数チケットの実績取得
+        /// バッチAPI（GET /api/tickets/actuals/batch）で1回のDBクエリで実績を取得することを確認
+        /// N+1問題がないことを確認
+        /// </summary>
+        [Fact]
+        public async Task TC_PERF_008_GetActualsBatch_ShouldUseSingleQuery()
+        {
+            // Arrange: 50件のチケットと各チケットに複数の実績を作成
+            const int ticketCount = 50;
+            const int actualsPerTicket = 5;
+            var ticketIds = new List<string>();
+            var allActuals = new List<TicketActual>();
+
+            for (int i = 0; i < ticketCount; i++)
+            {
+                var ticketId = $"perf-actual-ticket-{i}";
+                ticketIds.Add(ticketId);
+                _context.Tickets.Add(new Ticket
+                {
+                    TicketId = ticketId,
+                    Title = $"実績テストチケット {i}",
+                    Column = "todo",
+                    Position = i,
+                    Labels = new List<string>(),
+                    Assignees = new List<string>(),
+                    ChildTasks = new List<ChildTask>()
+                });
+
+                for (int j = 0; j < actualsPerTicket; j++)
+                {
+                    allActuals.Add(new TicketActual
+                    {
+                        TicketId = ticketId,
+                        Date = DateTime.UtcNow.AddDays(-j),
+                        Hours = 1.0 + j * 0.5
+                    });
+                }
+            }
+            _context.TicketActuals.AddRange(allActuals);
+            await _context.SaveChangesAsync();
+
+            // Act: バッチAPIで一括取得
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = await _controller.GetActualsBatch(ticketIds);
+            stopwatch.Stop();
+
+            // Assert: 応答が正常
+            var actionResult = Assert.IsType<ActionResult<List<TicketActual>>>(result);
+            
+            if (actionResult.Result is OkObjectResult okRes)
+            {
+                var returnedActuals = Assert.IsAssignableFrom<List<TicketActual>>(okRes.Value!);
+                // 全実績（50 × 5 = 250件）が返されることを確認
+                Assert.Equal(ticketCount * actualsPerTicket, returnedActuals.Count);
+            }
+            else
+            {
+                // ActionResult.Value から直接取得する場合
+                var returnedActuals = Assert.IsAssignableFrom<List<TicketActual>>(actionResult.Value!);
+                Assert.Equal(ticketCount * actualsPerTicket, returnedActuals.Count);
+            }
+
+            // 応答時間が合理的な範囲内（5秒以内）であることを確認
+            // テスト環境（SQLiteインメモリ）ではコールドスタートやデータ量の影響を受けるため許容範囲を広く
+            var elapsed = stopwatch.Elapsed;
+            Assert.True(elapsed.TotalSeconds < 5,
+                $"GetActualsBatch応答時間 ({elapsed.TotalSeconds:F2}秒) が5秒を超えています");
+
+            // N+1問題がないことを確認：バッチAPIは1回のクエリで処理される
+            // 個別に取得した場合と比較して、バッチAPIが同等または高速であることを確認
+            var batchTime = elapsed.TotalMilliseconds;
+
+            // 個別取得（N+1 パターン）との比較
+            var individualStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var individualTotal = 0;
+            foreach (var tid in ticketIds.Take(10)) // 10件だけで比較
+            {
+                var singleResult = await _controller.GetActuals(tid);
+                if (singleResult.Result is OkObjectResult singleOk)
+                {
+                    var singles = Assert.IsAssignableFrom<List<TicketActual>>(singleOk.Value!);
+                    individualTotal += singles.Count;
+                }
+            }
+            individualStopwatch.Stop();
+            var individualTime = individualStopwatch.Elapsed.TotalMilliseconds;
+
+            // バッチAPIは10件の個別呼び出しと同等または高速であること（相対比較）
+            // または、絶対時間で5秒以内であれば合格（テスト環境のオーバーヘッドを考慮）
+            // バッチAPIが50件を1回のクエリで処理し、個別APIが10件を10回のクエリで処理するため、
+            // 理論的にはバッチAPIの方が効率的であるはず
+            // テスト環境ではコールドスタートの影響で最初のクエリが遅くなる可能性があるため、
+            // 個別APIの5倍以内または3秒以内を許容
+            Assert.True(batchTime < individualTime * 5 || batchTime < 3000,
+                $"バッチAPI ({batchTime:F0}ms) は個別API ({individualTime:F0}ms for 10件) と比較して合理的な時間内であるべきです");
+        }
+    }

@@ -45,6 +45,10 @@ public class TicketService
         {
             throw new ArgumentException("タイトルは必須です。", nameof(dto));
         }
+        if (dto.Title.Length > 200)
+        {
+            throw new ArgumentException("タイトルは200文字以内でください。", nameof(dto));
+        }
 
         var validChildTasks = dto.ChildTasks
             .Where(ct => !string.IsNullOrWhiteSpace(ct.Text))
@@ -138,6 +142,10 @@ public class TicketService
         if (string.IsNullOrEmpty(dto.Title))
         {
             throw new ArgumentException("タイトルは必須です。", nameof(dto));
+        }
+        if (dto.Title.Length > 200)
+        {
+            throw new ArgumentException("タイトルは200文字以内でください。", nameof(dto));
         }
 
         // 監査列の更新

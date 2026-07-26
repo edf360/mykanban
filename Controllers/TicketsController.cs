@@ -267,6 +267,8 @@ public class TicketsController : ControllerBase
             return BadRequest(new { error = "Request body is required" });
         if (dto.Hours < 0)
             return BadRequest(new { error = "Hours must be non-negative" });
+        if (dto.Hours > 24)
+            return BadRequest(new { error = "Hours must be 24 or less" });
 
         var ticket = await _ticketService.GetAsync(id);
         if (ticket == null)
@@ -292,12 +294,19 @@ public class TicketsController : ControllerBase
 #pragma warning restore CS0618 // 'TicketActual.ChildTaskIndex' is obsolete
         }
 
+        // ProgressRateを0-100にクランプ
+        int? clampedProgress = dto.ProgressRate;
+        if (clampedProgress.HasValue)
+        {
+            clampedProgress = Math.Clamp(clampedProgress.Value, 0, 100);
+        }
+
         TicketActual actualEntity;
         if (existing != null)
         {
             // 更新
             existing.Hours = dto.Hours;
-            existing.ProgressRate = dto.ProgressRate;
+            existing.ProgressRate = clampedProgress;
             existing.UpdatedAt = DateTime.Now;
             actualEntity = existing;
         }
@@ -310,7 +319,7 @@ public class TicketsController : ControllerBase
                 TicketId = id,
                 Date = dto.Date.Date,
                 Hours = dto.Hours,
-                ProgressRate = dto.ProgressRate,
+                ProgressRate = clampedProgress,
                 ChildTaskIndex = childTaskIndex,
                 ChildTaskId = childTaskId,
                 CreatedAt = DateTime.Now
@@ -336,6 +345,8 @@ public class TicketsController : ControllerBase
             return BadRequest(new { error = "Request body is required" });
         if (dto.Hours < 0)
             return BadRequest(new { error = "Hours must be non-negative" });
+        if (dto.Hours > 24)
+            return BadRequest(new { error = "Hours must be 24 or less" });
 
         var ticket = await _ticketService.GetAsync(id);
         if (ticket == null)
@@ -370,7 +381,15 @@ public class TicketsController : ControllerBase
             return NotFound(new { error = "Actual not found" });
 
         actual.Hours = dto.Hours;
-        actual.ProgressRate = dto.ProgressRate;
+        // ProgressRateを0-100にクランプ
+        if (dto.ProgressRate.HasValue)
+        {
+            actual.ProgressRate = Math.Clamp(dto.ProgressRate.Value, 0, 100);
+        }
+        else
+        {
+            actual.ProgressRate = dto.ProgressRate;
+        }
         actual.UpdatedAt = DateTime.Now;
         await _dbContext.SaveChangesAsync();
         await NotifyTicketChanged();

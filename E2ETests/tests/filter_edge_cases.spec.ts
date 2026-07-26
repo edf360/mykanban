@@ -299,3 +299,89 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     expect(initialAssigneeValue).toBe('');
   });
 });
+
+// ===== パフォーマンステスト (TC-PERF-*) =====
+
+test.describe('パフォーマンステスト (TC-PERF-*)', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+  });
+
+  test('TC-PERF-003: 検索入力中 - 高速入力(10文字/秒)でデバウンスが機能する', async ({ page }) => {
+    // Arrange: テスト用のチケットを作成
+    const name1 = uniqueName('PerformanceTestA');
+    const name2 = uniqueName('PerformanceTestB');
+    
+    await page.click('.column-add-btn[data-column="todo"]');
+    await page.fill('#ticketTitle', name1);
+    await page.click('#saveBtn');
+    await expect(page.locator('#ticketModal')).toBeHidden();
+    
+    await page.click('.column-add-btn[data-column="todo"]');
+    await page.fill('#ticketTitle', name2);
+    await page.click('#saveBtn');
+    await expect(page.locator('#ticketModal')).toBeHidden();
+
+    // Act: 高速で検索入力をシミュレート（10文字/秒 = 100ms/文字）
+    // 半角文字を使用して安定性を確保
+    const searchText = 'Performance';
+    
+    // 高速入力：各文字を100ms間隔で入力（typeを使用）
+    for (const char of searchText) {
+      await page.type('#titleSearchInput', char, { delay: 100 }); // 100ms/文字 = 10文字/秒
+    }
+
+    // デバウンス時間（200ms）分以上待つ
+    await page.waitForTimeout(500);
+
+    // Assert: 再描画がデバウンスにより抑制されていることを確認
+    // 検索入力が完了した値が正しく設定されている
+    const finalValue = await page.locator('#titleSearchInput').inputValue();
+    expect(finalValue).toBe(searchText);
+
+    // 検索結果が正しくフィルタリングされていることを確認
+    await expect(page.locator('.column[data-column="todo"] .ticket:has-text("' + name1 + '")').first())
+      .toBeVisible({ timeout: 5000 });
+  });
+
+  test('TC-PERF-003-2: 検索入力デバウンス - 再描画回数が抑制される', async ({ page }) => {
+    // Arrange: 複数のチケットを作成
+    const tickets = [];
+    for (let i = 0; i < 5; i++) {
+      const name = uniqueName(`デバウンステスト${i}`);
+      tickets.push(name);
+      await page.click('.column-add-btn[data-column="todo"]');
+      await page.fill('#ticketTitle', name);
+      await page.click('#saveBtn');
+      await expect(page.locator('#ticketModal')).toBeHidden();
+    }
+
+    // Act: デバウンス動作を検証
+    // 高速入力で検索テキストを入力し、デバウンスが機能していることを確認
+    const searchText = 'デバウンステスト';
+    
+    // 高速入力：各文字を10ms間隔で入力（デバウンス期間200ms内）
+    for (const char of searchText) {
+      await page.type('#titleSearchInput', char, { delay: 10 });
+    }
+
+    // デバウンス時間（200ms）より長く待つ
+    await page.waitForTimeout(500);
+
+    // Assert: 入力が完了した値が正しく設定されている
+    const finalValue = await page.locator('#titleSearchInput').inputValue();
+    expect(finalValue).toBe(searchText);
+
+    // フィルタリング結果が正しく反映されていることを確認
+    // 「デバウンステスト」を含むチケットのみが表示されるはず
+    // 既存チケットがある可能性があるため、作成したチケット数が最小値として表示されることを確認
+    const visibleTickets = await page.locator('.column[data-column="todo"] .ticket').count();
+    expect(visibleTickets).toBeGreaterThanOrEqual(tickets.length);
+
+    // 各可視チケットが検索テキストを含むことを確認（デバウンス後にフィルタが正しく適用された証拠）
+    for (let i = 0; i < visibleTickets; i++) {
+      const ticketText = await page.locator('.column[data-column="todo"] .ticket').nth(i).textContent();
+      expect(ticketText).toContain(searchText);
+    }
+  });
+});

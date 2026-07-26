@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Tests\**;E2ETests\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -39,6 +40,13 @@
     <Compile Remove="Scripts\**" />
     <EmbeddedResource Remove="Scripts\**" />
     <None Remove="Scripts\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- E2ETestsディレクトリをコンパイルから除外 -->
+    <Compile Remove="E2ETests\**" />
+    <EmbeddedResource Remove="E2ETests\**" />
+    <None Remove="E2ETests\**" />
   </ItemGroup>
 
 </Project>
