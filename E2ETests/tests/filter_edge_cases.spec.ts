@@ -289,4 +289,13 @@ test.describe('フィルター組み合わせ・エッジケース', () => {
     // フィルターを解除
     await page.selectOption('#labelFilterSelect', '');
   });
+
+  test('TC-FUNC-085: 管理者ログイン時、フィルター担当者初期値は「すべて」に自動設定される', async ({ page }) => {
+    // login(page) によって管理者(admin)でログイン済み
+    
+    // 担当者フィルタードロップダウンの初期値を確認
+    // 「すべて」は空文字列('')として設定されている
+    const initialAssigneeValue = await page.locator('#assigneeFilterSelect').inputValue();
+    expect(initialAssigneeValue).toBe('');
+  });
 });

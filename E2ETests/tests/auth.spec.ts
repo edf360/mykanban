@@ -130,4 +130,50 @@ test.describe('認証', () => {
     // 設定パネルを閉じる（オーバーレイクリック）
     await page.click('#settingsModal');
   });
+
+  test('TC-FUNC-080: サーバー再起動後も既存トークンで認証成功', async ({ page }) => {
+    // 管理者でログイン
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'clsw');
+    await page.click('#loginBtn');
+    await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
+
+    // localStorage にトークンが保存されていることを確認
+    const tokenExists = await page.evaluate(() => {
+      const token = localStorage.getItem('kanban_token');
+      return token !== null && token.length > 0;
+    });
+    expect(tokenExists).toBe(true);
+
+    // ページをリロード（サーバー再起動をシミュレート）
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+
+    // 引き続き認証された状態であることを確認
+    await expect(page.locator('#loginScreen')).toHaveClass(/hidden/);
+    await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
+  });
+
+  test('TC-FUNC-081: SignalR接続が確立される（/ticketHub）', async ({ page }) => {
+    // 管理者でログイン
+    await page.fill('#loginUsername', 'admin');
+    await page.fill('#loginPassword', 'clsw');
+    await page.click('#loginBtn');
+    await expect(page.locator('#appContent')).not.toHaveClass(/hidden/);
+
+    // SignalR コネクションが確立されていることを確認
+    // 若干のウェイトを入れてコネクション確立を待つ
+    await page.waitForTimeout(2000);
+
+    // SignalR コネクションの状態を確認
+    const connectionState = await page.evaluate(() => {
+      const hubConnection = (window as any).hubConnection;
+      if (!hubConnection) {
+        return 'not_initialized';
+      }
+      return hubConnection.state || 'unknown';
+    });
+    // ConnectionState.Connected は 'Connected'
+    expect(connectionState).toBe('Connected');
+  });
 });

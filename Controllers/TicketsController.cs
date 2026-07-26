@@ -114,6 +114,14 @@ public class TicketsController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (Exception ex)
+        {
+            if (_env.IsDevelopment())
+            {
+                return StatusCode(500, new { error = "Internal server error", details = ex.Message, stackTrace = ex.StackTrace });
+            }
+            return StatusCode(500, new { error = "Internal server error" });
+        }
     }
 
     /// <summary>

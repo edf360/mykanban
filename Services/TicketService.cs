@@ -168,14 +168,16 @@ public class TicketService
         {
             ticket.Assignees = dto.Assignees;
             // TicketAssigneesを更新（IsPrimaryを含む）
-            var existingAssignees = await _context.TicketAssignees
-                .Where(ta => ta.TicketId == ticketId)
-                .ToListAsync();
-            _context.TicketAssignees.RemoveRange(existingAssignees);
+            // ナビゲーションプロパティ経由で操作してEF Coreトラッキング競合を避ける
+            var existingAssignees = ticket.TicketAssignees.ToList();
+            foreach (var ea in existingAssignees)
+            {
+                ticket.TicketAssignees.Remove(ea);
+            }
             
             foreach (var assignee in dto.Assignees)
             {
-                _context.TicketAssignees.Add(new TicketAssignee
+                ticket.TicketAssignees.Add(new TicketAssignee
                 {
                     TicketId = ticketId,
                     Assignee = assignee,

@@ -73,9 +73,9 @@ export function initActualTable(onFilterChange) {
     }
     initialized = true;
 
-    // ESCキーで閉じる
-    overlay?.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
+    // ESCキーで閉じる（documentレベルでリスン）
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && overlay?.classList.contains('active')) {
             overlay.classList.remove('active');
             saveActualState();
         }
